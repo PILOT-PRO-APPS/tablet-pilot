@@ -211,7 +211,7 @@ const STAFF_ROSTER=[
   {name:'Vince',    role:'prep'},
   {name:'Jo-Jo',    role:'prep'},   // was 'Joe' until 3 Oct 2026 (same PIN)
   {name:'Peter',    role:'admin'},
-  {name:'Christina',role:'prep'},
+  // Christina removed 11 Oct 2026 (owner: "can be removed entirely"); her PIN is switched off in staff_pins
   {name:'Abia',     role:'prep'},
 ];
 // ── WHO MAY DO WHAT: the one place to change it ──────────────────
@@ -221,8 +221,8 @@ const STAFF_ROSTER=[
 // Handing the vehicle to the client (check-out step 7) is a manager job too, except Christina.
 //  contract = the contract step (5) and the Documentation page only (Christina, since 3 Oct 2026)
 // Simon removed from the tablet 3 Oct 2026 (owner's request).
-const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Abia:'staff','Jo-Jo':'manager',Christina:'contract',Peter:'peter'};
-const NO_HANDOVER=['Christina'];
+const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Abia:'staff','Jo-Jo':'manager',Peter:'peter'};
+const NO_HANDOVER=[];
 function roleOf(n){return ROLE[n]||'staff';}
 function namesWithRole(){var r=[].slice.call(arguments);return STAFF_ROSTER.map(function(x){return x.name;}).filter(function(n){return r.indexOf(roleOf(n))>=0;});}
 // Check a staff PIN on the server. Returns {ok, name, role} or {ok:false, reason, wait_minutes}
@@ -6778,7 +6778,7 @@ function coFinishCheck(refresh){
 // tablet-payments (status without PIN; record/link need the staff member's PIN). Peter alone can release
 // with money still owing, with a reason — management is alerted.
 var PAY_ST={};
-var PAY_STAFF=['Jo-Jo','Peter','Christina'];
+var PAY_STAFF=['Jo-Jo','Peter'];
 function payFmt(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 async function payLoad(bid,force){
   if(!bid)return null;
