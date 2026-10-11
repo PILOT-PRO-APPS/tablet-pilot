@@ -1476,7 +1476,7 @@ async function saveOut(i){
   if(d&&d!==(r.return_date_new||v.rt))notes.push({at:now,by:who,text:'Return date changed to '+d+(v.rt?' (booked '+v.rt+')':'')});
   if(t!==(r.return_time||'')&&t)notes.push({at:now,by:who,text:'Expected return time set to '+t});
   if(note)notes.push({at:now,by:who,text:note});
-  var upd={return_date_new:(d&&d!==v.rt)?d:null,return_time:t||null,out_notes:notes};
+  var upd={return_date_new:(d&&d!==v.rt)?d:null,return_time:t||r.return_time||null,out_notes:notes};
   banner('Saving');
   try{var res=await SB.from('checkouts').update(upd).eq('id',r.id);hideBanner();if(res&&res.error){toast('Not saved: '+res.error.message,'err');return;}}catch(e){hideBanner();toast('Not saved — check the connection','err');return;}
   Object.assign(r,upd);toast('Saved ✅','ok');drawOut();
@@ -1742,9 +1742,10 @@ async function loadBookings(){
     }catch(e){}
     // …and bookings whose return place in the Fleet Manager is outside Windhoek, from the day they are booked
     try{
-      var _have={};(REMOTE_RETURNS||[]).forEach(function(x){_have[x.booking_id]=1;});
+      var _have={},_seenN={},_backN={};(REMOTE_RETURNS||[]).forEach(function(x){_have[bkNorm(x.booking_id)]=1;});
+      Object.keys(seen||{}).forEach(function(k){_seenN[bkNorm(k)]=1;});Object.keys(back||{}).forEach(function(k){_backN[bkNorm(k)]=1;});
       FLEET.forEach(function(v){var k=bkKey(v);
-        if(_have[k]||!v.doLocation||!_isRemoteLoc(v.doLocation)||(back&&back[k]))return;
+        var kn=bkNorm(k);if(_have[kn]||_seenN[kn]||_backN[kn]||!v.doLocation||!_isRemoteLoc(v.doLocation))return;
         REMOTE_RETURNS.push({booking_id:k,fleet_no:v.fn,return_place:v.doLocation,return_address:'',return_place_time:'',rt:v.rt,fromBooking:true});
       });
     }catch(e){}
@@ -2470,8 +2471,9 @@ function drPhotoRef(src,id){
 // signed one, the office tablet loaded it, and the client was asked to sign again (rental_contracts:
 // H-33, H-41, H-35, H-17, Hi-44 each signed twice 13–33 s apart). Now, whenever two copies meet,
 // anything finished in either one is kept: signatures, the signed contract, steps done, ticked items.
-var DR_DONE_RE=/(Sig|Signed|Done|Cleared|Closed|Override|By|At)$/;
-var DR_MAPS=['prepItems','mechItems','mechWho','docItems','equipItems','ciItems','retQty','vehChk','dmgNew'];
+var DR_MAPS=['prepItems','mechItems','mechWho','docItems','handoverChecks','retItems','retQty'];
+// Only fields the other copy never had are filled in (=== undefined). A field set to '' or null on purpose
+// (an item un-ticked, a name unlocked, an override undone) stays as it is. Overrides are never copied.
 function drKeepDone(t,o){
   if(!t||!o||typeof t!=='object'||typeof o!=='object')return 0;
   if(t._done||o._done)return 0;
@@ -2483,18 +2485,26 @@ function drKeepDone(t,o){
   if(oSigned&&!tSigned){t.contract=JSON.parse(JSON.stringify(oc));t.contractSigned=true;if(o.contractAt)t.contractAt=o.contractAt;if(o.contractBy)t.contractBy=o.contractBy;n++;}
   else if(!tSigned&&o.contract&&typeof o.contract==='object'){   // neither signed: answers given on either tablet are kept
     t.contract=t.contract||{};
-    for(k in oc){if((t.contract[k]===undefined||t.contract[k]===null||t.contract[k]==='')&&oc[k]!==undefined&&oc[k]!==null&&oc[k]!==''){t.contract[k]=oc[k];n++;}}
+    for(k in oc){if(t.contract[k]===undefined&&oc[k]!==undefined&&oc[k]!==null&&oc[k]!==''){t.contract[k]=oc[k];n++;}}
   }
   // Signatures and "done" marks (custSig, prepSig, equipSig, mgmtSig, retSig, mechDone, inspBy, mgmtCleared …)
   for(k in o){
-    if(k.charAt(0)==='_'||k==='contract'||k==='v')continue;
-    if(DR_DONE_RE.test(k)&&o[k]&&!t[k]){t[k]=o[k];n++;}
+    if(k.charAt(0)==='_'||k==='contract'||k==='v'||/^force|Override$/.test(k))continue;
+    // A signature or a finished step is never undone in the app (only by a reset or a vehicle swap,
+    // which the checks above skip), so it is kept whenever this copy lacks it — with its name and time.
+    if(/(Sig|Signed|Done|Cleared)$/.test(k)&&o[k]&&!t[k]){
+      t[k]=o[k];n++;
+      var base=k.replace(/(Sig|Signed|Done|Cleared)$/,'');
+      ['At','By'].forEach(function(s2){var kk=base+s2;if(o[kk]&&!t[kk])t[kk]=o[kk];});
+    }
+    // Names and times on their own (e.g. "Change name" cleared one): only when this copy never had them
+    else if(/(By|At)$/.test(k)&&o[k]&&t[k]===undefined){t[k]=o[k];n++;}
   }
   // Ticked items: each item answered on either tablet is kept
   DR_MAPS.forEach(function(m){
     var om=o[m];if(!om||typeof om!=='object'||Array.isArray(om))return;
     if(!t[m]||typeof t[m]!=='object')t[m]={};
-    for(var x in om){if((t[m][x]===undefined||t[m][x]===null||t[m][x]==='')&&om[x]!==undefined&&om[x]!==null&&om[x]!==''){t[m][x]=om[x];n++;}}
+    for(var x in om){if(t[m][x]===undefined&&om[x]!==undefined&&om[x]!==null&&om[x]!==''){t[m][x]=om[x];n++;}}
   });
   return n;
 }
@@ -2671,6 +2681,7 @@ async function drPush(){
       var chk=await SB.from('work_drafts').select('updated_at,updated_by,device,summary,data').eq('id',r.id).maybeSingle();
       if(chk.error){_drDirty=true;break;}
       var row=chk.data;
+      var _other=!!(row&&row.device!==DR_DEV&&(!r.base||row.updated_at>r.base));   // another tablet saved since this one last synced
       if(row&&row.device!==DR_DEV&&row.summary&&Object.keys(row.summary).length&&(!r.base||row.updated_at>r.base)){   // (older-format rows have no summary: just replace them)
         drOtherDeviceNote(r,row);   // someone else has it open too — never interrupt the person in front of the screen
         r.base=row.updated_at;
@@ -2683,7 +2694,7 @@ async function drPush(){
       // must never wipe photos already saved on the server (H-001, 2 Oct: 5 equipment photos lost).
       if(row&&row.data){try{await drMergePhotos(r,data,row.data);}catch(e){}}
       // Signatures, a signed contract and ticked items on the server copy are kept too
-      var _kept=0;if(row&&row.data&&row.data.o&&data&&data.o){try{_kept=drKeepDone(data.o,row.data.o);}catch(e){_kept=0;}}
+      var _kept=0;if(_other&&row.data&&row.data.o&&data&&data.o){try{_kept=drKeepDone(data.o,row.data.o);}catch(e){_kept=0;}}
       var up=await SB.from('work_drafts').upsert({id:r.id,kind:r.kind,fleet_no:r.fn,client:r.cl,staff:r.staff,step:r.step,summary:r.sum||{},
         data:data,updated_by:r.by||(APP_USER&&APP_USER.name),device:DR_DEV},{onConflict:'id'}).select('updated_at,started_at').single();
       if(up.error){_drDirty=true;break;}
@@ -2766,9 +2777,9 @@ async function drApplyServer(id,force){
   // What was finished on THIS screen (e.g. the client just signed) stays, even if the other copy lacks it
   var _here=kind==='checkout'?co:ci,_kept=0;
   try{if(_here&&_here.v&&drId(kind,_here)===id&&st&&st.o)_kept=drKeepDone(st.o,_here);}catch(e){}
-  var _same=!!(_here&&_here.v&&drId(kind,_here)===id),_myStep=kind==='checkout'?coStep:ciStep;
+  var _same=!!(_here&&_here.v&&drId(kind,_here)===id),_myStep=kind==='checkout'?coStep:ciStep,_myCs=(kind==='checkout'&&co)?co._cs:undefined;
   drRestore(kind,st,q.data);
-  if(_same&&!force){if(kind==='checkout')coStep=_myStep;else ciStep=_myStep;}   // each tablet stays on the step its person is on
+  if(_same&&!force){if(kind==='checkout'){coStep=_myStep;if(_myCs!==undefined)co._cs=_myCs;}else ciStep=_myStep;}   // each tablet stays on the step its person is on
   if(_kept){try{if(kind==='checkout')saveCOProgress();else if(typeof saveCIProgress==='function')saveCIProgress();}catch(e){}}
   if(kind==='checkout'&&drPageOn('co'))try{drawCO();}catch(e){}
   if(kind==='checkin'&&drPageOn('ci'))try{drawCI();}catch(e){}
@@ -3663,7 +3674,7 @@ function ctReturnWifiHTML(){
   var ret='<div id="ct-rtime-box" style="border:2px solid '+(ok?'var(--gb)':'var(--am)')+';border-radius:10px;padding:8px 10px;background:'+(ok?'var(--sg)':'var(--ag)')+';">'
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
     +'<span style="font-size:13px;font-weight:900;color:var(--tx);white-space:nowrap;">🕑 Return '+due+' — expected time *</span>'
-    +'<span style="display:flex;gap:6px;min-width:180px;flex:0 1 220px;">'+timePickers('ho-rtime',offHours(co.returnTime)?'':(co.returnTime||''),"var _t=timePickValue('ho-rtime');if(_t){co.returnTime=_t;saveCOProgress();drawCO();}",false,true)+'</span>'
+    +'<span style="display:flex;gap:6px;min-width:260px;flex:0 1 300px;">'+timePickers('ho-rtime',offHours(co.returnTime)?'':(co.returnTime||''),"var _t=timePickValue('ho-rtime');if(_t){co.returnTime=_t;saveCOProgress();drawCO();}",false,true)+'</span>'
     +hoQuickTimes(v,true)
     +'</div></div>';
   var w=d.wifi||'',bs='padding:7px 14px;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;touch-action:manipulation;';
@@ -4387,7 +4398,7 @@ function coStep1(){
           ${driverDocSlot(i,'licFront','🚗','Licence front',d.licFront)}
           ${driverDocSlot(i,'licBack','🔄','Licence back',d.licBack)}
         </div>
-        ${d.passportImg&&!d.name?`<div style="font-size:13px;color:var(--al);margin-top:6px;">📖 Reading passport details automatically…</div>`:''}
+        ${d.passportImg&&!d.name?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--al);margin-top:6px;">📖 Reading passport details automatically… <button onclick="co._drvOpen=co._drvOpen||{};co._drvOpen[${i}]=true;drawCO();" style="padding:8px 14px;border-radius:9px;border:2px solid var(--se);background:#fff;color:var(--se);font-size:14px;font-weight:900;cursor:pointer;">✏️ Type the details by hand</button></div>`:''}
       </div>
 
       ${drvDetailsHead(d,i)}
@@ -4625,7 +4636,10 @@ function editQuoteNo(){
 }
 function coRedrawDrivers(){
   var s=document.getElementById('cos');if(!s)return;
-  s.innerHTML=coStep1()+(coStep===5?'<div style="height:14px"></div>'+coStep2():'');
+  // must build exactly what drawCO builds for step 5, then hide what is not on this client step
+  s.innerHTML=coStep===5?(payPanelHTML(co.v)+coStep1()+'<div data-cs-split="1" style="height:14px"></div>'+coStep2()):coStep1();
+  try{coClientFilter();}catch(e){}
+  try{guideSoon();}catch(e){}
 }
 function addDriver(){
   co.drivers.push({name:'',dob:'',nationality:'',passport:'',licNo:'',licExpiry:'',
@@ -4901,7 +4915,7 @@ If a field is not visible or unclear, use an empty string. Return only the JSON.
     // Fall back to reading the machine-readable lines on the tablet itself
     try{
       toast('📷 Reading the passport code lines…','');
-      var m=await mrzFromImage(b64DataUrl);
+      var m=await withTimeout(mrzFromImage(b64DataUrl),25000);   // a slow tablet or no internet must never keep the client waiting
       var d2=co.drivers[driverIdx];
       if(m&&d2){
         var ch=[];
@@ -6709,7 +6723,11 @@ function coFixLine(i){
   try{coLeftClose();}catch(e){}
   try{var pp=document.getElementById('pay-pop');if(pp)pp.remove();}catch(e){}
   var cs=null,step=null,after=null,sel=null;
-  if(/contract not signed/i.test(x)){cs=2;after=function(){try{previewAndSignContract();}catch(e){}};}
+  if(/disc date/i.test(x)){step=4;after=function(){co._discEdit=true;drawCO();var e=document.getElementById('lic-banner-out');if(e){try{e.scrollIntoView({block:'center'});}catch(_){}flashTo(e);}};}
+  else if(/odo/i.test(x)){step=4;sel='#co-odo-out';}
+  else if(/vehicle documents|cross-border papers/i.test(x)){step=4;}
+  else if(/equipment not confirmed/i.test(x)){step=2;}
+  else if(/contract not signed/i.test(x)){cs=2;after=function(){try{previewAndSignContract();}catch(e){}};}
   else if(/passport|licence photo|name not filled|: name$/i.test(x)){cs=0;sel='#cos [onclick*="captureDriverDoc"], #cos input[type=file]';}
   else if(/return time|WiFi|Remote return|exact address|collection date/i.test(x)){cs=0;sel=/WiFi/i.test(x)?'#ct-wifi-box':/Remote|address|collection/i.test(x)?'#ct-remote':'#ct-rtime-box';}
   else if(/insurance/i.test(x)){cs=1;sel='#ct-ins';}
@@ -6721,6 +6739,7 @@ function coFixLine(i){
   else if(/handover|explained/i.test(x)){cs=3;}
   else if(/equipment not confirmed/i.test(x)){step=2;}
   else if(/odo|disc date|vehicle documents|cross-border papers/i.test(x)){step=4;}
+  if(cs!==null&&!canDoStep(cs===3?6:5)){toast('That part is done by the office (Joe or Peter)','err');return;}
   if(cs!==null){coCsGo(cs);}else if(step!==null){window._coLeftSkip=true;try{coGoStep(step);}finally{window._coLeftSkip=false;}}
   setTimeout(function(){
     if(sel){var el=document.querySelector(sel);if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}}
@@ -7028,7 +7047,7 @@ async function payGate(){
   if(!(st.total>0)||!(st.owing>0.5))return true;
   if(!isPeter()){
     await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nTap how the client paid (Adumo, card machine or cash) in the payment box. Only Peter can release a vehicle that is not fully paid.'});
-    coGoStep(6); return false;
+    coCsGo(1); setTimeout(function(){var el=document.getElementById('co-pay');if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}},250); return false;
   }
   var a=await askBox({title:'⚠ Release with '+payFmt(st.owing)+' unpaid?',danger:true,ok:'Release anyway',text:'The rental is not fully paid. Management is alerted.',reason:'Why is the vehicle released before payment?',minReason:5});
   if(!a.ok)return false;
@@ -7313,7 +7332,7 @@ function handoverWAText(){
   var c=co.contract||{},first=firstNameOf(mainRenter()||co.v.cl,(co.drivers||[])[0]);
   var rl=c.return_location||'',hq=!rl||rl===GR_HQ||/go rent office|diehl/i.test(rl);
   var place=hq?'Go Rent office, 6 Diehl Str, Windhoek':(rl+(c.return_address?' ('+c.return_address+')':''));
-  var rtime=co.returnTime||c.return_place_time||'';
+  var rtime=(!hq&&c.return_place_time)||co.returnTime||'';
   var rdate=(!hq&&c.return_place_date)?c.return_place_date:co.v.rt;
   var L=[];
   L.push('Hi '+first+',','','Thank you for renting with Go Rent 4x4 Namibia!','');
@@ -7817,7 +7836,7 @@ function ciIssues(){
   return {missing:missing,damaged:damaged,newDmg:newDmg,fuelShort:fuelShort,any:!!(missing.length||damaged.length||newDmg.length||fuelShort)};
 }
 // Deposit decisions are due the next working day (Mon–Fri)
-function nextWorkingDay(d){var x=d?new Date(d):new Date();x.setDate(x.getDate()+1);while(x.getDay()===0||x.getDay()===6)x.setDate(x.getDate()+1);return x.toISOString().split('T')[0];}
+function nextWorkingDay(d){var x=d?new Date(d):new Date();x.setDate(x.getDate()+1);while(x.getDay()===0||x.getDay()===6)x.setDate(x.getDate()+1);return calKey(x);}
 function fmtDay(s){try{return new Date(String(s).slice(0,10)+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return s||'';}}
 // Shown at the top of Step 4 once the client has signed: everything in one place, before the WhatsApp goes out
 function ciReportHeader(){
@@ -8980,7 +8999,7 @@ function rpTab(btn,id){
 function fnNum(fn){var m=/(\d+)/.exec(String(fn||''));return m?+m[1]:9999;}
 // ── 📅 Calendar: how many vehicles go out and come back, by week or month ──
 var CAL_MODE='month', CAL_OFF=0;
-function calKey(d){return d.toISOString().split('T')[0];}
+function calKey(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}   // local date (toISOString is UTC: in Namibia every day showed one cell late)
 function calCounts(){
   var out={},back={};
   FLEET.forEach(function(v){
@@ -9780,7 +9799,7 @@ function timePickers(id,val,onChangeJs,flash,office){
   };
   return '<div style="display:flex;align-items:center;gap:4px;flex:1;">'
     +sel(id+'-h','hh',hrs,hh)+'<span style="font-size:18px;font-weight:900;color:var(--g5);">:</span>'+sel(id+'-m','mm',mins,mm)
-    +'<span style="font-size:11px;font-weight:800;color:var(--g5);margin-left:2px;white-space:nowrap;">'+(office?'office '+OFFICE_FROM+'–'+OFFICE_TO:'24h')+'</span></div>';
+    +'<span style="font-size:11px;font-weight:800;color:var(--g5);margin-left:2px;white-space:nowrap;">'+(office?OFFICE_FROM+'–'+OFFICE_TO:'24h')+'</span></div>';
 }
 // ── Day / month / year pickers for a client's passport and licence expiry ──
 // Nobody types a date on a tablet. The value is kept as DD/MM/YYYY — exactly what the
@@ -11331,6 +11350,10 @@ function guideCO(){
   // anything the guide does not walk through but is still open in this step
   if(st!==6&&coLeftCount([st])){
     var _l=coLeftList([st]);
+    // header items (disc date, odometer) live above the step: point there, and open the disc editor
+    if(/disc date/i.test(_l[0]||'')){var _db=document.querySelector('.fh-grid .disc-flash, .fh-grid button[onclick*="_discEdit"]');
+      return t('Set the licence disc date: tap the red DISC DATE at the top and choose day, month, year.',_db);}
+    if(/odo/i.test(_l[0]||''))return t('Type the odometer (ODO OUT) at the top of the screen.',document.getElementById('co-odo-out'));
     return t('Still open in this step: '+(_l[0]||'')+(_l.length>1?' (+'+(_l.length-1)+' more)':''),gFind(R,'.left-box')||gFind(R,'.insp-flash'));
   }
   // this step is finished
