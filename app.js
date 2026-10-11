@@ -2464,8 +2464,27 @@ async function openDocLink(url){
   openDoc(t,/return|check-?in/i.test(u)?'Return report':'Report');
   return true;
 }
+// wa.me / api.whatsapp.com link → Android intent: URL that starts the WhatsApp app directly
+function waIntent(url){
+  try{
+    var u=new URL(url),phone='',text=u.searchParams.get('text')||'';
+    if(/wa\.me$/i.test(u.hostname))phone=u.pathname.replace(/\D/g,'');
+    else phone=(u.searchParams.get('phone')||'').replace(/\D/g,'');
+    var q=[];if(phone)q.push('phone='+phone);if(text)q.push('text='+encodeURIComponent(text));
+    return 'intent://send/?'+q.join('&')+'#Intent;scheme=whatsapp;end';
+  }catch(e){return '';}
+}
 function openExt(url){
   if(docLinkTarget(url)){openDocLink(url);return null;}
+  // Android tablets (Blackview / Fully Kiosk): never try a new window for WhatsApp. Fully blocks it
+  // ("Popups and new tabs disabled") but still hands back a window, so the fallback below never ran.
+  // An intent: link in the same window starts the WhatsApp app and the app page stays open.
+  if(/Android/i.test(navigator.userAgent||'')&&/^https:\/\/(wa\.me|api\.whatsapp\.com)\//i.test(url)){
+    var it=waIntent(url);
+    if(it){try{drTick();}catch(e){}
+      try{if(window.fully&&typeof fully.startIntent==='function'){fully.startIntent(it);return null;}}catch(e){}
+      location.href=it;return null;}
+  }
   var w=null;try{w=window.open(url,'_blank');}catch(e){}
   if(w)return w;
   // WhatsApp: hand the link to the WhatsApp app. Fully passes it on when wa.me is in
@@ -6679,7 +6698,7 @@ async function payLinkOpen(bid){
   var phone=String((res.phone||(co&&co.v&&co.v.phone)||'')).replace(/[^\d]/g,'');
   var msg=(res.test?'[TEST — no real payment] ':'')+'Hello '+String(res.client||'').split(' ')[0]+', please pay the remaining balance of '+payFmt(f.amount)+' for your Go Rent rental here: '+res.new_link;
   var a=await askBox({title:res.emailed?'✅ Link emailed to '+res.emailed:'🔗 Payment link made',text:(res.test?'TEST MODE — no real money.\n\n':'')+res.new_link+'\n\nSend it by WhatsApp too?',ok:'Open WhatsApp',cancel:'Done'});
-  if(a.ok)window.open('https://wa.me/'+(phone.length>=8?phone:'')+'?text='+encodeURIComponent(msg),'_blank');
+  if(a.ok)openExt('https://wa.me/'+(phone.length>=8?phone:'')+'?text='+encodeURIComponent(msg),'_blank');
   if(co&&co.v&&co.v.bid===bid)drawCO();
 }
 // Called by completeCO before anything is saved: true = go ahead
