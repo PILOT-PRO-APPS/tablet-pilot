@@ -2589,7 +2589,7 @@ function rfResendBox(){
     +'<input id="rf-wa" type="tel" placeholder="+264 81 123 4567" style="color-scheme:light;flex:1;min-width:180px;padding:10px 12px;border-radius:var(--rs);border:2px solid var(--g3);background:#fff;color:#111;font-size:16px;">'
     +'<button onclick="rfResendWA()" style="padding:10px 16px;background:#25d366;border:2px solid #128c7e;border-radius:var(--rs);color:#fff;font-size:15px;font-weight:800;cursor:pointer;white-space:nowrap;">💬 Send again</button>'
     +'</div>'
-    +'<label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;font-weight:700;color:var(--g5);"><input id="rf-wa-guide" type="checkbox" checked style="width:20px;height:20px;"> Add the Namibia driving guide</label>'
+    +'<div style="margin-top:8px;font-size:13px;font-weight:700;color:var(--g5);">📘 The Namibia info pack is sent in the same WhatsApp.</div>'
     +'<div id="rf-wa-note" style="font-size:12px;color:var(--g5);margin-top:4px;">Number from the booking — change it if needed.</div></div>';
 }
 async function rfResendFill(){
@@ -2614,9 +2614,8 @@ async function rfResendWA(){
   hideBanner();
   if(!link){toast('Could not make the link — check the connection and try again','err');return;}
   var first=firstNameOf(R.client||'')||'there';
-  var guide=(document.getElementById('rf-wa-guide')||{}).checked;
-  var msg='Hi '+first+',\n\nHere is your Go Rent 4x4 Namibia handover document again - handover checklist, vehicle condition and damage, photos, equipment issued and your full signed rental contract'+(R.fn?' (vehicle '+R.fn+')':'')+':\n'+link
-    +(guide?'\n\nYour Namibia driving guide - road rules, what to do after an accident or breakdown, emergency numbers:\n'+guideLink():'')
+  var msg='Hi '+first+',\n\nHere is your Go Rent 4x4 Namibia handover document again'+(R.fn?' (vehicle '+R.fn+')':'')+'.\n\nYOUR HANDOVER DOCUMENT (signed contract, vehicle condition, photos, equipment):\n'+link
+    +'\n\nYOUR NAMIBIA INFO PACK (shops, driving tips, what to do after an accident or breakdown, emergency numbers). Please save it, many roads have no signal:\n'+guideLink()
     +'\n\nSafe travels! WhatsApp us anytime: +264 81 861 8085\n- Go Rent 4x4 Team';
   openExt('https://wa.me/'+waNumber(phone)+'?text='+encodeURIComponent(msg));
 }
@@ -7203,11 +7202,10 @@ function coDoneScreen(){
       <div style="background:var(--g1);border:2px solid var(--gb);border-radius:var(--rs);padding:14px 16px;margin:14px 0;">
         <div style="font-size:15px;font-weight:800;color:var(--se);margin-bottom:10px;">💬 Send Handover Document on WhatsApp</div>
         <div style="font-size:14px;color:var(--g5);margin-bottom:12px;">Includes: handover checklist · equipment · vehicle condition &amp; damage diagram · photos · client signature · full signed contract</div>
-        <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;border-radius:10px;border:2px solid ${co.sendGuide===false?'var(--g3)':'var(--gb)'};background:${co.sendGuide===false?'var(--g0)':'var(--sg)'};cursor:pointer;">
-          <input type="checkbox" ${co.sendGuide===false?'':'checked'} onchange="co.sendGuide=this.checked;try{saveCOProgress();}catch(e){};var l=this.parentNode;l.style.borderColor=this.checked?'var(--gb)':'var(--g3)';l.style.background=this.checked?'var(--sg)':'var(--g0)';" style="width:24px;height:24px;flex-shrink:0;">
-          <span style="flex:1;font-size:14px;font-weight:800;color:var(--tx);">📘 Add the Namibia info pack<span style="display:block;font-size:12px;font-weight:600;color:var(--g5);">Our road rules, accident &amp; breakdown steps, emergency numbers, tyre pressure, shopping</span></span>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;border-radius:10px;border:2px solid var(--gb);background:var(--sg);">
+          <span style="flex:1;font-size:14px;font-weight:800;color:var(--tx);">📘 The Namibia info pack is always in the same WhatsApp<span style="display:block;font-size:12px;font-weight:600;color:var(--g5);">Shops, driving tips, accident &amp; breakdown steps, emergency numbers</span></span>
           <a href="${guideLink()}" target="_blank" onclick="event.stopPropagation()" style="font-size:13px;font-weight:800;color:var(--se);white-space:nowrap;">Preview</a>
-        </label>
+        </div>
 
         <!-- WhatsApp -->
         <div>
@@ -7221,7 +7219,7 @@ function coDoneScreen(){
             </button>
           </div>
           <div style="font-size:13px;color:var(--g5);margin-top:4px;">Opens WhatsApp with a pre-filled message and download link</div>
-          <button onclick="sendGuideWA()" style="margin-top:8px;padding:8px 14px;background:var(--g0);border:2px solid var(--gb);border-radius:var(--rs);color:var(--se);font-size:13px;font-weight:800;cursor:pointer;">📘 Send the driving guide only</button>
+
           ${mgmtBtn('btn-mgmt-co','sendHandoverMgmt()',false)}
         </div>
 
@@ -7320,7 +7318,7 @@ function handoverWAText(){
   var L=[];
   L.push('Hi '+first+',','','Thank you for renting with Go Rent 4x4 Namibia!','');
   L.push('YOUR HANDOVER DOCUMENT (signed contract, vehicle condition, photos, equipment):',co._handoverLink);
-  if(co.sendGuide!==false)L.push('','YOUR NAMIBIA INFO PACK (shops, driving tips, what to do after an accident or breakdown, emergency numbers). Please save it, many roads have no signal:',guideLink());
+  L.push('','YOUR NAMIBIA INFO PACK (shops, driving tips, what to do after an accident or breakdown, emergency numbers). Please save it, many roads have no signal:',guideLink());
   L.push('','Vehicle: '+co.fn+(co.v.reg?' ('+co.v.reg+')':''));
   L.push('Pickup: '+(waDate(coPickupDate())||'today'));
   L.push('Return: '+(waDate(rdate)||'-')+(rtime?' at '+rtime:'')+' - '+place);
