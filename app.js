@@ -3259,6 +3259,8 @@ function coClientNav(){
   var next=nx?'<button class="btn g co-next" style="flex:2" onclick="coCsGo('+(i+1)+')">Next: Step '+(i+2)+' · '+nx.ico+' '+nx.lbl+' →</button>':'';
   return '<div class="btn-row">'+back+next+'</div>';
 }
+// How many people the camping kit is for (owner 2026-10-11: "must show how many pax camping")
+function campPax(v){try{var n=parseInt(String((v&&v.pax)||'').replace(/\D/g,''),10);return n>0?n:0;}catch(e){return 0;}}
 function drawCO(){
   try{coAutoWho();}catch(e){}
   try{coFillFromBooking();}catch(e){}
@@ -3324,7 +3326,7 @@ function drawCO(){
     }
   }
   var _campStyle=_cov.camping?'':'color:#8a4b00;';
-  var _campLbl=_cov.camping?'🏕 CAMPING':'🏨 NO CAMPING';
+  var _campLbl=_cov.camping?'🏕 CAMPING'+(campPax(_cov)?' · '+campPax(_cov)+' PAX':''):'🏨 NO CAMPING';
   var _xbHtml=_cov.xb?_fhChip('🌍 '+_bx(_cov.xb)):'';
   var _backBtn=coStep>0?'<button class="btn s" style="flex:1" onclick="coGoStep(coStep-1)">← Back</button>':'';
   // The Handover page used to have only "← Back", so staff could not find the way on to
@@ -6795,14 +6797,14 @@ function payState(st){
   if(!st)return {txt:'💳 Checking payment…',col:'#475569',bg:'#f1f5f9',key:'load'};
   if(!st.ok)return {txt:'💳 Payment: not checked',col:'#92400e',bg:'#fef3c7',key:'err'};
   if(!st.found||!(st.total>0))return {txt:'💳 Total unknown — check',col:'#92400e',bg:'#fef3c7',key:'unknown'};
-  if(st.owing>0.5)return {txt:'💳 '+payFmt(st.owing)+' NOT PAID',col:'#fff',bg:'#d13636',key:'owing'};
+  if(st.owing>0.5)return {txt:'💳 To pay N$'+Math.round(st.owing).toLocaleString('en-US'),col:'#fff',bg:'#d13636',key:'owing'};
   return {txt:'💳 Fully paid ✓',col:'#fff',bg:'#12803c',key:'paid'};
 }
 function payChip(v){
   if(!v||!v.bid)return '';
   var st=PAY_ST[v.bid], s=payState(st);
   if(!st)payLoad(v.bid).then(function(){var el=document.getElementById('pay-chip');if(el)el.outerHTML=payChip(v);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(v);});
-  return '<span id="pay-chip" onclick="coGoStep(6)" title="Payments — tap to open on the Handover step" class="'+(s.key==='owing'?'disc-flash':'')+'" style="cursor:pointer;background:'+s.bg+';color:'+s.col+';border:1px solid '+s.bg+';font-weight:900;"><span class="fh-t">'+_bx(s.txt)+'</span></span>';
+  return '<span id="pay-chip" onclick="payChipOpen()" title="Tap to record how the client paid" class="'+(s.key==='owing'?'disc-flash':'')+'" style="cursor:pointer;background:'+s.bg+';color:'+s.col+';border:1px solid '+s.bg+';font-weight:900;"><span class="fh-t">'+_bx(s.txt)+'</span></span>';
 }
 function payPanelHTML(v){ return '<div id="co-pay" style="margin-bottom:14px;">'+payPanelInner(v)+'</div>'; }
 // Simple payment box (owner 2026-10-11): what is paid / still to pay, and one tap for HOW the client paid.
@@ -6881,6 +6883,19 @@ async function payCall(body){
   catch(e){res={ok:false,error:(e&&e.message)||'Could not reach the server'};}
   return res||{ok:false,error:'No answer'};
 }
+// Tap the flashing payment chip in the header: a small box with the same three buttons, then carry on
+function payChipOpen(){
+  if(!co||!co.v||!co.v.bid)return;
+  var old=document.getElementById('pay-pop');if(old)old.remove();
+  var w=document.createElement('div');w.id='pay-pop';
+  w.setAttribute('style','position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;');
+  w.onclick=function(e){if(e.target===w)w.remove();};
+  w.innerHTML='<div style="background:#fff;border-radius:16px;max-width:560px;width:100%;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+    +'<div id="pay-pop-in">'+payPanelInner(co.v)+'</div>'
+    +'<button onclick="document.getElementById(\'pay-pop\').remove()" style="width:100%;margin-top:10px;padding:14px;border-radius:12px;border:2px solid #cbd5e1;background:#f8fafc;font-size:16px;font-weight:800;">← Back to the check-out</button></div>';
+  document.body.appendChild(w);
+  if(!PAY_ST[co.v.bid])payLoad(co.v.bid).then(function(){var i=document.getElementById('pay-pop-in');if(i)i.innerHTML=payPanelInner(co.v);});
+}
 var _payPin=null;
 async function payQuick(bid,method){
   var st=PAY_ST[bid]||await payLoad(bid,true);
@@ -6896,6 +6911,7 @@ async function payQuick(bid,method){
     if(!x)return;res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};}
   res._at=Date.now();PAY_ST[bid]=res;
   toast('✓ '+payFmt(amt)+' paid by '+lbl+' — saved','ok');
+  try{var _pp=document.getElementById('pay-pop');if(_pp)_pp.remove();}catch(e){}
   if(co&&co.v&&co.v.bid===bid)drawCO();
 }
 async function payRecordOpen(bid){
@@ -7552,7 +7568,7 @@ var CI_SKIP=['Exterior washed','Canopy & roof','Mounting brackets & load bars','
 // and anything the check-out marked as not issued (N/A) or optional extras that were not issued
 // Check-in header: camping choice, airport transfer and flights from the booking
 function ciCampBadge(v){
-  return '<span style="'+(v.camping?'':'color:#8a4b00;')+'"><span class="fh-t">'+(v.camping?'🏕 CAMPING':'🏨 NO CAMPING')+'</span></span>'
+  return '<span style="'+(v.camping?'':'color:#8a4b00;')+'"><span class="fh-t">'+(v.camping?'🏕 CAMPING'+(campPax(v)?' · '+campPax(v)+' PAX':''):'🏨 NO CAMPING')+'</span></span>'
     +(v.pax?'<span><span class="fh-t">👥 PAX '+_bx(v.pax)+'</span></span>':'');
 }
 function ciTripInfo(v){
