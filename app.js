@@ -885,21 +885,50 @@ async function tdShow(k){
 }
 // Deleting anything (photos, damage marks, records) is for the admin only
 // Admin only: throw away a started check-out or check-in on this tablet and begin again
-function resetProcess(fn,ev){
+// Reset (owner 2026-10-11): choose what to reset — only the check-out, only the check-in, or both.
+// Only work IN PROGRESS is thrown away; a check-out or check-in already finished is not touched.
+function resetProcess(fn,ev,only){
   if(ev&&ev.stopPropagation)ev.stopPropagation();
   if(!canDelete('a started check-out'))return;
-  if(!confirm('RESET '+fn+'\n\nEverything captured so far on this tablet (ticks, photos, signatures, damage marks) is thrown away and the vehicle starts from the beginning.\n\nSaved check-outs already finished are NOT affected.\n\nReset now?'))return;
+  var has={checkout:false,checkin:false};
+  try{Object.keys(DR_SRV).forEach(function(k){var r=DR_SRV[k];if(r.fleet_no===fn&&has[r.kind]!==undefined)has[r.kind]=true;});}catch(e){}
+  try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('ip_')===0&&k.endsWith('_'+fn)){var r=JSON.parse(localStorage.getItem(k)||'null');if(r)has[(r.type||'checkout')]=true;}}}catch(e){}
+  try{if(co&&co.fn===fn&&!co._done)has.checkout=true;if(ci&&ci.fn===fn&&!ci._done)has.checkin=true;}catch(e){}
+  var old=document.getElementById('reset-pick');if(old)old.remove();
+  var w=document.createElement('div');w.id='reset-pick';
+  w.setAttribute('style','position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;');
+  w.onclick=function(e){if(e.target===w)w.remove();};
+  var b=function(kind,lbl,sub,on,danger){
+    return '<button '+(on?'':'disabled')+' onclick="resetDo(\''+_bx(fn)+'\',\''+kind+'\')" style="width:100%;text-align:left;padding:14px 16px;margin-top:8px;border-radius:12px;cursor:'+(on?'pointer':'not-allowed')+';opacity:'+(on?1:.45)+';border:2px solid '+(danger?'#d13636':'#cbd5e1')+';background:'+(danger?'#fef2f2':'#f8fafc')+';">'
+      +'<div style="font-size:17px;font-weight:900;color:'+(danger?'#991b1b':'#111')+';">'+lbl+'</div><div style="font-size:13px;color:#475569;margin-top:2px;">'+(on?sub:'Nothing in progress')+'</div></button>';
+  };
+  w.innerHTML='<div style="background:#fff;border-radius:16px;max-width:480px;width:100%;padding:18px;">'
+    +'<div style="font-size:20px;font-weight:900;">🗑 Reset '+_bx(fn)+'</div>'
+    +'<div style="font-size:14px;color:#475569;margin-top:2px;">What do you want to start again? Everything captured so far (ticks, photos, signatures, damage marks) for that part is thrown away. Finished check-outs and check-ins are not affected.</div>'
+    +b('checkout','↗ Only the check-out','Keeps the check-in as it is',has.checkout,false)
+    +b('checkin','↙ Only the check-in','Keeps the check-out as it is',has.checkin,false)
+    +b('both','Reset everything (check-out and check-in)','Both start from the beginning',has.checkout||has.checkin,true)
+    +'<button onclick="document.getElementById(\'reset-pick\').remove()" style="width:100%;margin-top:12px;padding:14px;border-radius:12px;border:2px solid #cbd5e1;background:#fff;font-size:16px;font-weight:800;">Cancel</button></div>';
+  document.body.appendChild(w);
+}
+async function resetDo(fn,kind){
+  var w=document.getElementById('reset-pick');if(w)w.remove();
+  var kinds=kind==='both'?['checkout','checkin']:[kind];
   var removed=0;
   try{
     var keys=[];
-    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('ip_')===0&&k.endsWith('_'+fn))keys.push(k);}
+    for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(k&&k.indexOf('ip_')===0&&k.endsWith('_'+fn)){var r=JSON.parse(localStorage.getItem(k)||'null');if(!r||kinds.indexOf(r.type||'checkout')>=0)keys.push(k);}}
     keys.forEach(function(k){localStorage.removeItem(k);removed++;});
   }catch(e){}
-  try{if(co&&co.fn===fn){co={};coStep=0;}}catch(e){}
-  try{if(ci&&ci.fn===fn){ci={};ciStep=0;}}catch(e){}
-  try{if(typeof CO_DRAFTS==='object'){delete CO_DRAFTS[fn];}}catch(e){}
-  try{drFinishFleet(fn);}catch(e){}
-  toast(removed?('Reset '+fn+' — start again from the beginning'):'Nothing in progress for '+fn,'ok');
+  if(kinds.indexOf('checkout')>=0){try{if(co&&co.fn===fn){co={};coStep=0;}}catch(e){}try{if(typeof CO_DRAFTS==='object')delete CO_DRAFTS[fn];}catch(e){}}
+  if(kinds.indexOf('checkin')>=0){try{if(ci&&ci.fn===fn){ci={};ciStep=0;}}catch(e){}}
+  try{
+    var ids=Object.keys(DR_SRV).filter(function(k){return DR_SRV[k].fleet_no===fn&&kinds.indexOf(DR_SRV[k].kind)>=0;});
+    (await drAll()).forEach(function(r){if(r.fn===fn&&kinds.indexOf(r.kind)>=0&&ids.indexOf(r.id)<0)ids.push(r.id);});
+    for(var j=0;j<ids.length;j++){await drFinish(ids[j]);removed++;}
+  }catch(e){}
+  var what=kind==='both'?'check-out and check-in':kind==='checkin'?'check-in':'check-out';
+  toast(removed?('Reset '+fn+' '+what+' — start again from the beginning'):'Nothing in progress for '+fn,'ok');
   try{renderOV();}catch(e){}
   try{if(document.getElementById('page-co'))renderCOPicker();}catch(e){}
   try{if(document.getElementById('page-ci'))renderCIPicker();}catch(e){}
