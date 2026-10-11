@@ -650,9 +650,13 @@ function startAutoRefresh(){
 }
 // ── App update: when a new version is published, load it (never in the middle of a job) ──
 var APP_LOADED_AT=new Date(document.lastModified).getTime()||Date.now(),_appNew=false;
+// Owner 2026-10-11: look for a new version only every 30 minutes, so tablets don't offer "Update now" while staff are busy
+var APP_UPD_EVERY=30*60*1000,_appChkAt=0;
 async function checkAppUpdate(onReturn){
   try{
     if(!_appNew){
+      if(_appChkAt&&Date.now()-_appChkAt<APP_UPD_EVERY)return;
+      _appChkAt=Date.now();
       var r=await fetch(location.pathname,{method:'HEAD',cache:'no-store'});
       var lm=r.ok&&r.headers.get('last-modified');
       if(!lm||new Date(lm).getTime()<=APP_LOADED_AT+5000)return;
@@ -2879,7 +2883,8 @@ setInterval(function(){if(APP_USER&&!_drStarted)drStart();},1500);
 //  the person who was signed in, so going back to work is just the 4 digits)
 //  Laptops: locks after 10 minutes away
 // ═══════════════════════════════════════════════════════════════
-var LOCK_TABLET_SEC=60, LOCK_LAPTOP_SEC=600, _hiddenAt=0;
+// Owner 2026-10-11: tablets and laptops lock after 30 minutes asleep (was 60 s on tablets, 10 min on laptops)
+var LOCK_TABLET_SEC=1800, LOCK_LAPTOP_SEC=1800, _hiddenAt=0;
 function isTabletDevice(){return (navigator.maxTouchPoints||0)>0&&/iPad|iPhone|Android|Macintosh|Tablet/i.test(navigator.userAgent);}
 function lockLimitSec(){return isTabletDevice()?LOCK_TABLET_SEC:LOCK_LAPTOP_SEC;}
 function markActive(){try{localStorage.setItem('gorent_active_at',String(Date.now()));}catch(e){}}
@@ -3117,6 +3122,135 @@ function coWhatsLeft(){
       +'</div>';
   }catch(e){return '';}
 }
+// ══ CLIENT STEPS (owner 2026-10-11) ══════════════════════════════════════════════════════════
+// "the equipment and vehicle checks get done in the workshop … the handover and contract get done when the client
+// arrives, normally late and in a hurry … this must be quick steps like step 1, step 2, step 3 … final step
+// WhatsApp all to the customer and that's it". Workshop = tabs 1–4 (unchanged). Client = 5 short numbered steps.
+// The client steps show parts of the same Contract / Handover pages (nothing is removed from the page, only
+// hidden), so every save, check and signature works exactly as before.
+var CO_CS=[
+  {k:'docs',ico:'🛂',lbl:'Passport & details'},
+  {k:'pay', ico:'💳',lbl:'Payment & cover'},
+  {k:'sign',ico:'✍️',lbl:'Contract'},
+  {k:'hand',ico:'🤝',lbl:'Handover'},
+  {k:'wa',  ico:'💬',lbl:'WhatsApp'}
+];
+function coCsIdx(){var i=co._cs|0;if(coStep===6)return 3;if(i<0||i>2)i=0;return i;}
+function coWorkshopLeft(){try{return coLeftCount([0,2,3,4]);}catch(e){return 0;}}
+function coCsLeft(k){
+  var m=[],c=co.contract||{},d=co.docItems||{},v=co.v||{};
+  try{
+    if(k==='docs'){
+      (co.drivers&&co.drivers.length?co.drivers:[{}]).forEach(function(dr,i){
+        var who=i===0?'Main driver':'Driver '+(i+1);
+        if(!dr.passportImg)m.push(who+': passport photo');
+        if(!dr.licFront)m.push(who+': licence photo');
+        if(!dr.name)m.push(who+': name');
+      });
+      if(!co.returnTime)m.push('Return time');
+      if(!d.wifi)m.push('WiFi device');
+      ctMissing(c).forEach(function(x){if(/Remote return/.test(x))m.push('Return place & time');});
+    }else if(k==='pay'){
+      if(!co.contractSigned)ctMissing(c).forEach(function(x){if(/Remote return/.test(x))return;if(!v.camping&&/Camping Equipment cover/.test(x))return;m.push(x.replace(/^\S+\s/,''));});
+      var st=PAY_ST[v.bid];if(st&&st.ok&&st.owing>0.5)m.push('Rental not fully paid ('+payFmt(st.owing)+')');
+    }else if(k==='sign'){
+      if(!co.contractSigned)m.push('Client signs the contract');
+    }else if(k==='hand'){
+      var hc=co.handoverChecks||{};
+      (window._HO_SECTIONS||[]).forEach(function(sec){
+        if(sec.key==='camping'&&!v.camping)return;
+        if(!sec.items.every(function(it){return hc[it.k]==='ok'||(it.k==='xb'&&!v.xb);}))m.push('Explain: '+sec.title);
+      });
+      if(!handoverClosed())m.push('Client signs the handover');
+      if(!(co.mgmtSig||co.mgmtCleared))m.push('Release the vehicle');
+    }
+  }catch(e){}
+  return m;
+}
+function coCsGo(i){
+  i=Math.max(0,Math.min(3,i));
+  window._coLeftSkip=true;
+  try{
+    if(i<=2){co._cs=i;if(coStep!==5){coStep=5;}drawCO();}
+    else{coStep=6;drawCO();}
+  }finally{window._coLeftSkip=false;}
+  try{saveCOProgress();}catch(e){}
+  try{var sc=document.getElementById('co-body');if(sc)sc.scrollTop=0;}catch(e){}
+}
+function coClientBar(){
+  var cur=coCsIdx(),wl=coWorkshopLeft();
+  var ws='<div onclick="coGoStep('+(function(){var f=[0,2,3,4].filter(function(n){return coLeftCount([n])>0;})[0];return f===undefined?4:f;})()+')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;margin-bottom:6px;font-size:14px;font-weight:900;'
+    +(wl?'background:#fff7ed;border:2px solid #f59e0b;color:#92400e;':'background:#f0fdf4;border:2px solid #86efac;color:#166534;')+'">'
+    +(wl?'🔧 Workshop: '+wl+' check'+(wl===1?'':'s')+' still open — the contract can only be signed when the workshop is finished · tap to see':'🔧 Workshop checks done ✓')+'</div>';
+  var chips=CO_CS.map(function(x,i){
+    var left=i<4?coCsLeft(x.k).length:0, done=i<4&&!left, on=i===cur;
+    var bg=on?'#1d4ed8':done?'#f0fdf4':'#fff', fg=on?'#fff':done?'#166534':'var(--tx)', bd=on?'#1d4ed8':done?'#86efac':'var(--g3)';
+    var sub=i===4?'final step':done?'✓ done':(left+' to do');
+    return '<div onclick="'+(i<4?'coCsGo('+i+')':'')+'" style="flex:1;min-width:0;cursor:'+(i<4?'pointer':'default')+';padding:8px 6px;border-radius:12px;border:2px solid '+bd+';background:'+bg+';color:'+fg+';text-align:center;">'
+      +'<div style="font-size:12px;font-weight:900;opacity:.85;">STEP '+(i+1)+'</div>'
+      +'<div style="font-size:14px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+x.ico+' '+x.lbl+'</div>'
+      +'<div style="font-size:12px;font-weight:800;margin-top:2px;'+(on?'':done?'color:#16a34a;':i<4?'color:#b45309;':'color:var(--g5);')+'">'+sub+'</div></div>';
+  }).join('');
+  return ws+'<div style="display:flex;gap:6px;margin-bottom:10px;">'+chips+'</div>';
+}
+function coWorkshopTabs(){
+  var tab=function(n,num,ico,lbl){
+    var done=(n===0&&coCleanDone())||(n===2&&!!co.equipSig)||(n===3&&!!co.mechDone)||(n===4&&coInspDone());
+    var left=coLeftCount([n]),active=n===coStep,restricted=!canDoStep(n);
+    var by=(n===0?co.prepBy:n===2?co.equipBy:n===3?co.mechCheckBy:co.inspBy)||'';
+    return '<div class="stg '+(active?'active':done?'done':restricted?'restricted':'')+'" onclick="coGoStep('+n+')" style="position:relative;height:54px;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;'+(restricted?'opacity:.4;cursor:not-allowed;':'')+'">'
+      +'<div style="font-size:13px;font-weight:900;white-space:nowrap;">'+(done&&!left?'<span style="color:#12803c;">✓</span> ':'')+num+'. '+ico+' '+lbl+'</div>'
+      +'<div style="font-size:11px;font-weight:800;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:'+(left?'#b45309':'#12803c')+';">'+(left?left+' to do':(by?_bx(by):'✓'))+'</div></div>';
+  };
+  var cl=CO_CS.slice(0,4).reduce(function(t,x){return t+coCsLeft(x.k).length;},0);
+  return '<div class="stg-bar s6" style="grid-template-columns:repeat(5,1fr);">'
+    +tab(0,1,'🚿','Cleaning')+tab(2,2,'📦','Equipment')+tab(3,3,'🔩','Mechanical')+tab(4,4,'🔍','Inspection')
+    +(canDoStep(5)||canDoStep(6)?'<div class="stg" onclick="coCsGo('+(co.contractSigned?3:0)+')" style="height:54px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1d4ed8;color:#fff;border-color:#1d4ed8;">'
+      +'<div style="font-size:13px;font-weight:900;">👤 Client arrives →</div><div style="font-size:11px;font-weight:800;opacity:.9;">'+(cl?cl+' to do':'all done')+'</div></div>':'')
+    +'</div>';
+}
+// Show only the part of the Contract / Handover page that belongs to the client step on screen
+function coClientFilter(){
+  var R=document.getElementById('cos');if(!R)return;
+  if(coStep===5){
+    var cur=CO_CS[coCsIdx()].k,part='docs';
+    Array.prototype.forEach.call(R.children,function(el){
+      var tag=part;
+      if(el.getAttribute('data-cs-split')==='1'){part='sign';tag='sign';}
+      else if(el.id==='co-pay'||el.classList.contains('sec-dep')||el.classList.contains('sec-ins'))tag='pay';
+      else if(el.classList.contains('step-intro')||el.classList.contains('left-box')||el.getAttribute('data-ct-open')==='1')tag='hide';
+      el.style.display=(tag===cur)?'':'none';
+    });
+  }else if(coStep===6){
+    Array.prototype.forEach.call(R.children,function(el){
+      if(el.classList.contains('step-intro')||el.classList.contains('left-box'))el.style.display='none';
+    });
+    // One tap for the whole handover checklist (each section can still be opened and changed)
+    var pw=R.querySelector('.prog-wrap');
+    if(pw&&coCsLeft('hand').some(function(x){return /^Explain/.test(x);})){
+      var ab=document.createElement('button');ab.type='button';ab.className='btn g';ab.style.cssText='width:100%;margin:4px 0 8px;font-size:16px;';
+      ab.textContent='✓ Everything explained to the client';
+      ab.onclick=function(){if(!co.handoverChecks)co.handoverChecks={};(window._HO_SECTIONS||[]).forEach(function(sec){sec.items.forEach(function(it){co.handoverChecks[it.k]='ok';});});saveCOProgress();drawCO();};
+      pw.parentNode.insertBefore(ab,pw);
+    }
+    // Damage pictures were marked in the workshop: folded away here, one tap to show them to the client
+    var iw=R.querySelector('.ins-wrap');
+    if(iw&&!co._hoDiag){
+      var n=(co.dmgd||[]).length;
+      iw.style.display='none';
+      var b=document.createElement('button');b.type='button';b.className='btn s';b.style.cssText='width:100%;margin:6px 0 10px;font-size:15px;';
+      b.textContent='🗺 Show the damage pictures to the client'+(n?' ('+n+' marked)':' (no damage marked)');
+      b.onclick=function(){co._hoDiag=true;iw.style.display='';b.remove();try{VIEWS.forEach(function(v){buildIG(v);});renderIS();}catch(e){}};
+      iw.parentNode.insertBefore(b,iw);
+    }
+  }
+}
+function coClientNav(){
+  var i=coCsIdx(),nx=i<3?CO_CS[i+1]:null;
+  var back=i>0?'<button class="btn s" style="flex:1" onclick="coCsGo('+(i-1)+')">← Step '+i+'</button>':'<button class="btn s" style="flex:1" onclick="coGoStep(4)">← Workshop</button>';
+  var next=nx?'<button class="btn g co-next" style="flex:2" onclick="coCsGo('+(i+1)+')">Next: Step '+(i+2)+' · '+nx.ico+' '+nx.lbl+' →</button>':'';
+  return '<div class="btn-row">'+back+next+'</div>';
+}
 function drawCO(){
   try{coAutoWho();}catch(e){}
   try{coFillFromBooking();}catch(e){}
@@ -3160,8 +3294,8 @@ function drawCO(){
     else if(coStep===2){_stepLine=4; body=coStep1_equip();} // Equipment packing & checks
     else if(coStep===3){_stepLine=5; body=coStepMech();}    // Mechanical
     else if(coStep===4){_stepLine=6; body=coStep4_dmg();}   // Vehicle inspection
-    else if(coStep===5){_stepLine=7; body=coStep1()+'<div style="height:14px"></div>'+coStep2();} // Client ID + the contract itself
-    else{_stepLine=8; if(coStep>6)coStep=6; body=payPanelHTML(co.v)+coStep5_client();} // Handover & release (Management is part of it now)
+    else if(coStep===5){_stepLine=7; body=payPanelHTML(co.v)+coStep1()+'<div data-cs-split="1" style="height:14px"></div>'+coStep2();} // Client ID + the contract itself
+    else{_stepLine=8; if(coStep>6)coStep=6; body=coStep5_client();} // Handover & release (Management is part of it now)
     _stepLine=9;
     if(!body||body.length<10) body='<div style="padding:20px;color:orange;">Step '+coStep+' returned empty</div>';
   }catch(stepErr){
@@ -3248,18 +3382,11 @@ function drawCO(){
       })()+
       (co._discEdit?'<div style="padding-top:8px;"><div id="lic-banner-out">'+licDiscBanner(_cov,'out')+'</div></div>':'')+
     '</div>'+
-    '<div class="stg-bar s6">'+bar+'</div>'+
+    (coStep>=5?coClientBar():coWorkshopTabs())+
     coWhatsLeft()+
-    (function(){
-      var by=[['🧹',co.prepBy],['📦',co.equipBy||co.prepBy],['🔩',co.mechCheckBy],['🔍',co.inspBy],['📋',co.contractBy],['🤝',co.mechBy],['👔',co.mgmtBy]]
-        .filter(function(x){return x[1];})
-        .map(function(x){return '<span style="white-space:nowrap;">'+x[0]+' '+_bx(x[1])+'</span>';});
-      if(!by.length)return '';
-      return '<div style="display:flex;gap:7px;flex-wrap:wrap;align-items:baseline;margin:-12px 0 6px;padding:2px 8px;background:var(--g2);border-radius:6px;font-size:11px;font-weight:800;color:var(--g6);line-height:1.45;">'
-        +'<span style="color:var(--g5);">ON THIS VEHICLE:</span>'+by.join('')+'</div>';
-    })()+
     '<div id="cos">'+body+'</div>'+
-    '<div class="btn-row">'+_backBtn+_nextBtn+'</div>';
+    (coStep>=5?coClientNav():'<div class="btn-row">'+_backBtn+_nextBtn+'</div>');
+  try{coClientFilter();}catch(e){}
   setTimeout(()=>['co-p-sig','co-c-sig','co-m-sig'].forEach(initSig),80);
   if(coStep===5&&!co.contractBy)setTimeout(ctWhoModal,250);
   if(coStep===6&&!co.mechBy)setTimeout(hoWhoModal,250);   // only when the signed-in person is not a handover person
@@ -4264,7 +4391,7 @@ function coStep1(){
     </div>
   </div>
   ${coContractWho()}
-  ${ctOpenLine()}
+  <div data-ct-open="1">${ctOpenLine()}</div>
   ${ctDepositsHTML()}
   ${ctInsuranceHTML()}
   <div class="sum-box sec-contact" style="margin-bottom:12px"><div class="sum-title" style="margin-bottom:10px">📇 Client contact · transfer · collection &amp; return</div>
@@ -4888,7 +5015,10 @@ function ctMethodButtons(c){
     return ctBtn(on,(on?'✓ ':'')+_bx(m.replace(' (see notes)','')),"ctSet('deposit_method','"+m.replace(/'/g,"\\'")+"')");}).join('')+'</div>';
 }
 // Deposit paid through Adumo (owner 2026-10-11): keep Adumo's transaction ID, so the office can refund it through Adumo from Pilot
-function ctIsAdumo(c){return /^(Adumo|Paid online)$/.test((c||{}).deposit_method||'');}
+// Owner 2026-10-11 (later the same day): "just a tick of where what was paid is good enough, dont need to put in
+// reference numbers or payment links on the tablet pilot, only on the desktop pilot". The Adumo transaction ID is
+// no longer asked for on the tablet; the office enters it in PilotDesktop. (Old: Adumo / Paid online needed the ID.)
+function ctIsAdumo(c){return false;}
 function ctRefInput(c,id){
   var ok=(c.deposit_ref||'').trim().length>=4;
   return '<div style="margin-top:8px;"><label style="font-size:14px;font-weight:900;color:var(--tx);">🔢 Adumo transaction ID *</label>'
@@ -6180,7 +6310,7 @@ function coStep5_client(){
       co.custSig?
         `<div class="signed">✅<div class="signed-name">${v.cl} — Handover accepted</div><div class="signed-time">${co.custAt}</div></div>`:
       coLeftCount(CO_BEFORE_HANDOVER)?
-        `<div style="padding:16px;border-radius:10px;background:var(--rg);border:2px solid var(--re);color:var(--rl);font-size:16px;font-weight:900;text-align:center;">🔒 The client cannot sign yet — ${coLeftCount(CO_BEFORE_HANDOVER)} check${coLeftCount(CO_BEFORE_HANDOVER)===1?'':'s'} still open (red list at the top of this step)</div>`:
+        `<div style="padding:16px;border-radius:10px;background:var(--rg);border:2px solid var(--re);color:var(--rl);font-size:16px;font-weight:900;text-align:center;">🔒 The client cannot sign yet — ${coLeftCount(CO_BEFORE_HANDOVER)} check${coLeftCount(CO_BEFORE_HANDOVER)===1?'':'s'} still open (see the orange Workshop line at the top)</div>`:
         `<div style="font-size:14px;color:var(--g5);margin-bottom:10px;">⛽ DIESEL ONLY · ✅ All equipment received · I accept responsibility for the vehicle and contents</div>
         <div class="sig-area" style="border-color:var(--gb)">
           <div class="sig-hdr" style="background:#15532f;border-bottom-color:var(--gb)">
@@ -6646,36 +6776,28 @@ function payChip(v){
   return '<span id="pay-chip" onclick="coGoStep(6)" title="Payments — tap to open on the Handover step" class="'+(s.key==='owing'?'disc-flash':'')+'" style="cursor:pointer;background:'+s.bg+';color:'+s.col+';border:1px solid '+s.bg+';font-weight:900;"><span class="fh-t">'+_bx(s.txt)+'</span></span>';
 }
 function payPanelHTML(v){ return '<div id="co-pay" style="margin-bottom:14px;">'+payPanelInner(v)+'</div>'; }
+// Simple payment box (owner 2026-10-11): what is paid / still to pay, and one tap for HOW the client paid.
+// No payment links, no reference numbers, no history table on the tablet: those stay on PilotDesktop.
 function payPanelInner(v){
   var st=PAY_ST[v.bid], s=payState(st);
-  var box='background:#fff;border:3px solid '+(s.key==='paid'?'#12803c':s.key==='owing'?'#d13636':'#e0a400')+';border-radius:14px;padding:14px 16px;';
-  var h='<div style="'+box+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;"><div style="font-size:19px;font-weight:900;flex:1;">💳 Payments — '+_bx((st&&st.client)||v.cl||'')+'</div>'
-    +'<button onclick="payRefresh(\''+_bx(v.bid)+'\')" style="padding:8px 14px;border-radius:10px;border:2px solid var(--g3);background:var(--g0);font-size:14px;font-weight:800;cursor:pointer;">↻ Refresh</button></div>';
-  if(!st)return h+'<div style="font-size:15px;color:#475569;">Checking payments…</div></div>';
-  if(!st.ok)return h+'<div style="font-size:15px;color:#92400e;font-weight:800;">Could not check payments ('+_bx(st.error||'')+'). Check with the office before releasing the vehicle.</div></div>';
-  if(!st.live)h+='<div style="background:#fde68a;color:#78350f;border-radius:8px;padding:6px 10px;font-size:13px;font-weight:800;margin-bottom:8px;">TEST MODE — Adumo is not connected yet; payment links do not take real money.</div>';
-  var cell=function(l,v2,c){return '<div style="flex:1;min-width:130px;background:var(--g0);border-radius:10px;padding:8px 10px;text-align:center;"><div style="font-size:12px;font-weight:800;color:#475569;">'+l+'</div><div style="font-size:20px;font-weight:900;color:'+(c||'#111')+';">'+v2+'</div></div>';};
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">'
-    +cell('Rental total',st.total>0?payFmt(st.total):'unknown')
-    +cell('Paid',payFmt(st.paid),'#12803c')
-    +cell('Still to pay',st.owing==null?'?':st.owing>0.5?payFmt(st.owing):'0 ✓',st.owing>0.5?'#d13636':'#12803c')
-    +cell('Deposits held',payFmt(st.security_held),'#1d4ed8')+'</div>';
-  if(st.paid_source==='booking record')h+='<div style="font-size:13px;color:#92400e;margin-bottom:8px;">Paid amount is from the booking record (deposit typed on the booking'+(st.deposit_via?', '+_bx(st.deposit_via):'')+') — not confirmed by the payment history.</div>';
-  if(st.owing>0.5)h+='<div style="background:#fee2e2;border:2px solid #d13636;border-radius:10px;padding:10px 12px;font-size:16px;font-weight:900;color:#991b1b;margin-bottom:10px;">⛔ '+payFmt(st.owing)+' must be paid before the vehicle is released.</div>';
-  else if(st.total>0)h+='<div style="background:#dcfce7;border:2px solid #12803c;border-radius:10px;padding:10px 12px;font-size:16px;font-weight:900;color:#14532d;margin-bottom:10px;">✅ Rental fully paid — the vehicle can be released.</div>';
-  if(st.link){var ls=st.link.status;h+='<div style="font-size:13px;color:#475569;margin-bottom:8px;">Last payment link: '+(st.link.kind==='balance'?'balance':'deposit')+' '+payFmt(st.link.amount)+' — <b>'+(ls==='open'?'open (not paid yet)':ls==='expired'?'EXPIRED':ls==='paid'?'PAID':ls)+'</b></div>';}
-  var can=APP_USER&&PAY_STAFF.indexOf(APP_USER.name)>=0;
-  if(st.owing>0.5||!(st.total>0)){
-    h+=can?'<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-      +'<button onclick="payRecordOpen(\''+_bx(v.bid)+'\')" style="flex:1;min-width:200px;padding:16px;border-radius:12px;border:none;background:#12803c;color:#fff;font-size:17px;font-weight:900;cursor:pointer;">💵 Client paid at the office</button>'
-      +(st.has_quote?'<button onclick="payLinkOpen(\''+_bx(v.bid)+'\')" style="flex:1;min-width:200px;padding:16px;border-radius:12px;border:2px solid #1d4ed8;background:#eff6ff;color:#1d4ed8;font-size:17px;font-weight:900;cursor:pointer;">🔗 Send Adumo payment link</button>':'')
-      +'</div>':'<div style="font-size:14px;font-weight:800;color:#475569;">Only '+PAY_STAFF.join(', ')+' can take payments — call one of them.</div>';
-  }
-  if(st.rows&&st.rows.length){
-    var CAT={booking_deposit:'Booking deposit',rental_payment:'Balance',security_fuel:'Fuel & admin deposit',security_cross_border:'Cross-border deposit',security_other:'Deposit',other:'Other'};
-    var MET={adumo_link:'Adumo link',adumo:'Adumo',card_swipe:'Card',cash:'Cash',eft:'EFT',other:'Other'};
-    h+='<div style="margin-top:12px;font-size:12px;font-weight:800;color:#475569;">PAYMENT HISTORY</div><table style="width:100%;border-collapse:collapse;font-size:14px;">'
-      +st.rows.map(function(r){return '<tr style="border-top:1px solid var(--g2);"><td style="padding:6px 4px;">'+new Date(r.at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})+'</td><td style="padding:6px 4px;">'+(r.dir==='out'?'<b style="color:#d13636">Refund</b> ':'')+_bx(CAT[r.cat]||r.cat)+(r.test?' <b style="color:#92400e">TEST</b>':'')+'</td><td style="padding:6px 4px;">'+_bx(MET[r.method]||r.method)+'</td><td style="padding:6px 4px;text-align:right;font-weight:900;color:'+(r.dir==='out'?'#d13636':'#12803c')+';">'+(r.dir==='out'?'−':'')+payFmt(r.amount)+'</td></tr>';}).join('')+'</table>';
+  var col=s.key==='paid'?'#12803c':s.key==='owing'?'#d13636':'#b45309';
+  var h='<div style="background:#fff;border:3px solid '+col+';border-radius:14px;padding:12px 14px;">';
+  if(!st)return h+'<div style="font-size:16px;font-weight:800;color:#475569;">💳 Checking payment…</div></div>';
+  if(!st.ok)return h+'<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;font-size:16px;font-weight:900;color:#92400e;">💳 Payment could not be checked — ask the office</div>'
+    +'<button onclick="payRefresh(\''+_bx(v.bid)+'\')" style="padding:10px 14px;border-radius:10px;border:2px solid var(--g3);background:var(--g0);font-size:14px;font-weight:800;">↻ Try again</button></div></div>';
+  var owing=st.owing>0.5;
+  h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+    +'<div style="flex:1;min-width:220px;font-size:20px;font-weight:900;color:'+col+';">'
+    +(owing?'💳 Still to pay: '+payFmt(st.owing):(st.total>0?'✅ Rental fully paid':'💳 Rental total unknown — ask the office'))+'</div>'
+    +(st.total>0?'<div style="font-size:13px;font-weight:700;color:#475569;">Total '+payFmt(st.total)+' · paid '+payFmt(st.paid)+'</div>':'')
+    +'</div>';
+  if(owing){
+    var can=APP_USER&&PAY_STAFF.indexOf(APP_USER.name)>=0;
+    if(!can)return h+'<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">Only '+PAY_STAFF.join(', ')+' can take the payment — call one of them.</div></div>';
+    var b=function(m,l){return '<button onclick="payQuick(\''+_bx(v.bid)+'\',\''+m+'\')" style="flex:1;min-width:140px;padding:16px 10px;border-radius:12px;border:2px solid #12803c;background:#f0fdf4;color:#14532d;font-size:18px;font-weight:900;cursor:pointer;">'+l+'</button>';};
+    h+='<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Client paid '+payFmt(st.owing)+' now — tap how:</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+b('adumo','💳 Adumo')+b('card','💳 Card machine')+b('cash','💵 Cash')+'</div>'
+      +'<div style="font-size:12px;color:#64748b;margin-top:6px;">Paid a different amount, by EFT, or need a payment link? The office does that in PilotDesktop.</div>';
   }
   return h+'</div>';
 }
@@ -6695,7 +6817,7 @@ function payForm(o){
       +[['adumo','Adumo'],['card','Card'],['cash','Cash']].map(function(m){return '<button data-m="'+m[0]+'" class="pf-m" style="flex:1;padding:16px;border-radius:12px;border:2px solid #cbd5e1;background:#f8fafc;font-size:18px;font-weight:900;cursor:pointer;">'+m[1]+'</button>';}).join('')+'</div>':'';
     w.innerHTML='<div style="background:#fff;color:#111;border-radius:16px;max-width:520px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.4);border-top:6px solid #12803c;">'
       +'<div style="font-size:19px;font-weight:900;margin-bottom:6px;">'+_bx(o.title)+'</div><div style="font-size:14px;color:#475569;margin-bottom:10px;white-space:pre-line;">'+_bx(o.text||'')+'</div>'
-      +'<div style="font-size:14px;font-weight:800;margin-bottom:6px;">Amount (N$)</div><input id="pf-amt" type="number" inputmode="decimal" step="0.01" value="'+(o.amount||'')+'" style="'+inp+'">'
+      +(o.fixedAmount?'<input id="pf-amt" type="hidden" value="'+(o.amount||'')+'">':'<div style="font-size:14px;font-weight:800;margin-bottom:6px;">Amount (N$)</div><input id="pf-amt" type="number" inputmode="decimal" step="0.01" value="'+(o.amount||'')+'" style="'+inp+'">')
       +meth
       +(o.reference?'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">Slip / reference number (optional)</div><input id="pf-ref" style="'+inp+'font-size:18px;">':'')
       +'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">'+_bx((APP_USER&&APP_USER.name)||'')+' — your PIN</div><input id="pf-pin" type="password" inputmode="numeric" autocomplete="off" style="'+inp+'letter-spacing:6px;">'
@@ -6730,6 +6852,23 @@ async function payCall(body){
   catch(e){res={ok:false,error:(e&&e.message)||'Could not reach the server'};}
   return res||{ok:false,error:'No answer'};
 }
+var _payPin=null;
+async function payQuick(bid,method){
+  var st=PAY_ST[bid]||await payLoad(bid,true);
+  if(!st||!(st.owing>0.5)){toast('Nothing left to pay','ok');return;}
+  var lbl={adumo:'Adumo',card:'card machine',cash:'cash'}[method]||method, amt=st.owing;
+  var cached=(_payPin&&_payPin.name===APP_USER.name&&Date.now()-_payPin.at<600000)?_payPin.pin:
+             (typeof _docPin!=='undefined'&&_docPin&&_docPin.name===APP_USER.name&&Date.now()-_docPin.at<600000)?_docPin.pin:'';
+  var save=function(pin){return payCall({action:'record',booking_id:bid,name:APP_USER.name,pin:pin,amount:amt,method:method,reference:''});};
+  var res=null;
+  if(cached){var a=await askBox({title:'💳 '+payFmt(amt)+' paid by '+lbl+'?',text:'Saved as paid at collection by '+APP_USER.name+'.',ok:'✓ Yes, paid',cancel:'Back'});if(!a.ok)return;
+    banner('Saving payment…');res=await save(cached);hideBanner();if(!res||!res.ok){_payPin=null;toast((res&&res.error)||'Not saved','err');if(!/PIN/i.test((res&&res.error)||''))return;res=null;}}
+  if(!res){var x=await payForm({title:'💳 '+payFmt(amt)+' paid by '+lbl,text:'Type your PIN to save it.',amount:amt,fixedAmount:true,ok:'✓ Save — paid',submit:function(f){return save(f.pin);}});
+    if(!x)return;res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};}
+  res._at=Date.now();PAY_ST[bid]=res;
+  toast('✓ '+payFmt(amt)+' paid by '+lbl+' — saved','ok');
+  if(co&&co.v&&co.v.bid===bid)drawCO();
+}
 async function payRecordOpen(bid){
   var st=PAY_ST[bid]||await payLoad(bid,true);
   var x=await payForm({title:'💵 Client paid at the office',text:'Record money the client paid here (card machine, cash, or Adumo at the office).',amount:st&&st.owing>0?st.owing:'',methods:true,reference:true,ok:'Save payment',
@@ -6761,7 +6900,7 @@ async function payGate(){
   }
   if(!(st.total>0)||!(st.owing>0.5))return true;
   if(!isPeter()){
-    await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nRecord the payment ("Client paid at the office") or send a new Adumo payment link on the Handover step. Only Peter can release a vehicle that is not fully paid.'});
+    await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nTap how the client paid (Adumo, card machine or cash) in the payment box. Only Peter can release a vehicle that is not fully paid.'});
     coGoStep(6); return false;
   }
   var a=await askBox({title:'⚠ Release with '+payFmt(st.owing)+' unpaid?',danger:true,ok:'Release anyway',text:'The rental is not fully paid. Management is alerted.',reason:'Why is the vehicle released before payment?',minReason:5});
@@ -7180,6 +7319,9 @@ async function startCI(fn){
 }
 
 function drawCI(){
+  try{_drawCI();}finally{try{ciQuickInject();}catch(e){}}
+}
+function _drawCI(){
   sigScope('ci:'+((ci&&ci.fn)||''));   // ink belongs to this vehicle's check-in only
   const r=ci,v=r.v;
   // Compute issues for step progress
@@ -7919,6 +8061,31 @@ function ciDmgAnswer(a){
   ci.dmgAns=a;
   var _sc=document.getElementById('ci-body'),_y=_sc?_sc.scrollTop:0;drawCI();try{if(_sc)_sc.scrollTop=_y;}catch(e){}
   if(a==='yes')setTimeout(function(){var e=document.getElementById('ci-dmg-grid');if(e&&e.scrollIntoView)e.scrollIntoView({behavior:'smooth',block:'start'});},150);
+}
+// Owner 2026-10-11: up to 6 returns at once — the client part of a check-in must be as short as possible.
+// One big button covers the most common case: vehicle check all fine AND no new damage.
+function ciQuickOK(){
+  window._ciQuick=true;
+  try{ciVehAllGood();}catch(e){}
+  window._ciQuick=false;
+  if(!ciHasNewDmg())ciDmgAnswer('none');else drawCI();
+}
+function ciQuickInject(){
+  try{
+    if(!ci||!ci.v||ci._done||(typeof ciStep!=='undefined'&&ciStep!==0))return;
+    var R=document.getElementById('ci-body');if(!R)return;
+    R.querySelectorAll('.step-intro').forEach(function(e){e.style.display='none';});
+    var pw=R.querySelector('.prog-wrap');if(!pw||document.getElementById('ci-quick'))return;
+    var open=0;try{L_CI.forEach(function(x,i){if(x[0]==='__SECTION__'||x[0]==='__OPTIONAL__'||!ciShow(x,i)||!ciStep1Item(i))return;var y=ci.retItems&&ci.retItems[x[1]];if(!(y&&(y.st!==undefined?y.st:y)))open++;});}catch(e){}
+    if(!open&&ci.dmgAns)return;
+    var b=document.createElement('button');b.id='ci-quick';b.type='button';b.className='btn g';
+    b.style.cssText='width:100%;margin:2px 0 10px;font-size:18px;padding:16px;';
+    b.textContent='✓ Vehicle OK — no new damage';
+    b.onclick=ciQuickOK;
+    var note=document.createElement('div');note.style.cssText='font-size:13px;color:var(--g5);text-align:center;margin:-4px 0 10px;';
+    note.textContent='Something wrong? Tap only that item below, or "Yes — mark it" for new damage.';
+    pw.parentNode.insertBefore(b,pw);pw.parentNode.insertBefore(note,pw);
+  }catch(e){}
 }
 // Tap a line in the red "client signs once these are done" box: go to that thing and flash it
 function ciGoOpen(k){
@@ -10947,6 +11114,12 @@ function guideCO(){
   var R=document.getElementById('cos');if(!R||!co||!co.v)return null;
   var t=function(text,el){return {text:text,el:el};};
   var st=coStep,b;
+  if(st>=5){   // client steps: one line saying what is still open here, and the way on
+    var _i=coCsIdx(),_m=coCsLeft(CO_CS[_i].k),_nx=_i<3?CO_CS[_i+1]:null;
+    var _go=_nx?function(){coCsGo(_i+1);}:null;
+    if(!_m.length)return {done:true,text:'Step '+(_i+1)+' done ✓',next:_nx?'Next: Step '+(_i+2)+' · '+_nx.lbl+' →':'',go:_go};
+    return {text:'Still to do here: '+_m[0]+(_m.length>1?' (+'+(_m.length-1)+' more)':'')};
+  }
   if(st===0){
     b=gAllGood(R);if(b)return t('Check the cleaning, then tap the green ✓ All good. Tap an item only if it is wrong.',b);
   }else if(st===2){
@@ -11089,7 +11262,7 @@ function guideUpdate(){
   bar.style.display='flex';
   var html='<div class="g-txt">'+(g.done?'':'👉 ')+_bx(g.text)+'</div>'
     +(g.done?(g.next?'<button class="g-next" onclick="_gCur&&_gCur.go&&_gCur.go()">'+_bx(g.next)+'</button>':'')
-            :(g.el?'<button class="g-show" onclick="guideShow()">Show me ↓</button>':''));
+            :(g.el?'<button class="g-show" onclick="guideShow()">Show me ↓</button>':'')+(g.next&&g.go?'<button class="g-show" onclick="_gCur&&_gCur.go&&_gCur.go()">'+_bx(g.next)+'</button>':''));
   if(bar._h!==html){bar._h=html;bar.innerHTML=html;bar.className=g.done?'g-done':'';}
 }
 function guideShow(){
