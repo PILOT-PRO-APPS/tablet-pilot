@@ -6325,7 +6325,7 @@ function coStep5_client(){
   <div style="background:var(--g1);border:1px solid var(--g2);border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;">
     <div style="font-size:13px;font-weight:700;color:var(--g5);text-transform:uppercase;margin-bottom:7px;">🏕 Equipment issued to client</div>
     <div style="display:flex;flex-wrap:wrap;gap:5px;">
-      ${equipSummary.map(e=>`<span style="font-size:13px;font-weight:700;padding:3px 9px;border-radius:8px;background:${e.st==='ok'?'var(--sg)':'var(--ag)'};color:${e.st==='ok'?'var(--se)':'var(--al)'};border:1px solid ${e.st==='ok'?'var(--gb)':'var(--am)'};">${e.st==='ok'?'✓':'⚠'} ${e.lbl}</span>`).join('')}
+      ${equipSummary.map(e=>{var cnt=/^\d+$/.test(String(e.st)),ok=e.st==='ok'||cnt;return `<span ${ok?'':`onclick="eqResolve('${_bx(e.lbl).replace(/'/g,'')}')"`} style="${ok?'':'cursor:pointer;'}font-size:13px;font-weight:700;padding:${ok?'3px 9px':'6px 12px'};border-radius:8px;background:${ok?'var(--sg)':'var(--ag)'};color:${ok?'var(--se)':'var(--al)'};border:${ok?'1px':'2px'} solid ${ok?'var(--gb)':'var(--am)'};">${ok?'✓':'⚠'} ${e.lbl}${cnt?' × '+e.st:''}${ok?'':' · tap to fix'}</span>`;}).join('')}
     </div>
   </div>`:''}
 
@@ -6341,7 +6341,7 @@ function coStep5_client(){
       co.custSig?
         `<div class="signed">✅<div class="signed-name">${v.cl} — Handover accepted</div><div class="signed-time">${co.custAt}</div></div>`:
       coLeftCount(CO_BEFORE_HANDOVER)?
-        `<div style="padding:16px;border-radius:10px;background:var(--rg);border:2px solid var(--re);color:var(--rl);font-size:16px;font-weight:900;text-align:center;">🔒 The client cannot sign yet — ${coLeftCount(CO_BEFORE_HANDOVER)} check${coLeftCount(CO_BEFORE_HANDOVER)===1?'':'s'} still open (see the orange Workshop line at the top)</div>`:
+        `<div style="padding:12px 14px;border-radius:10px;background:var(--rg);border:2px solid var(--re);"><div style="color:var(--rl);font-size:16px;font-weight:900;">🔒 Before the client signs — ${coLeftCount(CO_BEFORE_HANDOVER)} thing${coLeftCount(CO_BEFORE_HANDOVER)===1?'':'s'} to sort out. Tap ✓ OK right here:</div>${coLeftHTML(CO_BEFORE_HANDOVER)}</div>`:
         `<div style="font-size:14px;color:var(--g5);margin-bottom:10px;">⛽ DIESEL ONLY · ✅ All equipment received · I accept responsibility for the vehicle and contents</div>
         <div class="sig-area" style="border-color:var(--gb)">
           <div class="sig-hdr" style="background:#15532f;border-bottom-color:var(--gb)">
@@ -6648,6 +6648,30 @@ function coLeftList(steps){
 }
 function coLeftCount(steps){try{return coLeftList(steps).length;}catch(e){return 0;}}
 // The list itself: grouped per step, items tappable right here
+// Tap a ⚠ item in "Equipment issued to client": sort it out on the spot (owner 2026-10-11)
+function eqResolve(lbl){
+  var old=document.getElementById('eq-res');if(old)old.remove();
+  var w=document.createElement('div');w.id='eq-res';
+  w.setAttribute('style','position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;');
+  w.onclick=function(e){if(e.target===w)w.remove();};
+  var b='width:100%;padding:16px;border-radius:12px;font-size:17px;font-weight:900;margin-top:8px;cursor:pointer;';
+  var esc=String(lbl).replace(/'/g,"\\'");
+  w.innerHTML='<div style="background:#fff;border-radius:16px;max-width:460px;width:100%;padding:18px;">'
+    +'<div style="font-size:19px;font-weight:900;margin-bottom:4px;">⚠ '+_bx(lbl)+'</div>'
+    +'<div style="font-size:14px;color:#475569;">This was marked as a problem in the workshop. What is it now?</div>'
+    +'<button style="'+b+'border:none;background:#12803c;color:#fff;" onclick="eqResolveSet(\''+esc+'\',\'ok\')">✓ OK now — handed to the client</button>'
+    +'<button style="'+b+'border:2px solid #cbd5e1;background:#f8fafc;color:#111;" onclick="eqResolveSet(\''+esc+'\',\'na\')">Not booked / not given</button>'
+    +'<button style="'+b+'border:2px solid #cbd5e1;background:#fff;color:#475569;" onclick="document.getElementById(\'eq-res\').remove()">Keep as a problem</button></div>';
+  document.body.appendChild(w);
+}
+function eqResolveSet(lbl,v){
+  var w=document.getElementById('eq-res');if(w)w.remove();
+  var who=(APP_USER&&APP_USER.name)||'',t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if(!co.prepItems)co.prepItems={};
+  co.prepItems[lbl]=v==='na'?'na':{st:'ok',by:who+' (at handover)',at:t};
+  saveCOProgress();drawCO();
+  toast(v==='na'?lbl+' — not given':'✓ '+lbl+' OK','ok');
+}
 function coLeftHTML(steps){
   var h='';
   steps.forEach(function(n){
