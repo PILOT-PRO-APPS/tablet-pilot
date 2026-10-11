@@ -1637,7 +1637,7 @@ var DISCS={};var ALL_FLEET_NOS=[];
 var DISC_WARN_DAYS=45;
 function discDaysLeft(exp){if(!exp)return null;var t=new Date();t.setHours(0,0,0,0);return Math.round((new Date(exp+'T00:00:00')-t)/86400000);}
 function _bx(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function _isRemoteLoc(l){return !!(l&&String(l).trim()&&!/windhoek|whk|hkia|hosea/i.test(l));}
+function _isRemoteLoc(l){return !!(l&&String(l).trim()&&!/windhoek|whk|hkia|hosea|go rent|office|diehl/i.test(l));}
 function _fmtFlight(s,kind){
   if(!s)return '';
   var p=String(s).split('/');var num=(p[0]||'').trim();var last=(p[p.length-1]||'').trim();
@@ -1710,6 +1710,14 @@ async function loadBookings(){
         if(!x.booking_id||back[x.booking_id]||seen[x.booking_id])return false;seen[x.booking_id]=1;
         return x.return_place&&x.return_place!=='Go Rent Office, 6 Diehl Str, Windhoek';
       }).map(function(x){var v=FLEET.filter(function(f){return bkKey(f)===x.booking_id;})[0];x.rt=v?v.rt:'';return x;});
+    }catch(e){}
+    // …and bookings whose return place in the Fleet Manager is outside Windhoek, from the day they are booked
+    try{
+      var _have={};(REMOTE_RETURNS||[]).forEach(function(x){_have[x.booking_id]=1;});
+      FLEET.forEach(function(v){var k=bkKey(v);
+        if(_have[k]||!v.doLocation||!_isRemoteLoc(v.doLocation)||(back&&back[k]))return;
+        REMOTE_RETURNS.push({booking_id:k,fleet_no:v.fn,return_place:v.doLocation,return_address:'',return_place_time:'',rt:v.rt,fromBooking:true});
+      });
     }catch(e){}
     try{await loadRemoteDrafts();}catch(e){}
     BOOKINGS_LOADED=true;
@@ -3596,6 +3604,28 @@ function hoQuickTimes(v,inline){
 }
 // Expected return time + WiFi device: on the Contract step, right under Collection & Return,
 // as two compact rows (they used to be two big boxes at the top of Handover).
+// Remote collection (owner 2026-10-11): prefilled from the booking — place, the return date and the expected
+// return time — so it shows on the Dashboard straight away and someone is arranged to go and fetch the vehicle.
+function ctRemoteBoxHTML(){
+  var c=co.contract=co.contract||{},OFFICE=GR_HQ,v=co.v||{};
+  try{var _rv=placeValue('dropoffArrangement');if(_rv)c.return_location=_rv;}catch(e){}
+  var rl=c.return_location||OFFICE;
+  if(rl===OFFICE||/go rent office|diehl/i.test(rl))return '';
+  if(!c.return_address&&v.doLocation&&_isRemoteLoc(v.doLocation))c.return_address=v.doLocation;
+  if(!c.return_place_date)c.return_place_date=v.rt||'';
+  if(!c.return_place_time&&co.returnTime)c.return_place_time=co.returnTime;
+  var ok=!!(c.return_address&&c.return_place_time&&c.return_place_date);
+  return '<div id="ct-remote" style="border:2px solid '+(ok?'var(--gb)':'var(--am)')+';background:'+(ok?'var(--sg)':'var(--ag)')+';border-radius:10px;padding:10px 12px;">'
+    +'<div style="font-size:14px;font-weight:900;color:var(--al);margin-bottom:6px;">🚩 Vehicle collected at '+_bx(rl)+' — we must fetch it (shows on the Dashboard)</div>'
+    +'<div class="fi"><label>Exact address / directions *</label>'
+    +'<textarea id="ct-raddr" placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" '
+    +'style="width:100%;min-height:52px;padding:10px 12px;border-radius:var(--rs);border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;">'+_bx(c.return_address||'')+'</textarea></div>'
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">'
+    +'<div class="fi" style="margin-bottom:0;"><label>Collection date *</label><input type="date" id="ct-rpdate" value="'+_bx(c.return_place_date||'')+'" onchange="(co.contract=co.contract||{}).return_place_date=this.value;saveCOProgress();drawCO();" style="padding:9px 10px;border-radius:var(--rs);border:2px solid '+(c.return_place_date?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;"></div>'
+    +'<div class="fi" style="margin-bottom:0;flex:1;min-width:200px;"><label>Time to collect there *</label>'
+    +timePickers('ct-rptime',c.return_place_time||'',"var _t=timePickValue('ct-rptime');if(_t){(co.contract=co.contract||{}).return_place_time=_t;saveCOProgress();drawCO();}")
+    +'</div></div></div>';
+}
 function ctReturnWifiHTML(){
   var v=co.v,d=co.docItems||{};
   var due=v.rt?new Date(v.rt+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}):'—';
@@ -3612,7 +3642,7 @@ function ctReturnWifiHTML(){
     +'<button style="'+bs+(w==='ok'?'border:2px solid var(--gb);background:var(--se);color:#fff;':'border:2px solid var(--g3);background:var(--g0);color:var(--tx);')+'" onclick="coSetDoc(\'wifi\',\'ok\')">'+(w==='ok'?'✓ ':'')+'Handed over</button>'
     +'<button style="'+bs+(w&&w!=='ok'?'border:2px solid var(--re);background:var(--re);color:#fff;':'border:2px solid var(--g3);background:var(--g0);color:var(--tx);')+'" onclick="coSetDoc(\'wifi\',\'issue\')">'+(w&&w!=='ok'?'⚠ ':'')+'Not available</button>'
     +'</div>';
-  return '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'+ret+wifi+'</div>';
+  return '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'+ret+ctRemoteBoxHTML()+wifi+'</div>';
 }
 // Handover: only the cross-border papers are left up here (WiFi + return time moved to Contract)
 function hoTopRow(){
@@ -4969,7 +4999,10 @@ async function captureDriverDoc(event,driverIdx,field){
 
 // ── STEP 2: Contract ─────────────────────────────────────────────
 // Contract details: insurance dropdown + tick boxes (fuel & admin, cross-border, windscreen, camping cover)
-var CT_INS={'1':{t:'Option 1 — Basic Cover',rate:230,dep:45000},'2':{t:'Option 2 — Extended Cover',rate:362,dep:30000},'3':{t:'Option 3 — Premium Cover (zero excess)',rate:546,dep:0}};
+var CT_INS={'1':{t:'Option 1 — Basic Cover',rate:230,dep:45000},'2':{t:'Option 2 — Extended Cover',rate:320,dep:30000},'3':{t:'Option 3 — Premium Cover (zero excess)',rate:490,dep:0}};
+// Add-on prices: follow the office Price list in PilotDesktop (app_settings.price_list), these are the 11 Oct 2026 values
+var PL_TYRE=180, PL_CAMP=100;
+function plN(n){n=Number(n);return n%1?n.toFixed(2):String(n);}
 function ctMoney(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function ctDays(){var _pu=coPickupDate();return _pu&&co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(_pu))/86400000)):0;}
 function ctSet(k,v){(co.contract=co.contract||{})[k]=v;if(k==='country_deposit')co.contract.country_deposit_auto=false;if(k==='insurance_option'){var o=CT_INS[v];co.contract.deposit_amount=o?o.dep:null;}drawCO();try{ctAskRefresh();}catch(e){}}
@@ -4988,6 +5021,9 @@ function loadDriverPrices(){
     var v=r&&r.data&&r.data.value; if(!v) return;
     var f=Number(v.driverFee), n=Number(v.driversFree);
     if(isFinite(f)&&f>=0) EXTRA_DRIVER_FEE=f; if(isFinite(n)&&n>=0) EXTRA_DRIVER_FREE=Math.floor(n);
+    // insurance and add-on prices too (same Price list as the quotes in PilotDesktop)
+    if(v.ins)['1','2','3'].forEach(function(k){var r=Number(v.ins[k]);if(isFinite(r)&&r>=0&&CT_INS[k])CT_INS[k].rate=r;});
+    var t=Number(v.tyre),cc=Number(v.campcover);if(isFinite(t)&&t>=0)PL_TYRE=t;if(isFinite(cc)&&cc>=0)PL_CAMP=cc;
   },function(){}); }catch(e){}
 }
 setTimeout(loadDriverPrices,3000); setInterval(loadDriverPrices,30*60*1000);
@@ -5071,8 +5107,8 @@ function ctOpenQuestions(){
   var c=co.contract=co.contract||{},q=[],days=ctDays();
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
   if(!c.insurance_option)q.push({s:'Insurance',t:'📋 Which insurance does the client take?',h:ctInsButtons(c)});
-  if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$184/day × '+days+' = '+ctMoney(184*days),h:ctYesNo(c,'addon_windscreen')});
-  if(ctCampingBooked()&&c.addon_equipment!==true&&c.addon_equipment!==false)q.push({s:'Camping cover',t:'🏕 Camping Equipment cover — N$103.50/day × '+days+' = '+ctMoney(103.5*days),h:ctYesNo(c,'addon_equipment')});
+  if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$'+plN(PL_TYRE)+'/day × '+days+' = '+ctMoney(PL_TYRE*days),h:ctYesNo(c,'addon_windscreen')});
+  if(ctCampingBooked()&&c.addon_equipment!==true&&c.addon_equipment!==false)q.push({s:'Camping cover',t:'🏕 Camping Equipment cover — N$'+plN(PL_CAMP)+'/day × '+days+' = '+ctMoney(PL_CAMP*days),h:ctYesNo(c,'addon_equipment')});
   if(!c.fuel_deposit_received)q.push({s:'Fuel deposit',t:'⛽ Fuel & Admin deposit N$2,500 (every rental)',h:ctGot(c,'fuel_deposit_received')});
   if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')q.push({s:'Country deposit',t:'🛂 Extra security deposit N$7,500 by country (section 2.1)',h:ctXdepButtons(c)});
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
@@ -5133,7 +5169,7 @@ function ctDetailsForm(){
       +(right?'<div style="text-align:right;font-size:14px;font-weight:900;color:'+(on?'var(--se)':'var(--g5)')+';white-space:nowrap;">'+right+'</div>':'')
       +'</label>';
   }
-  var ws=c.addon_windscreen===true,eq=ctCampingBooked()&&c.addon_equipment===true,wsT=184*days,eqT=103.5*days;
+  var ws=c.addon_windscreen===true,eq=ctCampingBooked()&&c.addon_equipment===true,wsT=PL_TYRE*days,eqT=PL_CAMP*days;
   // Cover that must be answered: Taken or Declined (null = not answered yet)
   function choice(key,title,sub,rateTxt,totTxt){
     var v=c[key],done=v===true||v===false;
@@ -5155,20 +5191,13 @@ function ctDetailsForm(){
   if(c.pickup_location===undefined)c.pickup_location=OFFICE;
   if(c.return_location===undefined)c.return_location=OFFICE;
   var remote=(c.return_location||OFFICE)!==OFFICE;
-  var remoteBox=remote?('<div style="border:2px solid var(--am);background:var(--ag);border-radius:10px;padding:10px 12px;margin:0 0 10px;">'
-      +'<div style="font-size:14px;font-weight:900;color:var(--al);margin-bottom:6px;">🚩 Not the office — where exactly is the vehicle collected?</div>'
-      +'<div class="fi"><label>Exact address / directions *</label>'
-      +'<textarea id="ct-raddr" placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" '
-      +'style="width:100%;min-height:62px;padding:10px 12px;border-radius:var(--rs);border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;">'+_bx(c.return_address||'')+'</textarea></div>'
-      +'<div class="fi" style="margin-bottom:0;"><label>Time to collect there *</label>'
-      +timePickers('ct-rptime',c.return_place_time||'',"var _t=timePickValue('ct-rptime');if(_t){(co.contract=co.contract||{}).return_place_time=_t;drawCO();}")
-      +'</div></div>'):'';
+  var remoteBox='';   // moved to Step 1 next to the return time: ctRemoteBoxHTML()
   var h='<div style="font-size:13px;color:var(--g5);margin-bottom:10px;">Rental period: <b style="color:var(--tx);">'+days+' days</b> · rental rates are on the separate invoice</div>'
     +remoteBox
     +insSel
     +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;">Extra cover — client must take or decline each</div>'
-    +'<div id="ct-aws">'+choice('addon_windscreen','🛞 Windscreen &amp; Tyre cover','N$184 per day · 1 windscreen, '+(days>14?'2 tyres':'1 tyre')+' · rims excluded','N$184/day','N$184 × '+days+' = '+ctMoney(wsT))+'</div>'
-    +(ctCampingBooked()?'<div id="ct-aeq">'+choice('addon_equipment','🏕 Camping Equipment cover','N$103.50 per day · accidental damage or loss of camping gear','N$103.50/day','N$103.50 × '+days+' = '+ctMoney(eqT))+'</div>':'')
+    +'<div id="ct-aws">'+choice('addon_windscreen','🛞 Windscreen &amp; Tyre cover','N$'+plN(PL_TYRE)+' per day · 1 windscreen, '+(days>14?'2 tyres':'1 tyre')+' · rims excluded','N$'+plN(PL_TYRE)+'/day','N$'+plN(PL_TYRE)+' × '+days+' = '+ctMoney(wsT))+'</div>'
+    +(ctCampingBooked()?'<div id="ct-aeq">'+choice('addon_equipment','🏕 Camping Equipment cover','N$'+plN(PL_CAMP)+' per day · accidental damage or loss of camping gear','N$'+plN(PL_CAMP)+'/day','N$'+plN(PL_CAMP)+' × '+days+' = '+ctMoney(eqT))+'</div>':'')
     +((ws||eq)?'<div style="display:flex;justify-content:space-between;padding:8px 14px;margin:-2px 0 8px;border-top:1px dashed var(--g3);font-size:15px;font-weight:900;"><span style="color:var(--g5);">Cover total ('+days+' days)</span><span style="color:var(--se);">'+ctMoney((ws?wsT:0)+(eq?eqT:0))+'</span></div>':'')
     ;
   return h;
@@ -5321,7 +5350,7 @@ function gatherContract(){
 function ctCampingBooked(){try{return !!(co&&co.v&&co.v.camping);}catch(e){return true;}}
 function ctMissing(c){
   c=c||co.contract||{};var m=[];
-  if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&(!c.return_address||!c.return_place_time))m.push('📍 Remote return: exact address and collection time');
+  if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
   if(ctCampingBooked()&&c.addon_equipment!==true&&c.addon_equipment!==false)m.push('🏕 Camping Equipment cover: Taken or Declined?');
@@ -6777,7 +6806,7 @@ function payChip(v){
 }
 function payPanelHTML(v){ return '<div id="co-pay" style="margin-bottom:14px;">'+payPanelInner(v)+'</div>'; }
 // Simple payment box (owner 2026-10-11): what is paid / still to pay, and one tap for HOW the client paid.
-// No payment links, no reference numbers, no history table on the tablet: those stay on PilotDesktop.
+// No payment links, no reference numbers, no history table on the tablet: those stay on the Desktop APP.
 function payPanelInner(v){
   var st=PAY_ST[v.bid], s=payState(st);
   var col=s.key==='paid'?'#12803c':s.key==='owing'?'#d13636':'#b45309';
@@ -6797,7 +6826,7 @@ function payPanelInner(v){
     var b=function(m,l){return '<button onclick="payQuick(\''+_bx(v.bid)+'\',\''+m+'\')" style="flex:1;min-width:140px;padding:16px 10px;border-radius:12px;border:2px solid #12803c;background:#f0fdf4;color:#14532d;font-size:18px;font-weight:900;cursor:pointer;">'+l+'</button>';};
     h+='<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Client paid '+payFmt(st.owing)+' now — tap how:</div>'
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+b('adumo','💳 Adumo')+b('card','💳 Card machine')+b('cash','💵 Cash')+'</div>'
-      +'<div style="font-size:12px;color:#64748b;margin-top:6px;">Paid a different amount, by EFT, or need a payment link? The office does that in PilotDesktop.</div>';
+      +'<div style="font-size:12px;color:#64748b;margin-top:6px;">Paid a different amount, by EFT, or need a payment link? The office does that in the Desktop APP.</div>';
   }
   return h+'</div>';
 }
@@ -6951,7 +6980,7 @@ async function completeCO(){
     manager_name:co.mgmtBy, manager_signed_at:(co.mgmtSig||co.mgmtCleared)?new Date().toISOString():null,
     odo_out:co.odometerOut||co.v.odo, unchecked_prep:uncPrep, unchecked_mech:uncMech,
     damage_panels:co.dmgd, prep_checklist:co.prepItems||{}, mech_checklist:co.mechItems||{}, mech_by:co.mechCheckBy||null, mech_who:co.mechWho||{}, return_time:co.returnTime||null,
-    return_place:(co.contract&&co.contract.return_location)||null, return_address:(co.contract&&co.contract.return_address)||null, return_place_time:(co.contract&&co.contract.return_place_time)||null, doc_checks:co.docItems||{},
+    return_date_new:(co.contract&&co.contract.return_place_date&&co.contract.return_place_date!==co.v.rt&&co.contract.return_location&&co.contract.return_location!==GR_HQ)?co.contract.return_place_date:undefined, return_place:(co.contract&&co.contract.return_location)||null, return_address:(co.contract&&co.contract.return_address)||null, return_place_time:(co.contract&&co.contract.return_place_time)||null, doc_checks:co.docItems||{},
     created_at:new Date().toISOString(),
   };
   try{
@@ -10531,17 +10560,17 @@ function buildContractHTML(c,sigUrl){
       <!-- Option 1 -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='1'?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(c.insurance_option==='1')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 1 – Basic Cover</strong> | N$230/day | Security deposit N$45,000 — refunded 7 days after return if no damage.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 1 – Basic Cover</strong> | N$${plN(CT_INS['1'].rate)}/day | Security deposit N$45,000 — refunded 7 days after return if no damage.</div>
       </div>
       <!-- Option 2 -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='2'?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(c.insurance_option==='2')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 2 – Extended Cover</strong> | N$362/day | Security deposit N$30,000 — refunded 7 days after return if no damage.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 2 – Extended Cover</strong> | N$${plN(CT_INS['2'].rate)}/day | Security deposit N$30,000 — refunded 7 days after return if no damage.</div>
       </div>
       <!-- Option 3 -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='3'?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(c.insurance_option==='3')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$546/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$${plN(CT_INS['3'].rate)}/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
       </div>
       <!-- Fuel deposit -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;margin-bottom:5px;">
@@ -10560,12 +10589,12 @@ function buildContractHTML(c,sigUrl){
       <!-- Windscreen add-on -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.addon_windscreen?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(!!c.addon_windscreen)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Windscreen &amp; Tyre Cover</strong> | N$184/day | Optional. 1 windscreen per rental. Tyre cover: <strong>${tyreCover}</strong>. <span style="color:#c0392b;font-weight:700;">Rims always excluded.</span></div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Windscreen &amp; Tyre Cover</strong> | N$${plN(PL_TYRE)}/day | Optional. 1 windscreen per rental. Tyre cover: <strong>${tyreCover}</strong>. <span style="color:#c0392b;font-weight:700;">Rims always excluded.</span></div>
       </div>
       <!-- Camping add-on -->
       ${ctCampingBooked()?`<div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.addon_equipment?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(!!c.addon_equipment)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Camping Equipment Damage/Loss Cover</strong> | N$103.50/day | Optional. Covers provided camping gear against accidental damage or loss.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Camping Equipment Damage/Loss Cover</strong> | N$${plN(PL_CAMP)}/day | Optional. Covers provided camping gear against accidental damage or loss.</div>
       </div>`:''}
       <!-- Cross-border -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:${c.cross_border?'#f0f9f4;border-color:#1e8449':'#fff'};">
