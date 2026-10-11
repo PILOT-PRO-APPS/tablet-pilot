@@ -7038,13 +7038,38 @@ function sendGuideWA(){
   var msg='Hi '+first+',\n\nHere is your Namibia driving guide from Go Rent 4x4 - our road rules, what to do after an accident or breakdown, emergency numbers, tyre pressure and where to shop. Please keep it handy, many roads have no signal:\n'+guideLink()+'\n\nSafe travels! WhatsApp us anytime: +264 81 861 8085\n- Go Rent 4x4 Team';
   openExt('https://wa.me/'+waNumber(phone)+'?text='+encodeURIComponent(msg));
 }
+// Dates in a client message read "Wed 21 Oct 2026", not "2026-10-21"
+function waDate(ymd){try{if(!ymd)return '';var d=new Date(String(ymd).slice(0,10)+'T00:00:00');if(isNaN(d))return String(ymd);
+  return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getFullYear();}catch(e){return String(ymd||'');}}
+// Handover message to the client — kept in line with GR Agreement 2026 (owner 2026-10-11)
+function handoverWAText(){
+  var c=co.contract||{},first=firstNameOf(mainRenter()||co.v.cl,(co.drivers||[])[0]);
+  var rl=c.return_location||'',hq=!rl||rl===GR_HQ||/go rent office|diehl/i.test(rl);
+  var place=hq?'Go Rent office, 6 Diehl Str, Windhoek':(rl+(c.return_address?' ('+c.return_address+')':''));
+  var rtime=co.returnTime||c.return_place_time||'';
+  var L=[];
+  L.push('Hi '+first+',','','Thank you for renting with Go Rent 4x4 Namibia!','');
+  L.push('🚙 Vehicle: '+co.fn+(co.v.reg?' ('+co.v.reg+')':''));
+  L.push('📅 Pickup: '+(waDate(coPickupDate())||'today'));
+  L.push('🏁 Return: '+(waDate(co.v.rt)||'-')+(rtime?' at '+rtime:'')+' - '+place);
+  if(hq)L.push('   Office hours Mon-Fri 07:30-16:00. Weekend or holiday returns must be arranged with us in advance.');
+  L.push('⛽ Fuel at departure: '+(co.fuelOut||'Full')+'. DIESEL ONLY. Please return it full, otherwise N$250 plus the fuel is taken from your deposit.');
+  if(co.v.xb||c.cross_border)L.push('🌍 Cross-border: '+(co.v.xb||c.cross_border)+'. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
+  L.push('','📄 Your handover document - signed rental contract, vehicle condition, damage and photos, equipment issued:',co._handoverLink);
+  if(co.sendGuide!==false)L.push('','📘 Your Namibia driving guide - our speed limits, what to do after an accident or breakdown, emergency numbers (keep it handy, many roads have no signal):',guideLink());
+  L.push('','Please remember:',
+    '- Go Rent speed limits apply (GPS tracked): one speeding event cancels all insurance.',
+    '- No driving after sunset outside towns.',
+    '- Any accident or damage: call us first and get a police report within 24 hours.',
+    '- Want to extend? Ask at least 2 days before your return date.');
+  L.push('','Safe travels! WhatsApp us anytime: +264 81 861 8085','- Go Rent 4x4 Team');
+  return L.join('\n');
+}
 function sendHandoverWA(){
   const phone=((function(){var _e=document.getElementById('send-wa');return _e?_e.value:undefined;})()||'').trim();
   if(!phone){toast('Enter WhatsApp number','err');return;}
   if(!co._handoverLink){toast('The handover report is still being saved — try again in a moment','err');return;}
-  var first=firstNameOf(mainRenter()||co.v.cl,(co.drivers||[])[0]);
-  const msg=encodeURIComponent('Hi '+first+',\n\nThank you for renting with Go Rent 4x4 Namibia!\n\nVehicle: '+co.fn+' ('+(co.v.reg||'')+')\nPickup: '+(coPickupDate()||'today')+' | Return: '+(co.v.rt||'-')+'\nFuel at departure: '+(co.fuelOut||'Full')+' - please return at the same level. DIESEL ONLY.\n\nYour handover document - handover checklist, vehicle condition and damage, photos, equipment issued and your full signed rental contract:\n'+co._handoverLink+(co.sendGuide===false?'':'\n\nYour Namibia driving guide - our road rules, what to do after an accident or breakdown, emergency numbers (please keep it handy, many roads have no signal):\n'+guideLink())+'\n\nSafe travels! WhatsApp us anytime: +264 81 861 8085\n- Go Rent 4x4 Team');
-  openExt('https://wa.me/'+waNumber(phone)+'?text='+msg);
+  openExt('https://wa.me/'+waNumber(phone)+'?text='+encodeURIComponent(handoverWAText()));
   if(!co._mgmtSent)toast('Now send the copy to Management (green button)','ok');
 }
 
