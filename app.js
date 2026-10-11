@@ -2423,6 +2423,40 @@ function drPhotoRef(src,id){
   if(src.indexOf('data:image')!==0||src.length<=60000)return src;
   return 'draftimg:drafts/'+id.replace(/[^A-Za-z0-9_-]/g,'_')+'/'+drHash(src)+(src.indexOf('data:image/png')===0?'.png':'.jpg');
 }
+// ── Finished work is never taken away by an older copy (owner 2026-10-11: "we keep on losing contract signatures") ──
+// The workshop tablet and the office tablet often have the same job open. Sync was "last save wins"
+// for everything except photos, so a workshop tick uploaded the workshop's copy (no signature) over the
+// signed one, the office tablet loaded it, and the client was asked to sign again (rental_contracts:
+// H-33, H-41, H-35, H-17, Hi-44 each signed twice 13–33 s apart). Now, whenever two copies meet,
+// anything finished in either one is kept: signatures, the signed contract, steps done, ticked items.
+var DR_DONE_RE=/(Sig|Signed|Done|Cleared|Closed|Override|By|At)$/;
+var DR_MAPS=['prepItems','mechItems','mechWho','docItems','equipItems','ciItems','retQty','vehChk','dmgNew'];
+function drKeepDone(t,o){
+  if(!t||!o||typeof t!=='object'||typeof o!=='object')return 0;
+  if(t._done||o._done)return 0;
+  if((t.fn||o.fn)&&t.fn!==o.fn)return 0;   // booking moved to another vehicle: the old vehicle's checks were cleared on purpose
+  var n=0,k;
+  // A signed contract wins over an unsigned one, whole
+  var tc=t.contract||{},oc=o.contract||{};
+  var oSigned=!!(o.contractSigned||oc.status==='signed'),tSigned=!!(t.contractSigned||tc.status==='signed');
+  if(oSigned&&!tSigned){t.contract=JSON.parse(JSON.stringify(oc));t.contractSigned=true;if(o.contractAt)t.contractAt=o.contractAt;if(o.contractBy)t.contractBy=o.contractBy;n++;}
+  else if(!tSigned&&o.contract&&typeof o.contract==='object'){   // neither signed: answers given on either tablet are kept
+    t.contract=t.contract||{};
+    for(k in oc){if((t.contract[k]===undefined||t.contract[k]===null||t.contract[k]==='')&&oc[k]!==undefined&&oc[k]!==null&&oc[k]!==''){t.contract[k]=oc[k];n++;}}
+  }
+  // Signatures and "done" marks (custSig, prepSig, equipSig, mgmtSig, retSig, mechDone, inspBy, mgmtCleared …)
+  for(k in o){
+    if(k.charAt(0)==='_'||k==='contract'||k==='v')continue;
+    if(DR_DONE_RE.test(k)&&o[k]&&!t[k]){t[k]=o[k];n++;}
+  }
+  // Ticked items: each item answered on either tablet is kept
+  DR_MAPS.forEach(function(m){
+    var om=o[m];if(!om||typeof om!=='object'||Array.isArray(om))return;
+    if(!t[m]||typeof t[m]!=='object')t[m]={};
+    for(var x in om){if((t[m][x]===undefined||t[m][x]===null||t[m][x]==='')&&om[x]!==undefined&&om[x]!==null&&om[x]!==''){t[m][x]=om[x];n++;}}
+  });
+  return n;
+}
 async function drMergePhotos(r,data,srvData){
   var srv=srvData&&srvData.o;var mine=data&&data.o;
   if(!srv||!mine)return;
@@ -2608,6 +2642,8 @@ async function drPush(){
       // Done on EVERY save (also from the same tablet): an older copy of the job on this tablet
       // must never wipe photos already saved on the server (H-001, 2 Oct: 5 equipment photos lost).
       if(row&&row.data){try{await drMergePhotos(r,data,row.data);}catch(e){}}
+      // Signatures, a signed contract and ticked items on the server copy are kept too
+      var _kept=0;if(row&&row.data&&row.data.o&&data&&data.o){try{_kept=drKeepDone(data.o,row.data.o);}catch(e){_kept=0;}}
       var up=await SB.from('work_drafts').upsert({id:r.id,kind:r.kind,fleet_no:r.fn,client:r.cl,staff:r.staff,step:r.step,summary:r.sum||{},
         data:data,updated_by:r.by||(APP_USER&&APP_USER.name),device:DR_DEV},{onConflict:'id'}).select('updated_at,started_at').single();
       if(up.error){_drDirty=true;break;}
@@ -2615,6 +2651,12 @@ async function drPush(){
       if(now&&!now.deleted){now.base=up.data.updated_at;DR_BASEC[r.id]=now.base;if(now.json===r.json)now.pushed=true;else _drDirty=true;
         var _okPut=true;await _drTx('readwrite',function(s){return s.put(now,r.id);}).catch(function(){_drDirty=true;_okPut=false;});
         if(_okPut&&now.pushed)sent(r.id);}
+      if(_kept){   // put what the other tablet finished on this screen too, so the next save here keeps it
+        try{var _kk=r.id.split(':')[0],_job=_kk==='checkout'?co:ci;
+          if(_job&&_job.v&&drId(_kk,_job)===r.id){var _st=await drUnpack(row.data);if(_st&&_st.o&&drKeepDone(_job,_st.o)){
+            if(_kk==='checkout'&&drPageOn('co'))drawCO();if(_kk==='checkin'&&drPageOn('ci'))drawCI();}}
+        }catch(e){}
+      }
       DR_SRV[r.id]=Object.assign(DR_SRV[r.id]||{},{id:r.id,kind:r.kind,fleet_no:r.fn,client:r.cl,staff:r.staff,step:r.step,updated_at:up.data.updated_at,updated_by:r.by,device:DR_DEV,started_at:up.data.started_at});
       drMarkLocal(r.kind,r.fn,r.cl,r.staff,true);
     }
@@ -2681,7 +2723,13 @@ async function drApplyServer(id,force){
     await drDel(id);return false;
   }
   var st;try{st=await drUnpack(q.data.data);}catch(e){return false;}
+  // What was finished on THIS screen (e.g. the client just signed) stays, even if the other copy lacks it
+  var _here=kind==='checkout'?co:ci,_kept=0;
+  try{if(_here&&_here.v&&drId(kind,_here)===id&&st&&st.o)_kept=drKeepDone(st.o,_here);}catch(e){}
+  var _same=!!(_here&&_here.v&&drId(kind,_here)===id),_myStep=kind==='checkout'?coStep:ciStep;
   drRestore(kind,st,q.data);
+  if(_same&&!force){if(kind==='checkout')coStep=_myStep;else ciStep=_myStep;}   // each tablet stays on the step its person is on
+  if(_kept){try{if(kind==='checkout')saveCOProgress();else if(typeof saveCIProgress==='function')saveCIProgress();}catch(e){}}
   if(kind==='checkout'&&drPageOn('co'))try{drawCO();}catch(e){}
   if(kind==='checkin'&&drPageOn('ci'))try{drawCI();}catch(e){}
   if(!force)toast('↻ '+q.data.fleet_no+' updated by '+(q.data.updated_by||'another device'),'ok');
@@ -2705,7 +2753,9 @@ async function drLoadFor(kind,key){
   var row=null;
   if(drOnline()){try{var q=await SB.from('work_drafts').select('*').eq('id',id).maybeSingle();if(!q.error)row=q.data;}catch(e){}}
   if(row&&!(row.data&&row.data.o))row=null;   // older format
-  if(loc&&!loc.pushed){try{var st0=JSON.parse(loc.json);drRestore(kind,st0,null);DR_LAST[id]={sig:drSig(st0),im:st0.im||null};return {src:'here',by:loc.by};}catch(e){}}
+  if(loc&&!loc.pushed){try{var st0=JSON.parse(loc.json);
+    if(row&&st0&&st0.o){try{var _sv=await drUnpack(row.data);if(_sv&&_sv.o)drKeepDone(st0.o,_sv.o);}catch(e){}}   // keep signatures done on the other tablet
+    drRestore(kind,st0,null);DR_LAST[id]={sig:drSig(st0),im:st0.im||null};return {src:'here',by:loc.by};}catch(e){}}
   if(row){
     banner('Loading work from '+(row.updated_by||'another device'));
     try{var st=await drUnpack(row.data);hideBanner();drRestore(kind,st,row);return {src:'server',by:row.updated_by,device:row.device};}
