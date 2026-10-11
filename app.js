@@ -7205,7 +7205,7 @@ function coDoneScreen(){
         <div style="font-size:14px;color:var(--g5);margin-bottom:12px;">Includes: handover checklist · equipment · vehicle condition &amp; damage diagram · photos · client signature · full signed contract</div>
         <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;border-radius:10px;border:2px solid ${co.sendGuide===false?'var(--g3)':'var(--gb)'};background:${co.sendGuide===false?'var(--g0)':'var(--sg)'};cursor:pointer;">
           <input type="checkbox" ${co.sendGuide===false?'':'checked'} onchange="co.sendGuide=this.checked;try{saveCOProgress();}catch(e){};var l=this.parentNode;l.style.borderColor=this.checked?'var(--gb)':'var(--g3)';l.style.background=this.checked?'var(--sg)':'var(--g0)';" style="width:24px;height:24px;flex-shrink:0;">
-          <span style="flex:1;font-size:14px;font-weight:800;color:var(--tx);">📘 Add the Namibia driving guide<span style="display:block;font-size:12px;font-weight:600;color:var(--g5);">Our road rules, accident &amp; breakdown steps, emergency numbers, tyre pressure, shopping</span></span>
+          <span style="flex:1;font-size:14px;font-weight:800;color:var(--tx);">📘 Add the Namibia info pack<span style="display:block;font-size:12px;font-weight:600;color:var(--g5);">Our road rules, accident &amp; breakdown steps, emergency numbers, tyre pressure, shopping</span></span>
           <a href="${guideLink()}" target="_blank" onclick="event.stopPropagation()" style="font-size:13px;font-weight:800;color:var(--se);white-space:nowrap;">Preview</a>
         </label>
 
@@ -7310,20 +7310,23 @@ function waDate(ymd){try{if(!ymd)return '';var d=new Date(String(ymd).slice(0,10
   return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getFullYear();}catch(e){return String(ymd||'');}}
 // Handover message to the client — kept in line with GR Agreement 2026 (owner 2026-10-11)
 function handoverWAText(){
+  // Plain text only: emojis built into the link arrive as "?" on some phones (owner screenshot 11 Oct).
+  // The two links come first, so they show before WhatsApp folds the message behind "Read more".
   var c=co.contract||{},first=firstNameOf(mainRenter()||co.v.cl,(co.drivers||[])[0]);
   var rl=c.return_location||'',hq=!rl||rl===GR_HQ||/go rent office|diehl/i.test(rl);
   var place=hq?'Go Rent office, 6 Diehl Str, Windhoek':(rl+(c.return_address?' ('+c.return_address+')':''));
   var rtime=co.returnTime||c.return_place_time||'';
+  var rdate=(!hq&&c.return_place_date)?c.return_place_date:co.v.rt;
   var L=[];
   L.push('Hi '+first+',','','Thank you for renting with Go Rent 4x4 Namibia!','');
-  L.push('🚙 Vehicle: '+co.fn+(co.v.reg?' ('+co.v.reg+')':''));
-  L.push('📅 Pickup: '+(waDate(coPickupDate())||'today'));
-  L.push('🏁 Return: '+(waDate(co.v.rt)||'-')+(rtime?' at '+rtime:'')+' - '+place);
-  if(hq)L.push('   Office hours Mon-Fri 07:30-16:00. Weekend or holiday returns must be arranged with us in advance.');
-  L.push('⛽ Fuel at departure: '+(co.fuelOut||'Full')+'. DIESEL ONLY. Please return it full, otherwise N$250 plus the fuel is taken from your deposit.');
-  if(co.v.xb||c.cross_border)L.push('🌍 Cross-border: '+(co.v.xb||c.cross_border)+'. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
-  L.push('','📄 Your handover document - signed rental contract, vehicle condition, damage and photos, equipment issued:',co._handoverLink);
-  if(co.sendGuide!==false)L.push('','📘 Your Namibia driving guide - our speed limits, what to do after an accident or breakdown, emergency numbers (keep it handy, many roads have no signal):',guideLink());
+  L.push('YOUR HANDOVER DOCUMENT (signed contract, vehicle condition, photos, equipment):',co._handoverLink);
+  if(co.sendGuide!==false)L.push('','YOUR NAMIBIA INFO PACK (shops, driving tips, what to do after an accident or breakdown, emergency numbers). Please save it, many roads have no signal:',guideLink());
+  L.push('','Vehicle: '+co.fn+(co.v.reg?' ('+co.v.reg+')':''));
+  L.push('Pickup: '+(waDate(coPickupDate())||'today'));
+  L.push('Return: '+(waDate(rdate)||'-')+(rtime?' at '+rtime:'')+' - '+place);
+  if(hq)L.push('Office hours Mon-Fri 07:30-16:00. Weekend or holiday returns must be arranged with us in advance.');
+  L.push('Fuel: '+(co.fuelOut||'Full')+' at departure. DIESEL ONLY. Please return it full, otherwise N$250 plus the fuel is taken from your deposit.');
+  if(co.v.xb||c.cross_border)L.push('Cross-border: '+(co.v.xb||c.cross_border)+'. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
   L.push('','Please remember:',
     '- Go Rent speed limits apply (GPS tracked): one speeding event cancels all insurance.',
     '- No driving after sunset outside towns.',
