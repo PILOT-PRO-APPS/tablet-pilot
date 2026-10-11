@@ -4818,6 +4818,16 @@ function ctMethodButtons(c){
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+CT_METHODS.map(function(m){var on=(c.deposit_method||'')===m;
     return ctBtn(on,(on?'✓ ':'')+_bx(m.replace(' (see notes)','')),"ctSet('deposit_method','"+m.replace(/'/g,"\\'")+"')");}).join('')+'</div>';
 }
+// Deposit paid through Adumo (owner 2026-10-11): keep Adumo's transaction ID, so the office can refund it through Adumo from Pilot
+function ctIsAdumo(c){return /^(Adumo|Paid online)$/.test((c||{}).deposit_method||'');}
+function ctRefInput(c,id){
+  var ok=(c.deposit_ref||'').trim().length>=4;
+  return '<div style="margin-top:8px;"><label style="font-size:14px;font-weight:900;color:var(--tx);">🔢 Adumo transaction ID *</label>'
+    +'<input id="'+id+'" value="'+_bx(c.deposit_ref||'')+'" placeholder="Copy it from the Adumo payment email / portal" autocomplete="off" autocapitalize="off" spellcheck="false"'
+    +' oninput="(co.contract=co.contract||{}).deposit_ref=this.value.trim();this.style.borderColor=this.value.trim().length>=4?\'var(--gb)\':\'var(--re)\';"'
+    +' style="width:100%;margin-top:4px;padding:10px 12px;border-radius:9px;border:2px solid '+(ok?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;font-family:ui-monospace,Menlo,monospace;">'
+    +'<div style="font-size:12px;color:var(--g5);margin-top:3px;">Needed to refund the deposit to the client\'s card after the return.</div></div>';
+}
 function ctYesNo(c,key){
   var v=c[key];
   return '<div style="display:flex;gap:6px;">'+ctBtn(v===true,'✓ Taken',"ctSet('"+key+"',true)")+ctBtn(v===false,'✕ Declined',"ctSet('"+key+"',false)",'no')+'</div>';
@@ -4869,6 +4879,7 @@ function ctOpenQuestions(){
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
   if(!c.deposit_method)q.push({s:'Deposit method',t:'💳 How was the deposit paid?',h:ctMethodButtons(c)});
+  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)q.push({s:'Adumo transaction ID',t:'🔢 Adumo transaction ID of the deposit payment',h:ctRefInput(c,'ct-ask-dref'),manual:true});
   if(rl&&rl!==GR_HQ&&(!c.return_address||!c.return_place_time))q.push({s:'Return place & time',t:'📍 Vehicle returned at '+_bx(rl)+' — exact place and time',
     h:'<textarea placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" style="width:100%;min-height:56px;padding:9px 11px;border-radius:9px;border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;margin-bottom:6px;">'+_bx(c.return_address||'')+'</textarea>'
       +'<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:13px;font-weight:800;color:var(--g5);">Time:</span>'+timePickers('ct-ask-rt',c.return_place_time||'',"var _t=timePickValue('ct-ask-rt');if(_t){(co.contract=co.contract||{}).return_place_time=_t;}")+'</div>',
@@ -4984,6 +4995,7 @@ function ctDepositsHTML(){
     +'<div id="ct-xdep" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--gb)':'var(--re)')+';background:'+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--sg)':'var(--rg)')+';"><div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px;">🛂 Extra security deposit by country — N$7,500.00 *</div>'+ctXdepButtons(c)+'</div>'
     +'<div class="fi" id="ct-dmethod" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+(c.deposit_method?'var(--gb)':'var(--re)')+';background:'+(c.deposit_method?'var(--sg)':'var(--rg)')+';"><label style="font-size:15px;font-weight:900;color:var(--tx);">💳 How was the deposit paid? *</label>'
       +ctMethodButtons(c)
+      +(ctIsAdumo(c)?ctRefInput(c,'ct-dref'):'')
     +'</div>';
   setTimeout(function(){
     [['ct-fdr','fuel_deposit_received'],['ct-xbd','cross_border_deposit'],['ct-edf','extra_driver_paid']].forEach(function(p){var e=document.getElementById(p[0]);if(e)e.onchange=function(){ctSet(p[1],this.checked);};});
@@ -5117,6 +5129,7 @@ function ctMissing(c){
   if(!c.fuel_deposit_received)m.push('⛽ N$2,500 Fuel & Admin deposit not ticked (compulsory)');
   if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')m.push('🛂 N$7,500 country deposit: Received or Not needed?');
   if(!c.deposit_method)m.push('💳 Deposit method not selected (Adumo, Swipe, Cash…)');
+  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)m.push('🔢 Adumo transaction ID of the deposit payment not entered');
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)m.push('🌍 N$30,000 Cross-border deposit not ticked (travel to '+(co.v.xb||c.cross_border)+')');
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' not taken ('+extraDriverTxt()+')');
@@ -10272,7 +10285,7 @@ function buildContractHTML(c,sigUrl){
       <!-- Fuel deposit -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;margin-bottom:5px;">
         ${chkBox(!!c.fuel_deposit_received)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Fuel &amp; Admin Deposit (N$2,500.00) received</strong>${c.deposit_method?' — paid by <strong>'+c.deposit_method+'</strong>':''}<br>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Fuel &amp; Admin Deposit (N$2,500.00) received</strong>${c.deposit_method?' — paid by <strong>'+c.deposit_method+'</strong>'+(c.deposit_ref?' (ref '+c.deposit_ref+')':''):''}<br>
         <span style="font-size:9.5px;color:#555;">Refunded within 7 days of the vehicle's return. Any fuel shortage (fill-up cost) and admin costs (fill-up fee) will be deducted from this deposit before the balance is refunded.</span></div>
       </div>
       <!-- Country deposit (2.1) -->
@@ -10562,7 +10575,7 @@ function buildContractHTML(c,sigUrl){
         ['Cross-border deposit', c.cross_border_deposit?'N$ 30,000.00 received':(c.cross_border?'Not received':'N/A')],
         ['Windscreen & Tyre add-on', c.addon_windscreen?'Selected':'Not selected'],
         ['Camping Equipment cover', !ctCampingBooked()?'N/A — no camping':(c.addon_equipment?'Selected':'Not selected')],
-        ['Deposit method', c.deposit_method||'—'],
+        ['Deposit method', (c.deposit_method||'—')+(c.deposit_ref?' · ref '+c.deposit_ref:'')],
       ].map(([l,v])=>`<div style="padding:5px 8px;border-bottom:1px solid #eee;font-size:14px;"><span style="color:#555;font-weight:600;">${l}:</span> <span style="color:#111;font-weight:700;">${v}</span></div>`).join('')}
     </div>
   </div>
@@ -10862,6 +10875,7 @@ function guideCO(){
       if(!c0.fuel_deposit_received){b=gFind(R,'label,div',function(x){return /Fuel & Admin deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Fuel & Admin deposit, then tick it.',b);}
       if(co.v.xb&&!c0.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
+      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the Adumo transaction ID of the deposit payment (from the Adumo email / portal).',b);}
     }
     if(!co.returnTime)return t('Ask the client what time they will bring it back, and set the time.',document.getElementById('ct-rtime-box'));
     if(!(co.docItems&&co.docItems.wifi))return t('WiFi device: tap Handed over (or Not available).',document.getElementById('ct-wifi-box'));
@@ -10879,6 +10893,7 @@ function guideCO(){
       if(!c.fuel_deposit_received){b=gFind(R,'label,div',function(x){return /Fuel & Admin deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Fuel & Admin deposit, then tick it.',b);}
       if(co.v.xb&&!c.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
+      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the Adumo transaction ID of the deposit payment (from the Adumo email / portal).',b);}
       // the same list the contract itself checks (ctMissing): the guide used to send staff to
       // "Preview & Sign" while e.g. the extra driver fee was still open, and the contract
       // then only said "cannot be signed yet"
@@ -10886,7 +10901,7 @@ function guideCO(){
       var _rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
       if(_rl&&_rl!==GR_HQ&&(!c.return_address||!c.return_place_time))return t(!c.return_address?'Remote return: type the exact address / directions where the vehicle is collected.':'Remote return: set the time to collect the vehicle there.',document.getElementById(!c.return_address?'ct-raddr':'ct-rptime-box')||document.getElementById('ct-raddr'));
       var _cm=ctMissing(c);if(_cm.length){var _c0=_cm[0];
-        var _ce=/Camping Equipment/.test(_c0)?document.getElementById('ct-aeq'):/Windscreen/.test(_c0)?document.getElementById('ct-aws'):/Insurance/.test(_c0)?document.getElementById('ct-ins'):/Deposit method/.test(_c0)?document.getElementById('ct-dmethod'):/Cross-border/.test(_c0)?document.getElementById('ct-xbd'):/Fuel/.test(_c0)?document.getElementById('ct-fdr'):null;
+        var _ce=/Camping Equipment/.test(_c0)?document.getElementById('ct-aeq'):/Windscreen/.test(_c0)?document.getElementById('ct-aws'):/Insurance/.test(_c0)?document.getElementById('ct-ins'):/Adumo transaction/.test(_c0)?document.getElementById('ct-dref'):/Deposit method/.test(_c0)?document.getElementById('ct-dmethod'):/Cross-border/.test(_c0)?document.getElementById('ct-xbd'):/Fuel/.test(_c0)?document.getElementById('ct-fdr'):null;
         return t('Before the contract: '+_c0.replace(/^\S+\s/,''),_ce);}
       if(coLeftCount(CO_BEFORE_CONTRACT)){var _l5=coLeftList(CO_BEFORE_CONTRACT);return t(_l5.length===1?'Contract locked until staff finish: '+_l5[0]:'Contract locked — '+_l5.length+' staff checks still open. Tap Show on the red line to tick them.',gFind(R,'.left-box'));}
       b=gFind(R,'button',function(x){return gTxt(x,'Preview Full Contract');});
