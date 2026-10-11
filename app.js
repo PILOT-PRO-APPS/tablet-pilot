@@ -6701,6 +6701,33 @@ function eqResolveSet(lbl,v){
   saveCOProgress();drawCO();
   toast(v==='na'?lbl+' — not given':'✓ '+lbl+' OK','ok');
 }
+// Every open line can be tapped and goes straight to that thing (owner 2026-10-11: "when tap on red,
+// does not indicate what is outstanding"). Client steps: 0 passport & details, 1 payment & cover, 2 contract.
+var _coFix=[];
+function _coFixKeep(x){_coFix.push(x);if(_coFix.length>500)_coFix=_coFix.slice(-200);return _coFix.length-1;}
+function coFixLine(i){
+  var x=String(_coFix[i]||'');
+  try{coLeftClose();}catch(e){}
+  try{var pp=document.getElementById('pay-pop');if(pp)pp.remove();}catch(e){}
+  var cs=null,step=null,after=null,sel=null;
+  if(/contract not signed/i.test(x)){cs=2;after=function(){try{previewAndSignContract();}catch(e){}};}
+  else if(/passport|licence photo|name not filled|: name$/i.test(x)){cs=0;sel='#cos [onclick*="captureDriverDoc"], #cos input[type=file]';}
+  else if(/return time|WiFi|Remote return|exact address|collection date/i.test(x)){cs=0;sel=/WiFi/i.test(x)?'#ct-wifi-box':/Remote|address|collection/i.test(x)?'#ct-remote':'#ct-rtime-box';}
+  else if(/insurance/i.test(x)){cs=1;sel='#ct-ins';}
+  else if(/windscreen/i.test(x)){cs=1;sel='#ct-aws';}
+  else if(/camping equipment/i.test(x)){cs=1;sel='#ct-aeq';}
+  else if(/deposit method|how was the deposit/i.test(x)){cs=1;sel='#ct-dmethod';}
+  else if(/country deposit|N\$7,500/i.test(x)){cs=1;sel='#ct-xdep';}
+  else if(/fuel|cross-border|extra driver|deposit|not paid/i.test(x)){cs=1;sel='.sec-dep';}
+  else if(/handover|explained/i.test(x)){cs=3;}
+  else if(/equipment not confirmed/i.test(x)){step=2;}
+  else if(/odo|disc date|vehicle documents|cross-border papers/i.test(x)){step=4;}
+  if(cs!==null){coCsGo(cs);}else if(step!==null){window._coLeftSkip=true;try{coGoStep(step);}finally{window._coLeftSkip=false;}}
+  setTimeout(function(){
+    if(sel){var el=document.querySelector(sel);if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}}
+    if(after)after();
+  },250);
+}
 function coLeftHTML(steps){
   var h='';
   steps.forEach(function(n){
@@ -6712,8 +6739,11 @@ function coLeftHTML(steps){
       +(n!==coStep&&canDoStep(n)?' <button onclick="coLeftGoto('+n+')" style="margin-left:6px;padding:3px 9px;border-radius:7px;border:2px solid var(--re);background:#fff;color:var(--rl);font-size:12px;font-weight:900;cursor:pointer;text-transform:none;">Go to step →</button>':'')
       +'</div>';
     if(items.length)h+=qcUncheckedHTML('Not ticked',function(i){return i.step===CO_ITEM_STEP[n];});
-    if(other.length)h+='<ul style="margin:0 0 6px 18px;padding:0;font-size:15px;font-weight:700;color:var(--tx);line-height:1.7;">'
-      +other.map(function(x){return '<li>'+_bx(x)+'</li>';}).join('')+'</ul>';
+    if(other.length)h+='<div style="margin:0 0 6px;">'
+      +other.map(function(x){var k=_coFixKeep(x);
+        return '<div onclick="coFixLine('+k+')" style="display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:6px;border-radius:10px;border:2px solid var(--re);background:#fff;cursor:pointer;">'
+          +'<div style="flex:1;font-size:15px;font-weight:800;color:var(--tx);">'+_bx(x)+'</div>'
+          +'<span style="flex-shrink:0;padding:8px 14px;border-radius:9px;background:var(--se);color:#fff;font-size:14px;font-weight:900;">Fix it →</span></div>';}).join('')+'</div>';
   });
   return h;
 }
@@ -6773,7 +6803,7 @@ function coLeftBox(steps,o){
 }
 function coLeftClose(){var b=document.getElementById('co-step-left');if(b)b.remove();_coLeft=null;}
 function coLeftGo(){var c=_coLeft;coLeftClose();if(c&&c.o&&c.o.onGo)c.o.onGo();}
-function coLeftGoto(n){coLeftClose();window._coLeftSkip=true;try{coGoStep(n);}finally{window._coLeftSkip=false;}window.scrollTo(0,0);}
+function coLeftGoto(n){if(n===5||n===6){var _m=coStepMissing(n);if(_m.length){coFixLine(_coFixKeep(_m[0]));return;}}coLeftClose();window._coLeftSkip=true;try{coGoStep(n);}finally{window._coLeftSkip=false;}window.scrollTo(0,0);}
 // After a tick inside the popup: redraw it, and once everything is done carry on where they were going
 function coLeftRefresh(){
   var c=_coLeft;if(!c)return;
