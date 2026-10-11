@@ -1449,7 +1449,7 @@ function drawOut(){
       h+='<div style="border-top:1px solid var(--g2);padding:14px 16px;">'
         +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
         +'<div class="fi"><label>Return date'+(v.rt?' (booked: '+fmt(v.rt)+')':'')+'</label><input type="date" id="out-date" min="'+localYMD()+'" value="'+_bx(due)+'" style="color-scheme:light;"></div>'
-        +'<div class="fi"><label>Expected return time</label>'+timePickers('out-time',r.return_time||'',"")+'</div></div>'
+        +'<div class="fi"><label>Expected return time</label>'+timePickers('out-time',offHours(r.return_time)?'':(r.return_time||''),"",false,true)+'</div></div>'
         +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px;">📝 Notes</div>'
         +((r.out_notes||[]).map(function(n){return '<div style="background:var(--g0);border:1px solid var(--g2);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:14px;"><div style="font-size:11px;color:var(--g5);font-weight:800;">'+_bx(n.by||'')+' · '+_bx(new Date(n.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+'</div>'+_bx(n.text)+'</div>';}).join('')||'<div style="font-size:13px;color:var(--g5);margin-bottom:6px;">No notes yet.</div>')
         +'<textarea id="out-note" placeholder="Add a note — e.g. client called, extending by 2 days; flat tyre in Sesriem…" style="width:100%;min-height:70px;padding:10px 12px;border-radius:var(--rs);border:2px solid var(--g3);background:var(--g0);color:var(--tx);font-size:15px;"></textarea>'
@@ -1538,7 +1538,7 @@ function renderCIPicker(){
   try{var keys=returning.concat(outNow).map(function(v){return bkKey(v);});
     if(keys.length)SB.from('checkouts').select('booking_id,return_time,return_date_new').in('booking_id',keys).then(function(r){
       (r&&r.data||[]).forEach(function(x){if(!x.return_time&&!x.return_date_new)return;returning.concat(outNow).forEach(function(v){if(bkKey(v)!==x.booking_id)return;
-        var el=document.querySelector('#ci-body .picker-row-ci[data-bid="'+(v.bid||'')+'"][data-fn="'+v.fn+'"] .ci-rt');if(el)el.textContent=(x.return_date_new&&x.return_date_new!==v.rt?'📅 moved to '+new Date(x.return_date_new+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' ':'')+(x.return_time?'🕑 expected '+x.return_time:'');});});
+        var el=document.querySelector('#ci-body .picker-row-ci[data-bid="'+(v.bid||'')+'"][data-fn="'+v.fn+'"] .ci-rt');if(el)el.textContent=(x.return_date_new&&x.return_date_new!==v.rt?'📅 moved to '+new Date(x.return_date_new+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' ':'')+(x.return_time?(offHours(x.return_time)?'⚠ expected '+x.return_time+' — outside office hours, check with the client':'🕑 expected '+x.return_time):'');});});
     },function(){});}catch(e){}
 }
 function ciFilterPicker(q){
@@ -3184,7 +3184,7 @@ function coCsLeft(k){
         if(!dr.licFront)m.push(who+': licence photo');
         if(!dr.name)m.push(who+': name');
       });
-      if(!co.returnTime)m.push('Return time');
+      if(!co.returnTime||offHours(co.returnTime))m.push('Return time (office hours '+OFFICE_FROM+'–'+OFFICE_TO+')');
       if(!d.wifi)m.push('WiFi device');
       ctMissing(c).forEach(function(x){if(/Remote return/.test(x))m.push('Return place & time');});
     }else if(k==='pay'){
@@ -3623,7 +3623,7 @@ function hoQuickTimes(v,inline){
   var opts=['08:00','10:00','12:00','14:00','16:00'],sug='',fl='';
   try{
     var m=String((v&&v.flightOut)||'').match(/(\d{1,2}):(\d{2})/);
-    if(m){fl=('0'+m[1]).slice(-2)+':'+m[2];var mins=(+m[1])*60+(+m[2])-180;mins=Math.max(7*60,Math.floor(mins/30)*30);
+    if(m){fl=('0'+m[1]).slice(-2)+':'+m[2];var mins=(+m[1])*60+(+m[2])-180;mins=Math.min(16*60,Math.max(7*60+30,Math.floor(mins/30)*30));   // inside office hours 07:30–16:00
       sug=('0'+Math.floor(mins/60)).slice(-2)+':'+('0'+(mins%60)).slice(-2);}
   }catch(e){}
   var b=function(t,lbl,hl){var on=co.returnTime===t;
@@ -3664,7 +3664,7 @@ function ctReturnWifiHTML(){
   var ret='<div id="ct-rtime-box" style="border:2px solid '+(ok?'var(--gb)':'var(--am)')+';border-radius:10px;padding:8px 10px;background:'+(ok?'var(--sg)':'var(--ag)')+';">'
     +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
     +'<span style="font-size:13px;font-weight:900;color:var(--tx);white-space:nowrap;">🕑 Return '+due+' — expected time *</span>'
-    +'<span style="display:flex;gap:6px;min-width:180px;flex:0 1 220px;">'+timePickers('ho-rtime',co.returnTime||'',"var _t=timePickValue('ho-rtime');if(_t){co.returnTime=_t;saveCOProgress();drawCO();}")+'</span>'
+    +'<span style="display:flex;gap:6px;min-width:180px;flex:0 1 220px;">'+timePickers('ho-rtime',offHours(co.returnTime)?'':(co.returnTime||''),"var _t=timePickValue('ho-rtime');if(_t){co.returnTime=_t;saveCOProgress();drawCO();}",false,true)+'</span>'
     +hoQuickTimes(v,true)
     +'</div></div>';
   var w=d.wifi||'',bs='padding:7px 14px;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;touch-action:manipulation;';
@@ -9723,24 +9723,33 @@ function licDiscBanner(v, context){
 
 // Day / month / year selectors, so nobody can type a wrong year by hand
 var DISC_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// Returns are only taken in office hours (owner 2026-10-11: "we don't accept returns after office hours").
+// Office pickers offer 07–16 h only, and anything before 07:30 or after 16:00 is moved inside the hours.
+var OFFICE_FROM='07:30',OFFICE_TO='16:00';
 function timePickValue(id){
   var h=document.getElementById(id+'-h'),m=document.getElementById(id+'-m');
   if(!h||!m||h.value===''||m.value==='')return '';
-  return h.value+':'+m.value;
+  var t=h.value+':'+m.value;
+  if(h.getAttribute('data-office')){
+    if(t<OFFICE_FROM){toast('Returns are taken from '+OFFICE_FROM+' — set to '+OFFICE_FROM,'err');t=OFFICE_FROM;}
+    else if(t>OFFICE_TO){toast('Office closes at '+OFFICE_TO+' — set to '+OFFICE_TO,'err');t=OFFICE_TO;}
+  }
+  return t;
 }
-function timePickers(id,val,onChangeJs,flash){
+function offHours(t){return !!(t&&/^\d\d:\d\d$/.test(t)&&(t<OFFICE_FROM||t>OFFICE_TO));}
+function timePickers(id,val,onChangeJs,flash,office){
   var p=String(val||'').split(':'),hh=p[0]||'',mm=p[1]||'';
   var hrs=[],mins=[];
-  for(var i=0;i<24;i++)hrs.push(('0'+i).slice(-2));
+  for(var i=office?7:0;i<(office?17:24);i++)hrs.push(('0'+i).slice(-2));
   for(var j=0;j<60;j+=5)mins.push(('0'+j).slice(-2));
   var sel=function(sid,label,opts,v){
-    return '<select id="'+sid+'" onchange="'+onChangeJs+'" style="color-scheme:light;flex:1;padding:9px 6px;font-size:17px;font-weight:900;text-align:center;background:var(--g0);border:2px solid var(--g3);border-radius:8px;color:var(--tx);">'
+    return '<select id="'+sid+'"'+(office?' data-office="1"':'')+' onchange="'+onChangeJs+'" style="color-scheme:light;flex:1;padding:9px 6px;font-size:17px;font-weight:900;text-align:center;background:var(--g0);border:2px solid var(--g3);border-radius:8px;color:var(--tx);">'
       +'<option value="">'+label+'</option>'
       +opts.map(function(o){return '<option value="'+o+'"'+(v===o?' selected':'')+'>'+o+'</option>';}).join('')+'</select>';
   };
   return '<div style="display:flex;align-items:center;gap:4px;flex:1;">'
     +sel(id+'-h','hh',hrs,hh)+'<span style="font-size:18px;font-weight:900;color:var(--g5);">:</span>'+sel(id+'-m','mm',mins,mm)
-    +'<span style="font-size:11px;font-weight:800;color:var(--g5);margin-left:2px;">24h</span></div>';
+    +'<span style="font-size:11px;font-weight:800;color:var(--g5);margin-left:2px;white-space:nowrap;">'+(office?'office '+OFFICE_FROM+'–'+OFFICE_TO:'24h')+'</span></div>';
 }
 // ── Day / month / year pickers for a client's passport and licence expiry ──
 // Nobody types a date on a tablet. The value is kept as DD/MM/YYYY — exactly what the
