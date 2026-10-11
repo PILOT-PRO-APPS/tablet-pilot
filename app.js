@@ -209,7 +209,7 @@ const STAFF_ROSTER=[
   {name:'Bonga',    role:'prep'},
   {name:'Dixon',    role:'prep'},
   {name:'Vince',    role:'prep'},
-  {name:'Jo-Jo',    role:'prep'},   // was 'Joe' until 3 Oct 2026 (same PIN)
+  {name:'Joe',      role:'prep'},   // 'Joe' again from 11 Oct 2026 (was 'Joe' 3–11 Oct 2026 (same PIN)
   {name:'Peter',    role:'admin'},
   // Christina removed 11 Oct 2026 (owner: "can be removed entirely"); her PIN is switched off in staff_pins
   {name:'Abia',     role:'prep'},
@@ -221,7 +221,7 @@ const STAFF_ROSTER=[
 // Handing the vehicle to the client (check-out step 7) is a manager job too, except Christina.
 //  contract = the contract step (5) and the Documentation page only (Christina, since 3 Oct 2026)
 // Simon removed from the tablet 3 Oct 2026 (owner's request).
-const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Abia:'staff','Jo-Jo':'manager',Peter:'peter'};
+const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Abia:'staff','Joe':'manager',Peter:'peter'};
 const NO_HANDOVER=[];
 function roleOf(n){return ROLE[n]||'staff';}
 function namesWithRole(){var r=[].slice.call(arguments);return STAFF_ROSTER.map(function(x){return x.name;}).filter(function(n){return r.indexOf(roleOf(n))>=0;});}
@@ -261,7 +261,7 @@ function initAppUser(){
   try{
     const saved=localStorage.getItem('gorent_user');
     if(saved){APP_USER=JSON.parse(saved);if(APP_USER&&APP_USER.code){delete APP_USER.code;localStorage.setItem('gorent_user',JSON.stringify(APP_USER));}
-      if(APP_USER&&APP_USER.name==='Joe'){APP_USER.name='Jo-Jo';localStorage.setItem('gorent_user',JSON.stringify(APP_USER));}}   // renamed 3 Oct 2026
+      if(APP_USER&&APP_USER.name==='Jo'+'-Jo'){APP_USER.name='Joe';localStorage.setItem('gorent_user',JSON.stringify(APP_USER));}}   // renamed back to Joe 11 Oct 2026
   }catch(e){}
 }
 function loginUser(code){
@@ -764,7 +764,7 @@ function isAdmin(){ return !!(APP_USER && roleOf(APP_USER.name)==='peter'); }
 // on the management list (Supabase app_settings.tablet_doc_viewers), logs every look in
 // doc_access_log and hands back 5-minute links. The PIN is asked once and kept in memory
 // (never stored) for 10 minutes. Change who may see them in BOTH places.
-const DOC_VIEWERS=['Peter','Jo-Jo'];
+const DOC_VIEWERS=['Peter','Joe'];
 function canSeeBookingDocs(){ return !!(APP_USER&&DOC_VIEWERS.indexOf(APP_USER.name)>=0); }
 var _docPin=null;   // {name,pin,at} — memory only
 function tdBtn(bid,client){
@@ -772,7 +772,7 @@ function tdBtn(bid,client){
   return '<button onclick="tdOpen(\''+String(bid).replace(/[\'\\"<>]/g,'')+'\',\''+String(client||'').replace(/[\'\\"<>]/g,'')+'\')" style="margin-left:10px;padding:10px 16px;border-radius:22px;border:2px solid #1d4ed8;background:#eff6ff;color:#1d4ed8;font-size:15px;font-weight:900;cursor:pointer;">📄 Quote &amp; booking form</button>';
 }
 // Tapping the client's name (check-out / check-in header, booking detail, Documentation) opens the
-// same box: Peter and Jo-Jo choose View quote or View booking form. Everyone else sees plain text.
+// same box: Peter and Joe choose View quote or View booking form. Everyone else sees plain text.
 function custLink(v,html){
   if(!v||!v.bid||!canSeeBookingDocs())return html;
   var cl=String(v.cl||'').replace(/[\'\\"<>]/g,'');
@@ -4177,7 +4177,7 @@ function signEquip(){
 
 // ── STEP 1: Client ID Documents ──────────────────────────────────
 
-// Contract step: who is doing it (Christina, Jo-Jo or Peter)
+// Contract step: who is doing it (Christina, Joe or Peter)
 var CONTRACT_STAFF=namesWithRole('contract','manager','peter');
 // Ask who is doing the contract as soon as Step 5 opens — before any photos are taken
 function ctWhoModal(){
@@ -6369,7 +6369,7 @@ function coReleaseBox(){
   var ready=handoverClosed();
   var me=(APP_USER&&APP_USER.name)||'';
   if(!ready)return '<div style="text-align:center;font-size:13px;color:var(--g5);margin:6px 0 10px;">When the client has signed, <b>Release vehicle</b> appears here.</div>';
-  if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask Jo-Jo or Peter</div>';
+  if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask Joe or Peter</div>';
   return '<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
     +'<button class="btn g" style="font-size:18px;padding:18px;" onclick="coRelease()">✅ Release vehicle</button>'
     +'<div style="font-size:12px;color:var(--g5);margin-top:6px;text-align:center;">Released by '+_bx(me)+' · anything still open is shown before it goes</div></div>';
@@ -6773,12 +6773,12 @@ function coFinishCheck(refresh){
 }
 // ── PAYMENTS at check-out (owner 2026-10-09) ─────────────────────────────────
 // The client must have paid the full rental before the vehicle is released. Check-out staff
-// (Jo-Jo, Peter, Christina) see what is paid / still owing, record a payment taken at the office
+// (Joe, Peter, Christina) see what is paid / still owing, record a payment taken at the office
 // (Adumo, Card or Cash) or send a new Adumo payment link. Everything goes through the edge function
 // tablet-payments (status without PIN; record/link need the staff member's PIN). Peter alone can release
 // with money still owing, with a reason — management is alerted.
 var PAY_ST={};
-var PAY_STAFF=['Jo-Jo','Peter'];
+var PAY_STAFF=['Joe','Peter'];
 function payFmt(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 async function payLoad(bid,force){
   if(!bid)return null;
