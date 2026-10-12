@@ -5306,21 +5306,66 @@ function openDoc(html,title){
   m.appendChild(bar);m.appendChild(fr);document.body.appendChild(m);
   window.__docClose=function(){var x=document.getElementById('doc-view');if(x)x.remove();window.__docClose=null;};
   document.getElementById('doc-back').onclick=function(){window.__docClose();};
-  document.getElementById('doc-print').onclick=async function(){
-    // pictures further down were left to load when scrolled to; make sure all are there before printing
-    try{
-      var ims=[].slice.call(fr.contentWindow.document.images||[]).filter(function(im){return im.loading==='lazy';});
-      if(ims.length){banner('Preparing to print…');ims.forEach(function(im){im.loading='eager';});
-        await withTimeout(Promise.all(ims.map(function(im){return im.decode?im.decode().catch(function(){}):null;})),15000);hideBanner();}
-    }catch(e){try{hideBanner();}catch(e2){}}
-    try{fr.contentWindow.focus();fr.contentWindow.print();}catch(e){try{window.print();}catch(e2){toast('Use the share button to print','err');}}
-  };
+  document.getElementById('doc-print').onclick=function(){docPrint(fr,html);};
   // Handover and return reports carry every photo inside them (~1.4 MB). Decoding all of them at
-  // once made the Blackview slow to show the report; pictures now load as they come on screen.
-  if(typeof html==='string'&&html.length>200000)html=html.replace(/<img(?![^>]*\bloading=)/gi,'<img loading="lazy" decoding="async"');
-  try{var d=fr.contentWindow.document;d.open();d.write(html);d.close();}
+  // once made the Blackview slow to show the report; pictures now load as they come on screen,
+  // and the rest load quietly in the background so they are ready when Print is tapped.
+  if(typeof html==='string'&&html.length>200000){
+    html=html.replace(/<img(?![^>]*\bloading=)/gi,'<img loading="lazy" decoding="async"');
+    setTimeout(function(){docEagerImgs(fr,true);},1500);
+  }
+  try{var d=fr.contentWindow.document;d.open();d.write(html);d.close();
+    // Buttons inside the document were made for a separate window (window.close / window.print);
+    // inside the app they did nothing. They now do what the green bar's Back and Print do.
+    try{var cw=fr.contentWindow;fr._np=cw.print;cw.close=function(){if(window.__docClose)window.__docClose();};cw.print=function(){docPrint(fr,html);};}catch(e){}
+  }
   catch(e){m.removeChild(fr);var w=document.createElement('div');w.setAttribute('style','flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;');w.innerHTML=html;m.appendChild(w);}
   return m;
+}
+// Load the pictures that were left to load on scroll; slow=true does it one by one in the background
+async function docEagerImgs(fr,slow){
+  try{
+    var ims=[].slice.call(fr.contentWindow.document.images||[]).filter(function(im){return im.loading==='lazy';});
+    for(var i=0;i<ims.length;i++){
+      if(!document.body.contains(fr))return;
+      ims[i].loading='eager';
+      if(slow){try{await withTimeout(ims[i].decode?ims[i].decode():Promise.resolve(),4000);}catch(e){}}
+    }
+  }catch(e){}
+}
+// Print must run straight from the tap: iPads and Android ignore print() after a wait.
+function docPrint(fr,html){
+  docEagerImgs(fr,false);
+  var android=/Android/i.test(navigator.userAgent||'');
+  if(!android){
+    try{fr.contentWindow.focus();(fr._np||fr.contentWindow.print).call(fr.contentWindow);return;}catch(e){}
+    try{window.print();}catch(e2){toast('Use the share button to print','err');}
+    return;
+  }
+  // Android (Blackview / Fully Kiosk): the browser inside Fully ignores print() from inside a frame.
+  // Copy the document into the page itself, hide the app while printing, and print the page.
+  var old=document.getElementById('print-copy');if(old)old.remove();
+  var pc=document.createElement('div');pc.id='print-copy';
+  var b='';try{b=fr.contentWindow.document.body.innerHTML;}catch(e){}
+  if(!b){var m=/<body[^>]*>([\s\S]*)<\/body>/i.exec(html||'');b=m?m[1]:(html||'');}
+  var st='';try{[].slice.call(fr.contentWindow.document.querySelectorAll('style')).forEach(function(x){st+=x.outerHTML;});}catch(e){}
+  pc.innerHTML=st+b.replace(/\sloading="lazy"/g,'');
+  document.body.appendChild(pc);document.body.classList.add('has-print-copy');
+  var hidden=false,onVis=function(){if(document.visibilityState==='hidden')hidden=true;};
+  document.addEventListener('visibilitychange',onVis);
+  window.addEventListener('blur',onVis);
+  var done=function(){setTimeout(function(){var x=document.getElementById('print-copy');if(x)x.remove();document.body.classList.remove('has-print-copy');},800);};
+  window.addEventListener('afterprint',done,{once:true});
+  var called=false;
+  try{if(window.fully&&typeof fully.print==='function'){fully.print();called=true;}}catch(e){}
+  if(!called){try{window.print();}catch(e){}}
+  setTimeout(function(){
+    document.removeEventListener('visibilitychange',onVis);window.removeEventListener('blur',onVis);
+    if(hidden)return;   // the print screen opened
+    done();
+    try{askBox({title:'This tablet could not open printing',ok:'OK',
+      text:'The Blackview’s kiosk browser did not open the print screen.\n\nPrint this document from an iPad or the office computer (rental file → 🖨 Print / save documents).'});}catch(e){toast('Printing is not available on this tablet','err');}
+  },2500);
 }
 // Open the signed contract full screen (with a print / save as PDF button)
 function viewSignedContract(){
@@ -8693,7 +8738,6 @@ async function rfPrintAll(pick){
     +'body{font-family:Arial,sans-serif;color:#111;max-width:800px;margin:0 auto;padding:18px;font-size:13px;}h1{font-size:20px;margin:0;}h2{font-size:15px;color:#145c30;border-bottom:2px solid #145c30;padding-bottom:4px;margin-top:22px;}'
     +'table{width:100%;border-collapse:collapse;margin:6px 0;}td,th{border:1px solid #ddd;padding:5px 8px;text-align:left;font-size:12px;}.pb{page-break-before:always;}'
     +'@media print{.noprint{display:none;}}</style></head><body>'
-    +'<div class="noprint" style="display:flex;gap:10px;justify-content:flex-end;margin-bottom:8px;"><button onclick="window.close()" style="padding:10px 18px;font-size:15px;font-weight:bold;">← Back</button><button onclick="window.print()" style="padding:10px 18px;font-size:15px;font-weight:bold;">🖨 Print / Save as PDF</button></div>'
     +'<div style="display:flex;align-items:center;gap:14px;border-bottom:2px solid #000;padding-bottom:10px;"><img src="'+GR_LOGO+'" style="width:120px;"><div><h1>COMPLETE RENTAL FILE</h1><div>Go Rent 4x4 Rentals and Tours CC · CC/2021/04371 · +264 81 861 8085</div></div></div>'
     +(pick.sum?('<h2>Summary</h2><table>'+line('Vehicle',esc(R.fn)+(c.vehicle_reg?' · '+esc(c.vehicle_reg):''))+line('Client',esc(c.client_name||R.client||''))+line('Passport',esc(c.client_passport||''))+line('Licence',esc((c.client_licence||'')+(c.client_licence_expiry?' · exp '+c.client_licence_expiry:'')))
     +line('Rental period',esc((c.pickup_date||'')+' → '+(k.return_date_new||c.return_date||'')))+line('Contract signed',c.client_signed_at?new Date(c.client_signed_at).toLocaleString('en-GB')+' · staff '+esc(c.staff_signed_by||''):'NOT on file')
@@ -8711,7 +8755,6 @@ async function rfPrintAll(pick){
     +(pick.sigs?('<h2>Signatures</h2>'+(R.sigs.length?imgs(R.sigs):'<p>No separate signature files.</p>')):'')
     +'</body></html>';
   hideBanner();openDoc(html,'Rental file — '+(R.fn||''));
-  setTimeout(function(){try{w.focus();w.print();}catch(e){}},1500);
 }
 async function loadRentalFiles(q){
   var el=document.getElementById('rp-files');if(!el)return;

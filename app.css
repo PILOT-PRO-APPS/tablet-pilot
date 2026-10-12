@@ -409,3 +409,11 @@ body.guide-next .co-next{display:none!important;}
 .sum-box.sec-ins{background:#eaf1fd;border-color:#9bb8ea;border-left:8px solid #3b6fd1;}
 .sum-box.sec-contact{background:#e9f7f0;border-color:#8fd0b0;border-left:8px solid #23935f;}
 .sum-box.sec-dep>.sum-title,.sum-box.sec-ins>.sum-title,.sum-box.sec-contact>.sum-title{font-size:15px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;}
+
+/* Blackview printing: the document is copied into the page (#print-copy); print only that */
+#print-copy{display:none;}
+@media print{
+  body.has-print-copy > *:not(#print-copy){display:none !important;}
+  body.has-print-copy > #print-copy{display:block !important;background:#fff;color:#111;}
+  body.has-print-copy{background:#fff !important;}
+}
