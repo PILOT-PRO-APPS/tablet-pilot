@@ -737,6 +737,12 @@ async function backupToCloud(auto){
     var up=await SB.storage.from('client-docs').upload(path,blob,{contentType:'application/json',upsert:true});
     if(up&&up.error){ if(!auto)toast('Backup failed: '+up.error.message,'err'); return false; }
     try{localStorage.setItem('gorent_backup_day',day);}catch(e){}
+    // Keep only the newest 14 daily copies (12 Oct 2026: storage was full; each copy is ~3–5 MB).
+    try{
+      var ls=await SB.storage.from('client-docs').list('backups',{limit:1000});
+      var old=((ls&&ls.data)||[]).map(function(o){return o.name;}).filter(function(n){return /^gorent-backup-\d{4}-\d{2}-\d{2}\.json$/.test(n);}).sort().reverse().slice(14);
+      if(old.length)await SB.storage.from('client-docs').remove(old.map(function(n){return 'backups/'+n;}));
+    }catch(e){}
     var n=(data.checkouts||[]).length+(data.checkins||[]).length+(data.rental_contracts||[]).length;
     if(!auto)toast('\u2601\uFE0F Backup saved off the tablet \u2014 '+n+' records','ok');
     return true;
@@ -5009,7 +5015,7 @@ async function captureDriverDoc(event,driverIdx,field){
   const file=event.target.files[0];if(!file)return;
   banner('Processing photo...');
   let b64=null;
-  try{const _sb=await compressImg(file,1400,0.9,true);if(_sb)b64=await drBlobToData(_sb);}catch(e){}
+  try{const _sb=await compressImg(file,ID_MAX_W,ID_Q,true);if(_sb)b64=await drBlobToData(_sb);}catch(e){}
   try{event.target.value='';}catch(e){}
   if(!b64){hideBanner();toast('Could not read image','err');return;}
   {
@@ -7365,6 +7371,7 @@ function clientDocLink(signedUrl){
 }
 async function saveHandoverLink(html){
   try{
+    html=await slimReportImgs(html);
     var path='bookings/'+bkKey(co.v)+'/handover-report_'+Date.now()+'.html';
     var up=await SB.storage.from('client-docs').upload(path,new Blob([html],{type:'text/html'}),{contentType:'text/html;charset=utf-8',upsert:true});
     if(up&&up.error)return '';
@@ -8790,6 +8797,7 @@ async function saveCIReportLink(){
       +'<title>Go Rent 4×4 Namibia — Vehicle Return Report</title>'
       +'<style>body{margin:0;padding:16px;background:#f3f3f3;}</style></head><body>'
       +ciReportHTML()+'</body></html>';
+    html=await slimReportImgs(html);
     var path='bookings/'+bkKey(ci.v)+'/return-report_'+Date.now()+'.html';
     var blob=new Blob([html],{type:'text/html'});
     var up=await SB.storage.from('client-docs').upload(path,blob,{contentType:'text/html;charset=utf-8',upsert:true});
@@ -10089,11 +10097,12 @@ async function handlePhotos(e,key,max){
   // Camera photos are 4–5 MB each. Kept at full size they filled the tablet's memory and the
   // work draft (saved every 2 s), so photos — and signatures — were lost and a check-in could
   // not be completed. Shrink them first: 1920 px is still sharp enough as damage evidence.
+  // 12 Oct 2026: storage was full (1 GB free plan), so photos are now 1280 px at 70 % (PHOTO_MAX_W).
   try{banner('Saving '+toAdd+' photo'+(toAdd>1?'s':'')+'…');}catch(e4){}
   let failed=0;
   for(let i=0;i<toAdd;i++){
     let url=null;
-    try{const b=await compressImg(files[i],1920,0.8);if(b)url=await drBlobToData(b);}catch(err){}
+    try{const b=await compressImg(files[i],PHOTO_MAX_W,PHOTO_Q);if(b)url=await drBlobToData(b);}catch(err){}
     // The job can be reloaded from the server while the photo is being shrunk (slow on the
     // Blackview). The list taken before then belongs to the old copy, and the photo went nowhere.
     arr=getPA(key)||arr;
@@ -10158,6 +10167,26 @@ function withTimeout(pr,ms){return Promise.race([pr,new Promise(function(r){setT
 // checked; a black one is thrown away and the picture is decoded the old way, and the fast decode
 // is switched off for the rest of the session on that tablet.
 var IMG_FAST_OK=true;
+// Photo sizes (12 Oct 2026, storage limit). Camera photos: 1280 px long side, JPEG 70 % (~250 KB,
+// was 1920 px / 80 % ~800 KB). Passport/licence: 1400 px wide kept so the reader can read them, 68 %
+// (was 90 %). Pictures inside the handover/return reports: 900 px, 60 % (the report links to nothing
+// else, so it must stay readable, but it does not need full-size copies).
+var PHOTO_MAX_W=1280,PHOTO_Q=0.7,ID_MAX_W=1400,ID_Q=0.68,REPORT_IMG_W=900,REPORT_IMG_Q=0.6;
+// Shrinks every large embedded JPEG/PNG photo in a report before it is uploaded.
+async function slimReportImgs(html){
+  try{
+    var re=/data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+\/=]+/g,seen={},list=[],m;
+    while((m=re.exec(html))){var u=m[0];if(u.length>200000&&!seen[u]){seen[u]=1;list.push(u);}}
+    if(!list.length)return html;
+    for(var i=0;i<list.length;i++){
+      try{
+        var b=drDataToBlob(list[i]),sm=b&&await withTimeout(compressImg(b,REPORT_IMG_W,REPORT_IMG_Q),8000);
+        if(sm&&sm.size*1.37<list[i].length){var nu=await drBlobToData(sm);html=html.split(list[i]).join(nu);}
+      }catch(e){}
+    }
+  }catch(e){}
+  return html;
+}
 async function compressImg(file,maxW,q,byW){
   function lim(w,h){return byW?w:Math.max(w,h);}
   // true when the drawn picture is (almost) entirely black
