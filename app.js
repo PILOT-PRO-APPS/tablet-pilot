@@ -1241,9 +1241,12 @@ async function renderDoc(){
   if(!canViewReports()){body.innerHTML='<div style="padding:40px;text-align:center;color:var(--g5);">🔒 Documentation is not available for '+(APP_USER?_bx(APP_USER.name):'you')+'</div>';return;}
   body.innerHTML='<div style="padding:30px;text-align:center;color:var(--g5);">Loading rental documents…</div>';
   var co_=[],ci_=[],ct_=[];
-  try{var r1=await SB.from('checkouts').select('booking_id,fleet_no,client,customer_name,created_at,odo_out,fuel_out,handover_by,manager_name').order('created_at',{ascending:false}).limit(400);co_=(r1&&r1.data)||[];}catch(e){}
-  try{var r2=await SB.from('checkins').select('booking_id,fleet_no,client,created_at,received_by,manager_name,force_closed_by');ci_=(r2&&r2.data)||[];}catch(e){}
-  try{var r3=await SB.from('rental_contracts').select('booking_id,client_name,created_at');ct_=(r3&&r3.data)||[];}catch(e){}
+  var _safe=function(q){return Promise.resolve(q).then(function(r){return (r&&r.data)||[];},function(){return [];});};
+  var _r=await Promise.all([   // the three lookups run together (they used to wait for each other)
+    _safe(SB.from('checkouts').select('booking_id,fleet_no,client,customer_name,created_at,odo_out,fuel_out,handover_by,manager_name').order('created_at',{ascending:false}).limit(400)),
+    _safe(SB.from('checkins').select('booking_id,fleet_no,client,created_at,received_by,manager_name,force_closed_by')),
+    _safe(SB.from('rental_contracts').select('booking_id,client_name,created_at'))]);
+  co_=_r[0];ci_=_r[1];ct_=_r[2];
   var back={},ciRow={};ci_.forEach(function(x){back[x.booking_id]=x.created_at||1;if(!ciRow[x.booking_id])ciRow[x.booking_id]=x;});
   var signed={};ct_.forEach(function(x){signed[x.booking_id]=x.client_name||1;});
   var seen={};
@@ -5303,9 +5306,18 @@ function openDoc(html,title){
   m.appendChild(bar);m.appendChild(fr);document.body.appendChild(m);
   window.__docClose=function(){var x=document.getElementById('doc-view');if(x)x.remove();window.__docClose=null;};
   document.getElementById('doc-back').onclick=function(){window.__docClose();};
-  document.getElementById('doc-print').onclick=function(){
+  document.getElementById('doc-print').onclick=async function(){
+    // pictures further down were left to load when scrolled to; make sure all are there before printing
+    try{
+      var ims=[].slice.call(fr.contentWindow.document.images||[]).filter(function(im){return im.loading==='lazy';});
+      if(ims.length){banner('Preparing to print…');ims.forEach(function(im){im.loading='eager';});
+        await withTimeout(Promise.all(ims.map(function(im){return im.decode?im.decode().catch(function(){}):null;})),15000);hideBanner();}
+    }catch(e){try{hideBanner();}catch(e2){}}
     try{fr.contentWindow.focus();fr.contentWindow.print();}catch(e){try{window.print();}catch(e2){toast('Use the share button to print','err');}}
   };
+  // Handover and return reports carry every photo inside them (~1.4 MB). Decoding all of them at
+  // once made the Blackview slow to show the report; pictures now load as they come on screen.
+  if(typeof html==='string'&&html.length>200000)html=html.replace(/<img(?![^>]*\bloading=)/gi,'<img loading="lazy" decoding="async"');
   try{var d=fr.contentWindow.document;d.open();d.write(html);d.close();}
   catch(e){m.removeChild(fr);var w=document.createElement('div');w.setAttribute('style','flex:1;overflow:auto;-webkit-overflow-scrolling:touch;background:#fff;');w.innerHTML=html;m.appendChild(w);}
   return m;
@@ -8456,7 +8468,7 @@ async function rfDeleteDoc(encPath,bucket,ev){
   var nm=path.split('/').pop();
   if(!confirm('REMOVE THIS FILE\n\n'+nm+'\n\nThis deletes it permanently from storage. It cannot be undone.\n\nOnly do this if the file does not belong to this client.'))return;
   try{
-    var r=await SB.storage.from(bucket||'client-docs').remove([path]);
+    var r=await SB.storage.from(bucket||'client-docs').remove([path,rfThumbPath(path)]);
     if(r&&r.error){toast('Could not remove it: '+r.error.message,'err');return;}
   }catch(e){toast('Could not remove it — check the connection','err');return;}
   try{
@@ -8478,11 +8490,8 @@ async function rfList(bucket,prefix){
   var out=[];
   var r=await SB.storage.from(bucket).list(prefix,{limit:200});
   var items=(r&&r.data)||[];
-  for(var i=0;i<items.length;i++){
-    var it=items[i];
-    if(!it.id){var sub=await rfList(bucket,prefix+'/'+it.name);out=out.concat(sub);}
-    else out.push(prefix+'/'+it.name);
-  }
+  var subs=await Promise.all(items.map(function(it){return it.id?Promise.resolve([prefix+'/'+it.name]):rfList(bucket,prefix+'/'+it.name);}));
+  subs.forEach(function(x){out=out.concat(x);});
   return out;
 }
 function rfLabel(path){
@@ -8516,9 +8525,15 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
   var body=document.getElementById('rf-body');
   try{
     var _bk=[key];var _alt=bkAltKey(key);if(_alt&&_alt!==key)_bk.push(_alt);var _nk=bkNorm(key);if(_bk.indexOf(_nk)<0)_bk.push(_nk);
-    var rc=await SB.from('rental_contracts').select('*').in('booking_id',_bk).order('created_at',{ascending:false}).limit(1);
-    var co_=await SB.from('checkouts').select('*').in('booking_id',_bk).order('created_at',{ascending:false}).limit(1);
-    var ci_=await SB.from('checkins').select('*').in('booking_id',_bk).order('created_at',{ascending:false}).limit(1);
+    // Everything below used to be fetched one after the other (3 tables + a folder listing per key
+    // and bucket, ~10 round trips); on the Blackview's Wi-Fi that alone took several seconds.
+    var _keys=_bk.concat((alsoKeys||[]).filter(function(k){return k&&_bk.indexOf(k)<0;}));
+    var _lists=Promise.all(_keys.map(function(k){return rfList('client-docs','bookings/'+k);}).concat(_keys.map(function(k){return rfList('vehicle-photos','bookings/'+k);})));
+    var _q=await Promise.all([
+      SB.from('rental_contracts').select('*').in('booking_id',_bk).order('created_at',{ascending:false}).limit(1),
+      SB.from('checkouts').select('*').in('booking_id',_bk).order('created_at',{ascending:false}).limit(1),
+      SB.from('checkins').select('*').in('booking_id',_bk).order('created_at',{ascending:false}).limit(1)]);
+    var rc=_q[0],co_=_q[1],ci_=_q[2];
     var contract=rc&&rc.data&&rc.data[0], cko=co_&&co_.data&&co_.data[0], cki=ci_&&ci_.data&&ci_.data[0];
     // older contracts were filed under a different key: fall back to fleet number + client name
     if(!contract){
@@ -8530,18 +8545,16 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
         if(contract)contract._alt=true;
       }catch(e){}
     }
-    var _keys=_bk.concat((alsoKeys||[]).filter(function(k){return k&&_bk.indexOf(k)<0;}));
+    var _ls=await _lists,_nK=_keys.length;
     var docs=[],_from={};
-    for(var _i=0;_i<_keys.length;_i++){
-      var _d=await rfList('client-docs','bookings/'+_keys[_i]);
-      _d.forEach(function(p){if(docs.indexOf(p)<0){docs.push(p);_from[p]=_keys[_i];}});
+    for(var _i=0;_i<_nK;_i++){
+      (_ls[_i]||[]).forEach(function(p){if(docs.indexOf(p)<0){docs.push(p);_from[p]=_keys[_i];}});
     }
     var signed={};
     if(docs.length){var s=await SB.storage.from('client-docs').createSignedUrls(docs,3600);((s&&s.data)||[]).forEach(function(x){if(x&&x.signedUrl)signed[x.path]=x.signedUrl;});}
     var pics=[];
-    for(var _j=0;_j<_keys.length;_j++){
-      var _p=await rfList('vehicle-photos','bookings/'+_keys[_j]);
-      _p.forEach(function(p){if(pics.indexOf(p)<0){pics.push(p);_from[p]=_keys[_j];}});
+    for(var _j=0;_j<_nK;_j++){
+      (_ls[_nK+_j]||[]).forEach(function(p){if(pics.indexOf(p)<0){pics.push(p);_from[p]=_keys[_j];}});
     }
     var picUrls=pics.map(function(p){return {path:p,url:SB.storage.from('vehicle-photos').getPublicUrl(p).data.publicUrl};});
     (cki&&cki.fuel_receipts||[]).forEach(function(u){if(String(u).indexOf('http')===0&&!picUrls.some(function(x){return x.url===u;}))picUrls.push({path:'x/fuel-receipt/x',url:u});});
@@ -8561,7 +8574,7 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
     function thumb(url,label,path,bucket){
       var del=(path&&isAdmin())?'<button onclick="rfDeleteDoc(\''+encodeURIComponent(path)+'\',\''+(bucket||'client-docs')+'\',event)" title="Remove this file" style="position:absolute;top:4px;right:4px;width:30px;height:30px;line-height:1;border-radius:8px;border:2px solid #fff;background:var(--re);color:#fff;font-size:15px;font-weight:900;cursor:pointer;box-shadow:0 1px 5px rgba(0,0,0,.35);">&times;</button>':'';
       return '<div style="display:inline-block;position:relative;width:150px;margin:0 8px 8px 0;vertical-align:top;">'
-        +'<a href="'+url+'" target="_blank" style="display:block;text-decoration:none;"><img src="'+url+'" style="width:150px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--g3);background:#fff;"><div style="font-size:11px;color:var(--g5);margin-top:3px;">'+_bx(label)+'</div></a>'
+        +'<a href="'+url+'" target="_blank" style="display:block;text-decoration:none;"><img '+rfThumbAttr(url,path,bucket)+' style="width:150px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--g3);background:#cbd5e1;"><div style="font-size:11px;color:var(--g5);margin-top:3px;">'+_bx(label)+'</div></a>'
         +del+'</div>';
     }
     function line(l,v){return '<div style="display:flex;gap:8px;font-size:14px;padding:5px 0;border-bottom:1px solid var(--g2);"><div style="width:44%;color:var(--g5);">'+l+'</div><div style="color:var(--tx);font-weight:700;">'+v+'</div></div>';}
@@ -8585,7 +8598,48 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
     h+=sec('✍️ Signatures',sigDocs.length?sigDocs.map(function(p){return signed[p]?thumb(signed[p],rfLabel(p),p,'client-docs'):'';}).join(''):'<div style="font-size:13px;color:var(--g5);">No signatures saved for this booking yet.</div>');
     h+='<div style="font-size:11px;color:var(--g5);margin-top:12px;">Tap any picture to open it full size. Scan and signature links are private and expire after 1 hour.</div>';
     body.innerHTML=h;
+    rfThumbsStart();
   }catch(e){body.innerHTML='<div class="al err">Could not load the rental file: '+_bx(e.message||e)+'</div>';}
+}
+// ── Rental file thumbnails ──
+// The rental file showed every photo, passport and signature at full size (~0.6–0.8 MB each, ~13
+// per rental), all downloaded and decoded at once just to fill 150 px tiles. On the Blackview that
+// took a long time and much memory. Tiles now show a small copy (~30 KB), stored once next to the
+// original under thumbs/…; the first tablet to open a rental makes it, everyone else just reads it.
+// Tapping a tile still opens the full photo.
+var RF_TH={},RF_THQ=[],RF_THN=0;
+function rfThumbPath(path){return 'thumbs/'+String(path).replace(/\.[a-z0-9]+$/i,'')+'.jpg';}
+function rfThumbAttr(url,path,bucket){
+  if(!path||/^x\//.test(path))return 'src="'+url+'" loading="lazy" decoding="async"';
+  var k=(bucket||'client-docs')+'|'+path;
+  if(RF_TH[k])return 'src="'+RF_TH[k]+'" decoding="async"';
+  return 'src="'+TH_BLANK+'" data-rfth="'+_bx(k)+'" data-full="'+_bx(url)+'" decoding="async"';
+}
+function rfThumbsStart(){
+  document.querySelectorAll('#rf-modal img[data-rfth]').forEach(function(im){var k=im.getAttribute('data-rfth');if(RF_THQ.indexOf(k)<0&&!RF_TH[k])RF_THQ.push(k);});
+  for(var i=RF_THN;i<2;i++){RF_THN++;rfThumbWork();}   // two at a time: quick, without flooding the tablet
+}
+async function rfThumbWork(){
+  try{
+    while(RF_THQ.length){
+      var k=RF_THQ.shift();if(RF_TH[k]){rfThumbShow(k);continue;}
+      if(!document.getElementById('rf-modal')){RF_THQ=[];break;}
+      var u='';try{u=await withTimeout(rfThumbGet(k),20000);}catch(e){}
+      if(u){RF_TH[k]=u;rfThumbShow(k);}
+      else document.querySelectorAll('#rf-modal img[data-rfth="'+k.replace(/"/g,'')+'"]').forEach(function(im){im.src=im.getAttribute('data-full')||'';});
+    }
+  }finally{RF_THN--;}
+}
+function rfThumbShow(k){document.querySelectorAll('#rf-modal img[data-rfth]').forEach(function(im){if(im.getAttribute('data-rfth')===k){im.src=RF_TH[k];im.style.background='#fff';}});}
+async function rfThumbGet(k){
+  var i=k.indexOf('|'),bucket=k.slice(0,i),path=k.slice(i+1),tp=rfThumbPath(path),st=SB.storage.from(bucket);
+  try{var t=await st.download(tp);if(t&&!t.error&&t.data&&t.data.size>200)return URL.createObjectURL(t.data);}catch(e){}
+  // no small copy yet: make it from the full file and keep it for every tablet
+  var f=await st.download(path);if(!f||f.error||!f.data)return '';
+  var sm=null;try{sm=await compressImg(f.data,360,0.7);}catch(e){}
+  if(!sm)return URL.createObjectURL(f.data);
+  try{st.upload(tp,sm,{contentType:'image/jpeg',upsert:false}).catch(function(){});}catch(e){}
+  return URL.createObjectURL(sm);
 }
 // One printable document with everything for a booking (accident, insurance claim, contract dispute)
 // Pick what to print
