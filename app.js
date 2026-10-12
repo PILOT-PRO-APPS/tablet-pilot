@@ -5057,7 +5057,7 @@ async function captureDriverDoc(event,driverIdx,field){
 // Contract details: insurance dropdown + tick boxes (fuel & admin, cross-border, windscreen, camping cover)
 var CT_INS={'1':{t:'Option 1 — Basic Cover',rate:230,dep:45000},'2':{t:'Option 2 — Extended Cover',rate:320,dep:30000},'3':{t:'Option 3 — Premium Cover (zero excess)',rate:490,dep:0}};
 // Add-on prices: follow the office Price list in PilotDesktop (app_settings.price_list), these are the 11 Oct 2026 values
-var PL_TYRE=180, PL_CAMP=100;
+var PL_TYRE=180; // Camping equipment cover removed 12 Oct 2026 (owner): not sold any more; lost/damaged camping gear is the client's cost
 function plN(n){n=Number(n);return n%1?n.toFixed(2):String(n);}
 function ctMoney(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function ctDays(){var _pu=coPickupDate();return _pu&&co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(_pu))/86400000)):0;}
@@ -5079,7 +5079,7 @@ function loadDriverPrices(){
     if(isFinite(f)&&f>=0) EXTRA_DRIVER_FEE=f; if(isFinite(n)&&n>=0) EXTRA_DRIVER_FREE=Math.floor(n);
     // insurance and add-on prices too (same Price list as the quotes in PilotDesktop)
     if(v.ins)['1','2','3'].forEach(function(k){var r=Number(v.ins[k]);if(isFinite(r)&&r>=0&&CT_INS[k])CT_INS[k].rate=r;});
-    var t=Number(v.tyre),cc=Number(v.campcover);if(isFinite(t)&&t>=0)PL_TYRE=t;if(isFinite(cc)&&cc>=0)PL_CAMP=cc;
+    var t=Number(v.tyre);if(isFinite(t)&&t>=0)PL_TYRE=t;
   },function(){}); }catch(e){}
 }
 setTimeout(loadDriverPrices,3000); setInterval(loadDriverPrices,30*60*1000);
@@ -5164,7 +5164,6 @@ function ctOpenQuestions(){
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
   if(!c.insurance_option)q.push({s:'Insurance',t:'📋 Which insurance does the client take?',h:ctInsButtons(c)});
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$'+plN(PL_TYRE)+'/day × '+days+' = '+ctMoney(PL_TYRE*days),h:ctYesNo(c,'addon_windscreen')});
-  if(ctCampingBooked()&&c.addon_equipment!==true&&c.addon_equipment!==false)q.push({s:'Camping cover',t:'🏕 Camping Equipment cover — N$'+plN(PL_CAMP)+'/day × '+days+' = '+ctMoney(PL_CAMP*days),h:ctYesNo(c,'addon_equipment')});
   if(!c.fuel_deposit_received)q.push({s:'Fuel deposit',t:'⛽ Fuel & Admin deposit N$2,500 (every rental)',h:ctGot(c,'fuel_deposit_received')});
   if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')q.push({s:'Country deposit',t:'🛂 Extra security deposit N$7,500 by country (section 2.1)',h:ctXdepButtons(c)});
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
@@ -5225,7 +5224,7 @@ function ctDetailsForm(){
       +(right?'<div style="text-align:right;font-size:14px;font-weight:900;color:'+(on?'var(--se)':'var(--g5)')+';white-space:nowrap;">'+right+'</div>':'')
       +'</label>';
   }
-  var ws=c.addon_windscreen===true,eq=ctCampingBooked()&&c.addon_equipment===true,wsT=PL_TYRE*days,eqT=PL_CAMP*days;
+  var ws=c.addon_windscreen===true,wsT=PL_TYRE*days;
   // Cover that must be answered: Taken or Declined (null = not answered yet)
   function choice(key,title,sub,rateTxt,totTxt){
     var v=c[key],done=v===true||v===false;
@@ -5253,8 +5252,7 @@ function ctDetailsForm(){
     +insSel
     +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;">Extra cover — client must take or decline each</div>'
     +'<div id="ct-aws">'+choice('addon_windscreen','🛞 Windscreen &amp; Tyre cover','N$'+plN(PL_TYRE)+' per day · 1 windscreen, '+(days>14?'2 tyres':'1 tyre')+' · rims excluded','N$'+plN(PL_TYRE)+'/day','N$'+plN(PL_TYRE)+' × '+days+' = '+ctMoney(wsT))+'</div>'
-    +(ctCampingBooked()?'<div id="ct-aeq">'+choice('addon_equipment','🏕 Camping Equipment cover','N$'+plN(PL_CAMP)+' per day · accidental damage or loss of camping gear','N$'+plN(PL_CAMP)+'/day','N$'+plN(PL_CAMP)+' × '+days+' = '+ctMoney(eqT))+'</div>':'')
-    +((ws||eq)?'<div style="display:flex;justify-content:space-between;padding:8px 14px;margin:-2px 0 8px;border-top:1px dashed var(--g3);font-size:15px;font-weight:900;"><span style="color:var(--g5);">Cover total ('+days+' days)</span><span style="color:var(--se);">'+ctMoney((ws?wsT:0)+(eq?eqT:0))+'</span></div>':'')
+    +(ws?'<div style="display:flex;justify-content:space-between;padding:8px 14px;margin:-2px 0 8px;border-top:1px dashed var(--g3);font-size:15px;font-weight:900;"><span style="color:var(--g5);">Cover total ('+days+' days)</span><span style="color:var(--se);">'+ctMoney(wsT)+'</span></div>':'')
     ;
   return h;
 }
@@ -5411,7 +5409,7 @@ function calcDays(){
 }
 
 function gatherContract(){
-  try{if(!ctCampingBooked()){co.contract=co.contract||{};co.contract.addon_equipment=false;}}catch(e){}   // no camping: the cover does not apply
+  try{co.contract=co.contract||{};co.contract.addon_equipment=false;}catch(e){}   // camping equipment cover is no longer sold (12 Oct 2026)
   co.contract=co.contract||{};
   // Pull primary driver details from co.drivers[0]
   const pd=co.drivers&&co.drivers[0]?co.drivers[0]:{};
@@ -5456,14 +5454,13 @@ function gatherContract(){
 }
 
 // Everything that must be done on the contract details before the client can sign
-// Camping Equipment cover only exists for a camping booking — no camping, no question.
+// Is this a camping booking? (Camping Equipment cover was removed 12 Oct 2026.)
 function ctCampingBooked(){try{return !!(co&&co.v&&co.v.camping);}catch(e){return true;}}
 function ctMissing(c){
   c=c||co.contract||{};var m=[];
   if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
-  if(ctCampingBooked()&&c.addon_equipment!==true&&c.addon_equipment!==false)m.push('🏕 Camping Equipment cover: Taken or Declined?');
   if(!c.fuel_deposit_received)m.push('⛽ N$2,500 Fuel & Admin deposit not ticked (compulsory)');
   if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')m.push('🛂 N$7,500 country deposit: Received or Not needed?');
   if(!c.deposit_method)m.push('💳 Deposit method not selected (Adumo, Swipe, Cash…)');
@@ -6910,7 +6907,6 @@ function coMissing(){
   if(!d0.licFront)m.push('🪪 No licence photo');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(!co.contractSigned&&c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover not taken/declined');
-  if(!co.contractSigned&&ctCampingBooked()&&c.addon_equipment!==true&&c.addon_equipment!==false)m.push('🏕 Camping Equipment cover not taken/declined');
   if(!c.fuel_deposit_received)m.push('⛽ Fuel & admin deposit not ticked');
   if(v.xb&&!c.cross_border_deposit)m.push('🌍 Cross-border deposit not ticked');
   (function(){var n=extraDriverCharged();
@@ -10848,11 +10844,6 @@ function buildContractHTML(c,sigUrl){
         ${chkBox(!!c.addon_windscreen)}
         <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Windscreen &amp; Tyre Cover</strong> | N$${plN(PL_TYRE)}/day | Optional. 1 windscreen per rental. Tyre cover: <strong>${tyreCover}</strong>. <span style="color:#c0392b;font-weight:700;">Rims always excluded.</span></div>
       </div>
-      <!-- Camping add-on -->
-      ${ctCampingBooked()?`<div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.addon_equipment?'#f0f9f4;border-color:#1e8449':'#fff'};">
-        ${chkBox(!!c.addon_equipment)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Camping Equipment Damage/Loss Cover</strong> | N$${plN(PL_CAMP)}/day | Optional. Covers provided camping gear against accidental damage or loss.</div>
-      </div>`:''}
       <!-- Cross-border -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:${c.cross_border?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(!!c.cross_border_deposit)}
@@ -10893,7 +10884,7 @@ function buildContractHTML(c,sigUrl){
       <div>• Sandblast / sandstorm damage to paint or glass<br>
       • Single-vehicle accidents (rollovers, collisions with animals or objects)<br>
       • Stationary objects — walls, poles, gates, trees, rocks<br>
-      ${ctCampingBooked()?'• Lost or damaged camping gear — unless Camping Equipment Damage/Loss Cover is chosen<br>':''}
+      ${ctCampingBooked()?'• Lost or damaged camping gear<br>':''}
       • Tyre blowout vehicle damage — blowouts, loose lug nuts, broken wheel studs, or jack misuse<br>
       • Negligence or vehicle misuse (see Section 5)</div>
     </div>
@@ -10954,7 +10945,7 @@ function buildContractHTML(c,sigUrl){
       • Personal belongings — theft or loss<br>
       • Interior damage beyond normal wear<br>
       • Rooftop tent misuse — driving with tent open or partially open unless formally extended<br>
-      ${ctCampingBooked()?'• Camping equipment — loss or damage to any provided gear, unless Camping Equipment Damage/Loss Cover is chosen and paid for<br>':''}
+      ${ctCampingBooked()?'• Camping equipment — loss or damage to any provided gear (paid by the renter)<br>':''}
       • Mechanical misuse — gearbox or engine damage from incorrect operation<br>
       • Undercarriage &amp; body damage — from off-road collisions or driving over rocks<br>
       • Scratches &amp; paint damage from vegetation — trees, branches, thorns, bush contact<br>
@@ -11121,7 +11112,6 @@ function buildContractHTML(c,sigUrl){
         ['Country security deposit (2.1)', c.country_deposit==='received'?'N$ 7,500.00 received':(c.country_deposit==='exempt'?'Not applicable':'—')],
         ['Cross-border deposit', c.cross_border_deposit?'N$ 30,000.00 received':(c.cross_border?'Not received':'N/A')],
         ['Windscreen & Tyre add-on', c.addon_windscreen?'Selected':'Not selected'],
-        ['Camping Equipment cover', !ctCampingBooked()?'N/A — no camping':(c.addon_equipment?'Selected':'Not selected')],
         ['Deposit method', (c.deposit_method||'—')+(c.deposit_ref?' · ref '+c.deposit_ref:'')],
       ].map(([l,v])=>`<div style="padding:5px 8px;border-bottom:1px solid #eee;font-size:14px;"><span style="color:#555;font-weight:600;">${l}:</span> <span style="color:#111;font-weight:700;">${v}</span></div>`).join('')}
     </div>
@@ -11442,7 +11432,6 @@ function guideCO(){
       var c=co.contract||{};
       if(!c.insurance_option){b=document.getElementById('ct-ins');return t('Ask the client which insurance they take, then tap it.',b);}
       if(c.addon_windscreen!==true&&c.addon_windscreen!==false)return t('Ask the client: Windscreen & Tyre cover? Tap Taken or Declined.',document.getElementById('ct-aws'));
-      if(co.v.camping&&c.addon_equipment!==true&&c.addon_equipment!==false&&document.getElementById('ct-aeq'))return t('Ask the client: Camping Equipment cover? Tap Taken or Declined.',document.getElementById('ct-aeq'));
       if(!c.fuel_deposit_received){b=gFind(R,'label,div',function(x){return /Fuel & Admin deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Fuel & Admin deposit, then tick it.',b);}
       if(co.v.xb&&!c.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
