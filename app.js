@@ -5149,11 +5149,21 @@ function ctCountryExempt(n){
   return false;
 }
 function ctNat(){try{var d=co.drivers&&co.drivers[0];return (d&&d.nationality)||(co.v&&(co.v.nationality||co.v.nat))||'';}catch(e){return '';}}
+// Country deposit (owner 13 Oct 2026): only asked AFTER the passport is read, and only when the nationality is NOT a listed country.
+function ctPassNat(){try{var d=co.drivers&&co.drivers[0];return (d&&d.nationality)||'';}catch(e){return '';}}
+function ctXdepSync(c){c=c||(co.contract=co.contract||{});if(c!==co.contract)return;var ex=ctCountryExempt(ctPassNat());
+  if(ex===true&&!c.country_deposit){c.country_deposit='exempt';c.country_deposit_auto=true;}
+  else if(ex!==true&&c.country_deposit==='exempt'&&c.country_deposit_auto){delete c.country_deposit;delete c.country_deposit_auto;}}
+// show the question? (also keeps it visible once staff answered it by hand, so it can be changed)
+function ctXdepAsk(c){c=c||co.contract||{};try{ctXdepSync(c);}catch(e){}
+  if(c.country_deposit==='received'||(c.country_deposit==='exempt'&&!c.country_deposit_auto))return true;
+  return ctCountryExempt(ctPassNat())===false;}
+function ctXdepOpen(c){c=c||co.contract||{};return ctXdepAsk(c)&&c.country_deposit!=='received'&&c.country_deposit!=='exempt';}
 function ctXdepButtons(c){
-  var v=c.country_deposit,nat=ctNat(),ex=ctCountryExempt(nat);
+  var v=c.country_deposit,nat=ctPassNat(),ex=ctCountryExempt(nat);
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'
     +ctBtn(v==='received',(v==='received'?'✓ ':'')+'N$7,500 received',"ctSet('country_deposit','received')")
-    +ctBtn(v==='exempt',(v==='exempt'?'✓ ':'')+'Not needed — listed country'+(c.country_deposit_auto&&v==='exempt'?' (from passport)':''),"ctSet('country_deposit','exempt')",'no')
+    +ctBtn(v==='exempt',(v==='exempt'?'✓ ':'')+'Not needed — listed country / permanent resident'+(c.country_deposit_auto&&v==='exempt'?' (from passport)':''),"ctSet('country_deposit','exempt')",'no')
     +'</div><div style="font-size:12px;color:var(--g5);margin-top:5px;">Nationality: <strong>'+_bx(nat||'not read yet')+'</strong>'
     +(ex===false?' · <span style="color:var(--re);font-weight:900;">not on the list — N$7,500 applies unless a permanent resident of a listed country</span>':'')
     +' · No extra deposit for USA, Canada, Switzerland, EU/EEA, UK, Australia, NZ, Japan, Singapore, Russia.</div>';
@@ -5164,7 +5174,7 @@ function ctOpenQuestions(){
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
   if(!c.insurance_option)q.push({s:'Insurance',t:'📋 Which insurance does the client take?',h:ctInsButtons(c)});
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$'+plN(PL_TYRE)+'/day × '+days+' = '+ctMoney(PL_TYRE*days),h:ctYesNo(c,'addon_windscreen')});
-  if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')q.push({s:'Country deposit',t:'🛂 Extra security deposit N$7,500 by country (section 2.1)',h:ctXdepButtons(c)});
+  if(ctXdepOpen(c))q.push({s:'Country deposit',t:'🛂 Extra security deposit N$7,500 by country (section 2.1)',h:ctXdepButtons(c)});
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
   if(!c.deposit_method)q.push({s:'Deposit method',t:'💳 How was the deposit paid?',h:ctMethodButtons(c)});
@@ -5272,7 +5282,7 @@ function ctDepositsHTML(){
 
     +tick('ct-xbd',c.cross_border_deposit===true,'🌍 Cross-border/Damage deposit — N$30,000.00',need?'Required: this booking goes cross-border ('+_bx(co.v.xb||c.cross_border)+')':'Only for travel outside Namibia',c.cross_border_deposit===true?'✓ Received':(need?'Required':'Not needed'),need?'req':'opt')
     +((function(){var n=extraDriverCharged();if(!n)return '';return tick('ct-edf',c.extra_driver_paid===true,'\uD83D\uDC64 Extra driver fee \u2014 '+ctMoney(extraDriverFee()),extraDriverTxt()+' once-off \u00b7 take this at collection',c.extra_driver_paid?'\u2713 Received':'TAKE PAYMENT','req');})())
-    +'<div id="ct-xdep" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--gb)':'var(--re)')+';background:'+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--sg)':'var(--rg)')+';"><div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px;">🛂 Extra security deposit by country — N$7,500.00 *</div>'+ctXdepButtons(c)+'</div>'
+    +(!ctXdepAsk(c)?'':'<div id="ct-xdep" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--gb)':'var(--re)')+';background:'+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--sg)':'var(--rg)')+';"><div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px;">🛂 Extra security deposit by country — N$7,500.00 *</div>'+ctXdepButtons(c)+'</div>')
     +'<div class="fi" id="ct-dmethod" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+(c.deposit_method?'var(--gb)':'var(--re)')+';background:'+(c.deposit_method?'var(--sg)':'var(--rg)')+';"><label style="font-size:15px;font-weight:900;color:var(--tx);">💳 How was the deposit paid? *</label>'
       +ctMethodButtons(c)
       +(ctIsAdumo(c)?ctRefInput(c,'ct-dref'):'')
@@ -5420,7 +5430,7 @@ function gatherContract(){
   co.contract.client_licence=pd.licNo||'';
   co.contract.client_licence_expiry=pd.licExpiry||'';
   co.contract.client_passport_expiry=pd.ppExpiry||'';
-  if(!co.contract.country_deposit&&ctCountryExempt(pd.nationality||ctNat())===true){co.contract.country_deposit='exempt';co.contract.country_deposit_auto=true;}
+  ctXdepSync(co.contract);
   co.contract.fleet_no=co.fn;
   co.contract.vehicle_reg=co.v.reg;
   co.contract.pickup_date=coPickupDate();
@@ -5458,7 +5468,7 @@ function ctMissing(c){
   if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
-  if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')m.push('🛂 N$7,500 country deposit: Received or Not needed?');
+  if(ctXdepOpen(c))m.push('🛂 N$7,500 country deposit: Received or Not needed?');
   if(!c.deposit_method)m.push('💳 Deposit method not selected (Adumo, Swipe, Cash…)');
   else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)m.push('🔢 Adumo transaction ID of the deposit payment not entered');
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)m.push('🌍 N$30,000 Cross-border deposit not ticked (travel to '+(co.v.xb||c.cross_border)+')');
