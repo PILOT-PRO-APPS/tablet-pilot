@@ -11235,6 +11235,7 @@ async function lsPin(d) {
       msg.textContent = pinFailText(res);
       LS_PIN = '';
       lsDots();
+      try{var _d=document.getElementById('ls-dots');_d.classList.remove('ls-shake');void _d.offsetWidth;_d.classList.add('ls-shake');}catch(e){}
       setTimeout(function() { msg.textContent = ''; }, 2000);
     }
   }
@@ -11543,3 +11544,34 @@ var _gT=null;
 function guideSoon(){if(_gT)clearTimeout(_gT);_gT=setTimeout(function(){_gT=null;guideUpdate();},180);}
 ['click','change','input','touchend'].forEach(function(ev){document.addEventListener(ev,guideSoon,{passive:true,capture:true});});
 setInterval(guideUpdate,2500);
+
+
+// ── ONLINE / OFFLINE DOT (13 Oct 2026) ─────────────────────────────────────────
+// A small chip in the menu bar: green "Online" or red "Offline". navigator.onLine can say
+// "online" on Wi-Fi without internet, so every 30 s (and on wake / reconnect) a tiny HEAD
+// request to this page checks for real. Work is saved on the tablet either way.
+var NET_OK=true;
+function netDotPaint(on){
+  NET_OK=on;var d=document.getElementById('net-dot');if(!d)return;
+  d.classList.toggle('off',!on);d.textContent=on?'● Online':'● Offline';
+}
+function netDotInfo(){
+  toast(NET_OK?'📶 Online — your work is sent straight away':'📵 No internet — your work is saved on this tablet and sent when the internet is back',NET_OK?'':'err');
+}
+(function(){
+  var busy=false;
+  async function check(){
+    if(busy)return;
+    if(navigator.onLine===false){netDotPaint(false);return;}
+    busy=true;var ctl=(typeof AbortController!=='undefined')?new AbortController():null;
+    var t=setTimeout(function(){try{if(ctl)ctl.abort();}catch(e){}},6000);
+    try{await fetch(location.pathname+'?net='+Date.now(),{method:'HEAD',cache:'no-store',signal:ctl?ctl.signal:undefined});netDotPaint(true);}
+    catch(e){netDotPaint(false);}
+    finally{clearTimeout(t);busy=false;}
+  }
+  window.addEventListener('online',check);
+  window.addEventListener('offline',function(){netDotPaint(false);});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)check();});
+  setInterval(check,30000);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',check);else check();
+})();

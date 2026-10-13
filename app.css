@@ -417,3 +417,18 @@ body.guide-next .co-next{display:none!important;}
   body.has-print-copy > #print-copy{display:block !important;background:#fff;color:#111;}
   body.has-print-copy{background:#fff !important;}
 }
+
+/* 13 Oct 2026: bigger name cards, wrong-PIN shake, Check-Out/Check-In stand out, online dot */
+#ls-names>div[style*="grid"]{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))!important;gap:12px!important;}
+#ls-names button{display:flex!important;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:128px;padding:16px 10px!important;border-radius:16px!important;}
+#ls-names button:active{background:#e8f5e4!important;border-color:#12803c!important;}
+.ls-ini{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#ffffff;line-height:1;}
+.ls-nm{font-size:19px;font-weight:800;}
+.ls-forgot{margin-top:10px;font-size:13px;color:#64748b;}
+@keyframes lsShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-7px)}80%{transform:translateX(7px)}}
+.ls-shake{animation:lsShake .4s;}
+.nb.nb-main{font-size:13px;padding:9px 14px;border:2px solid #12803c;background:#ffffff;}
+.nb.nb-main.on{background:#12803c;color:#ffffff;}
+#net-dot{font-size:11px;font-weight:800;padding:6px 10px;border-radius:20px;border:1px solid #9ad3a8;background:#ffffff;color:#12803c;cursor:pointer;white-space:nowrap;}
+#net-dot.off{color:#ffffff;background:#d13636;border-color:#7f1d1d;}
+@media (prefers-reduced-motion:reduce){.ls-shake{animation:none;}}
