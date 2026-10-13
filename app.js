@@ -5164,7 +5164,6 @@ function ctOpenQuestions(){
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
   if(!c.insurance_option)q.push({s:'Insurance',t:'📋 Which insurance does the client take?',h:ctInsButtons(c)});
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$'+plN(PL_TYRE)+'/day × '+days+' = '+ctMoney(PL_TYRE*days),h:ctYesNo(c,'addon_windscreen')});
-  if(!c.fuel_deposit_received)q.push({s:'Fuel deposit',t:'⛽ Fuel & Admin deposit N$2,500 (every rental)',h:ctGot(c,'fuel_deposit_received')});
   if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')q.push({s:'Country deposit',t:'🛂 Extra security deposit N$7,500 by country (section 2.1)',h:ctXdepButtons(c)});
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
@@ -5271,7 +5270,6 @@ function ctDepositsHTML(){
   }
   var h=''
 
-    +tick('ct-fdr',!!c.fuel_deposit_received,'⛽ Fuel &amp; Admin deposit — N$2,500.00','Required for every rental · refunded within 7 days after return',c.fuel_deposit_received?'✓ Received':'Required','req')
     +tick('ct-xbd',c.cross_border_deposit===true,'🌍 Cross-border/Damage deposit — N$30,000.00',need?'Required: this booking goes cross-border ('+_bx(co.v.xb||c.cross_border)+')':'Only for travel outside Namibia',c.cross_border_deposit===true?'✓ Received':(need?'Required':'Not needed'),need?'req':'opt')
     +((function(){var n=extraDriverCharged();if(!n)return '';return tick('ct-edf',c.extra_driver_paid===true,'\uD83D\uDC64 Extra driver fee \u2014 '+ctMoney(extraDriverFee()),extraDriverTxt()+' once-off \u00b7 take this at collection',c.extra_driver_paid?'\u2713 Received':'TAKE PAYMENT','req');})())
     +'<div id="ct-xdep" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--gb)':'var(--re)')+';background:'+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--sg)':'var(--rg)')+';"><div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px;">🛂 Extra security deposit by country — N$7,500.00 *</div>'+ctXdepButtons(c)+'</div>'
@@ -5280,7 +5278,7 @@ function ctDepositsHTML(){
       +(ctIsAdumo(c)?ctRefInput(c,'ct-dref'):'')
     +'</div>';
   setTimeout(function(){
-    [['ct-fdr','fuel_deposit_received'],['ct-xbd','cross_border_deposit'],['ct-edf','extra_driver_paid']].forEach(function(p){var e=document.getElementById(p[0]);if(e)e.onchange=function(){ctSet(p[1],this.checked);};});
+    [['ct-xbd','cross_border_deposit'],['ct-edf','extra_driver_paid']].forEach(function(p){var e=document.getElementById(p[0]);if(e)e.onchange=function(){ctSet(p[1],this.checked);};});
   },0);
   return '<div class="sum-box sec-dep" style="margin-bottom:12px"><div class="sum-title" style="margin-bottom:10px">💰 Deposits received</div>'+h+'</div>';
 }
@@ -5438,12 +5436,11 @@ function gatherContract(){
   co.contract.deposit_amount=+(function(){var _e=document.getElementById('ct-dep');return _e?_e.value:undefined;})()||co.contract.deposit_amount;
   co.contract.quote_number=(function(){var _e=document.getElementById('ct-quote');return _e?_e.value:undefined;})()||co.contract.quote_number||co.v.quote||'';
   co.contract.deposit_amount=+(function(){var _e=document.getElementById('ct-dep');return _e?_e.value:undefined;})()||co.contract.deposit_amount;
-  co.contract.fuel_deposit=+(function(){var _e=document.getElementById('ct-fdep');return _e?_e.value:undefined;})()||2500;
+  delete co.contract.fuel_deposit; delete co.contract.fuel_deposit_received; // fuel deposit discontinued (owner, 13 Oct 2026)
   co.contract.insurance_option=(function(){var _e=document.getElementById('ct-ins');return _e?_e.value:undefined;})()||co.contract.insurance_option;
   (function(){var _e=document.getElementById('ct-xbd');if(_e)co.contract.cross_border_deposit=_e.checked;})();
   (function(){var _e=document.getElementById('ct-edf');if(_e)co.contract.extra_driver_paid=_e.checked;})();
   if(co.contract.insurance_option&&CT_INS[co.contract.insurance_option])co.contract.deposit_amount=CT_INS[co.contract.insurance_option].dep;
-  co.contract.fuel_deposit_received=(function(){var _e=document.getElementById('ct-fdr');return _e?_e.checked:false;})()||!!co.contract.fuel_deposit_received;
   co.contract.cross_border=(function(){var _e=document.getElementById('ct-xb');return _e?_e.value:undefined;})()||co.contract.cross_border;
   co.contract.additional_drivers=(co.drivers||[]).slice(1).filter(function(d){return d&&d.name;}).map(function(d){return [d.name,d.dob,d.nationality,d.licNo,d.licExpiry].filter(Boolean).join(' / ');}).join('\n');
   co.contract.extra_driver_count=extraDriverCount();
@@ -5461,7 +5458,6 @@ function ctMissing(c){
   if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
-  if(!c.fuel_deposit_received)m.push('⛽ N$2,500 Fuel & Admin deposit not ticked (compulsory)');
   if(c.country_deposit!=='received'&&c.country_deposit!=='exempt')m.push('🛂 N$7,500 country deposit: Received or Not needed?');
   if(!c.deposit_method)m.push('💳 Deposit method not selected (Adumo, Swipe, Cash…)');
   else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)m.push('🔢 Adumo transaction ID of the deposit payment not entered');
@@ -6798,7 +6794,7 @@ function coFixLine(i){
   else if(/camping equipment/i.test(x)){cs=1;sel='#ct-aeq';}
   else if(/deposit method|how was the deposit/i.test(x)){cs=1;sel='#ct-dmethod';}
   else if(/country deposit|N\$7,500/i.test(x)){cs=1;sel='#ct-xdep';}
-  else if(/fuel|cross-border|extra driver|deposit|not paid/i.test(x)){cs=1;sel='.sec-dep';}
+  else if(/cross-border|extra driver|deposit|not paid/i.test(x)){cs=1;sel='.sec-dep';}
   else if(/handover|explained/i.test(x)){cs=3;}
   else if(/equipment not confirmed/i.test(x)){step=2;}
   else if(/odo|disc date|vehicle documents|cross-border papers/i.test(x)){step=4;}
@@ -6907,7 +6903,6 @@ function coMissing(){
   if(!d0.licFront)m.push('🪪 No licence photo');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(!co.contractSigned&&c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover not taken/declined');
-  if(!c.fuel_deposit_received)m.push('⛽ Fuel & admin deposit not ticked');
   if(v.xb&&!c.cross_border_deposit)m.push('🌍 Cross-border deposit not ticked');
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' NOT TAKEN ('+extraDriverTxt()+')');
@@ -7405,7 +7400,7 @@ function handoverWAText(){
   L.push('Pickup: '+(waDate(coPickupDate())||'today'));
   L.push('Return: '+(waDate(rdate)||'-')+(rtime?' at '+rtime:'')+' - '+place);
   if(hq)L.push('Office hours Mon-Fri 07:30-16:00. Weekend or holiday returns must be arranged with us in advance.');
-  L.push('Fuel: '+(co.fuelOut||'Full')+' at departure. DIESEL ONLY. Please return it full, otherwise N$250 plus the fuel is taken from your deposit.');
+  L.push('Fuel: '+(co.fuelOut||'Full')+' at departure. DIESEL ONLY. Please return it full, otherwise a N$250 fee plus the fuel needed is charged.');
   if(co.v.xb||c.cross_border)L.push('Cross-border: '+(co.v.xb||c.cross_border)+'. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
   L.push('','Please remember:',
     '- Go Rent speed limits apply (GPS tracked): one speeding event cancels all insurance.',
@@ -10825,12 +10820,6 @@ function buildContractHTML(c,sigUrl){
         ${chkBox(c.insurance_option==='3')}
         <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$${plN(CT_INS['3'].rate)}/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
       </div>
-      <!-- Fuel deposit -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;margin-bottom:5px;">
-        ${chkBox(!!c.fuel_deposit_received)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Fuel &amp; Admin Deposit (N$2,500.00) received</strong>${c.deposit_method?' — paid by <strong>'+c.deposit_method+'</strong>'+(c.deposit_ref?' (ref '+c.deposit_ref+')':''):''}<br>
-        <span style="font-size:9.5px;color:#555;">Refunded within 7 days of the vehicle's return. Any fuel shortage (fill-up cost) and admin costs (fill-up fee) will be deducted from this deposit before the balance is refunded.</span></div>
-      </div>
       <!-- Country deposit (2.1) -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:${c.country_deposit==='received'?'#f0f9f4;border-color:#1e8449':'#fff'};margin-bottom:5px;">
         ${chkBox(c.country_deposit==='received')}
@@ -10862,9 +10851,9 @@ function buildContractHTML(c,sigUrl){
   <!-- 2.1 COUNTRY DEPOSIT -->
   <div style="font-size:14px;font-weight:700;margin-bottom:4px;">2.1 ADDITIONAL SECURITY DEPOSIT BY COUNTRY</div>
   <div style="font-size:13px;color:#333;margin-bottom:14px;line-height:1.6;">
-    The Fuel &amp; Admin Deposit of N$2,500.00 applies to every rental. As part of our insurance and fraud-prevention requirements, an additional security deposit may apply depending on the Renter's country of citizenship or permanent residency. This is a general policy and is not a reflection on any individual guest. Proof of citizenship or permanent residency (e.g. passport) is required at vehicle collection, and any additional deposit is confirmed at the time of booking.<br>
+    As part of our insurance and fraud-prevention requirements, an additional security deposit may apply depending on the Renter's country of citizenship or permanent residency. This is a general policy and is not a reflection on any individual guest. Proof of citizenship or permanent residency (e.g. passport) is required at vehicle collection, and any additional deposit is confirmed at the time of booking.<br>
     <strong>No additional deposit:</strong> citizens or permanent residents of the United States of America, Canada, Switzerland, European Union member states &amp; EEA countries, the United Kingdom, Australia, New Zealand, Japan, Singapore and the Russian Federation.<br>
-    <strong>All other countries — additional N$7,500.00 security deposit</strong> (on top of the N$2,500.00 Fuel &amp; Admin Deposit). Fully refunded once the vehicle is returned undamaged and all return conditions are met.
+    <strong>All other countries — additional N$7,500.00 security deposit</strong>. Fully refunded once the vehicle is returned undamaged and all return conditions are met.
   </div>
   ${ini()}
 
@@ -11108,7 +11097,6 @@ function buildContractHTML(c,sigUrl){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       ${[
         ['Rental period', days?days+' days':'—'],
-        ['Fuel & admin deposit', 'N$ 2,500.00'],
         ['Country security deposit (2.1)', c.country_deposit==='received'?'N$ 7,500.00 received':(c.country_deposit==='exempt'?'Not applicable':'—')],
         ['Cross-border deposit', c.cross_border_deposit?'N$ 30,000.00 received':(c.cross_border?'Not received':'N/A')],
         ['Windscreen & Tyre add-on', c.addon_windscreen?'Selected':'Not selected'],
@@ -11415,7 +11403,6 @@ function guideCO(){
     // same order as the screen: deposits first, then the photos, then the cover
     if(!co.contractSigned){
       var c0=co.contract||{};
-      if(!c0.fuel_deposit_received){b=gFind(R,'label,div',function(x){return /Fuel & Admin deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Fuel & Admin deposit, then tick it.',b);}
       if(co.v.xb&&!c0.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
       if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the Adumo transaction ID of the deposit payment (from the Adumo email / portal).',b);}
@@ -11432,7 +11419,6 @@ function guideCO(){
       var c=co.contract||{};
       if(!c.insurance_option){b=document.getElementById('ct-ins');return t('Ask the client which insurance they take, then tap it.',b);}
       if(c.addon_windscreen!==true&&c.addon_windscreen!==false)return t('Ask the client: Windscreen & Tyre cover? Tap Taken or Declined.',document.getElementById('ct-aws'));
-      if(!c.fuel_deposit_received){b=gFind(R,'label,div',function(x){return /Fuel & Admin deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Fuel & Admin deposit, then tick it.',b);}
       if(co.v.xb&&!c.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
       if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the Adumo transaction ID of the deposit payment (from the Adumo email / portal).',b);}
