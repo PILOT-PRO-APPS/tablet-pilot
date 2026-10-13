@@ -7115,9 +7115,51 @@ async function payGate(){
   return true;
 }
 
+// Called by completeCO before anything is saved (owner 2026-10-13, tablet review item 5):
+// stops a second check-out on a vehicle that is still out with another client (no check-in yet).
+// Only rentals that are really still running count (a booking exists and its return date is at most 7 days ago),
+// so old records from before the fleet-number rename never block. Peter can override with a reason.
+async function dupCheckoutGate(){
+  if(!co||!co.v||co._coRowId)return true;            // correcting an already-saved check-out
+  var key=bkKey(co.v), since=new Date(Date.now()-60*86400000).toISOString(), open=[];
+  try{
+    var r=await SB.from('checkouts').select('booking_id,client,created_at').eq('fleet_no',co.fn).gte('created_at',since);
+    var rows=((r&&r.data)||[]).filter(function(x){return x.booking_id&&x.booking_id!==key;});
+    if(!rows.length)return true;
+    var ids=rows.map(function(x){return x.booking_id;}).filter(function(x,i,a){return a.indexOf(x)===i;});
+    // a check-in counts for the same vehicle + pickup date, whatever format the fleet number had (H-008 vs H-08)
+    var ci=await SB.from('checkins').select('booking_id').eq('fleet_no',co.fn).gte('created_at',since);
+    var done={}; ((ci&&ci.data)||[]).forEach(function(x){done[String(x.booking_id).slice(-10)]=1;});
+    var todo=ids.filter(function(id){return !done[String(id).slice(-10)];});
+    if(!todo.length)return true;
+    var today=new Date(Date.now()+2*3600000).toISOString().slice(0,10);
+    var cut=new Date(Date.now()+2*3600000-7*86400000).toISOString().slice(0,10);
+    for(var i=0;i<todo.length;i++){
+      var pu=String(todo[i]).slice(-10); if(!/^\d{4}-\d{2}-\d{2}$/.test(pu)||pu>today)continue;
+      var b=await SB.from('bookings').select('client,return_date').eq('fleet_no',co.fn).eq('pickup_date',pu).limit(1);
+      var bk=b&&b.data&&b.data[0];
+      if(bk&&bk.return_date&&bk.return_date>=cut){ var row=rows.find(function(x){return x.booking_id===todo[i];}); open.push({key:todo[i],client:(row&&row.client)||bk.client,ret:bk.return_date}); }
+    }
+  }catch(e){ return true; }                          // never block a check-out because the check itself failed
+  if(!open.length)return true;
+  var o=open[0], txt=co.fn+' is still out with '+o.client+' (return '+o.ret+') — that rental has no check-in yet.';
+  if(!isPeter()){
+    await askBox({title:'⛔ Vehicle not checked in yet',danger:true,cancel:false,ok:'OK',text:txt+'\n\nDo the check-in of '+o.client+' first, then this check-out. Only Peter can release the vehicle without it.'});
+    return false;
+  }
+  var a=await askBox({title:'⚠ '+co.fn+' has no check-in yet',danger:true,ok:'Release anyway',text:txt+'\n\nManagement is alerted.',reason:'Why is the vehicle released without the check-in?',minReason:5});
+  if(!a.ok)return false;
+  co.dupOverride={by:APP_USER.name,at:new Date().toISOString(),reason:a.reason,open:o.key};
+  try{SB.from('management_alerts').insert({booking_id:key,fleet_no:co.fn,client:co.v.cl,received_by:APP_USER.name,
+    message:'CHECK-OUT WITHOUT CHECK-IN — '+co.fn+' released to '+co.v.cl+' while '+o.client+' ('+o.key+') has no check-in. By '+APP_USER.name+': '+a.reason,
+    created_at:new Date().toISOString()}).then(function(){},function(){});}catch(e){}
+  return true;
+}
+
 async function completeCO(){
   if(!drOnline()){askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the check-out when the internet is back.'});return;}
   if(!(await payGate()))return;   // the rental must be paid in full before release (Peter can override)
+  if(!(await dupCheckoutGate()))return;   // the vehicle must be checked in from the previous rental (Peter can override)
   var _stBefore=co.v.st;
   co._done=true;
   try{localStorage.removeItem(ipKey(co.fn));}catch(e){}
