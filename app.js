@@ -740,7 +740,7 @@ async function backupToCloud(auto){
     // Keep only the newest 14 daily copies (12 Oct 2026: storage was full; each copy is ~3–5 MB).
     try{
       var ls=await SB.storage.from('client-docs').list('backups',{limit:1000});
-      var old=((ls&&ls.data)||[]).map(function(o){return o.name;}).filter(function(n){return /^gorent-backup-\d{4}-\d{2}-\d{2}\.json$/.test(n);}).sort().reverse().slice(14);
+      var old=((ls&&ls.data)||[]).map(function(o){return o.name;}).filter(function(n){return /^gorent-backup-\d{4}-\d{2}-\d{2}\.json$/.test(n);}).sort().reverse().slice(7);   // keep a week (owner 14 Oct 2026: storage)
       if(old.length)await SB.storage.from('client-docs').remove(old.map(function(n){return 'backups/'+n;}));
     }catch(e){}
     var n=(data.checkouts||[]).length+(data.checkins||[]).length+(data.rental_contracts||[]).length;
@@ -2675,6 +2675,39 @@ async function drUnpack(val){
 }
 
 // ── push everything not yet on the server (runs whenever there is internet) ──
+// Storage (owner 14 Oct 2026): a job's draft photos are only working copies — the final photos are in
+// vehicle-photos / id-docs and inside the reports — but they were never removed (300+ MB by 14 Oct).
+// They now go when the job is finished or reset, and Peter's tablet sweeps up leftovers once a day.
+async function drDropPhotos(id){
+  try{
+    var dir='drafts/'+String(id).replace(/[^A-Za-z0-9_-]/g,'_');
+    var l=await SB.storage.from('client-docs').list(dir,{limit:1000});
+    var names=((l&&l.data)||[]).filter(function(f){return f&&f.name&&f.id!==null;}).map(function(f){return dir+'/'+f.name;});
+    for(var i=0;i<names.length;i+=100)await SB.storage.from('client-docs').remove(names.slice(i,i+100));
+  }catch(e){}
+}
+async function drSweepPhotos(){
+  try{
+    if(!isAdmin()||!drOnline())return;
+    var day=localYMD();try{if(localStorage.getItem('gorent_dr_sweep')===day)return;}catch(e){}
+    var w=await SB.from('work_drafts').select('id');if(w.error)return;
+    var keep={};(w.data||[]).forEach(function(x){keep[String(x.id).replace(/[^A-Za-z0-9_-]/g,'_')]=1;});
+    var l=await SB.storage.from('client-docs').list('drafts',{limit:1000});if(l.error)return;
+    var dirs=((l.data||[])).filter(function(f){return f&&f.name&&f.id===null&&!keep[f.name];}).map(function(f){return f.name;});
+    // a folder is only removed when it has no draft row AND its files are older than a day
+    // (a brand-new job uploads its photos a moment before its draft row exists)
+    var cut=Date.now()-86400000;
+    for(var i=0;i<dirs.length;i++){
+      var dir='drafts/'+dirs[i],fl=await SB.storage.from('client-docs').list(dir,{limit:1000});
+      var files=((fl&&fl.data)||[]).filter(function(f){return f&&f.name&&f.id!==null;});
+      if(!files.length||files.some(function(f){return new Date(f.updated_at||f.created_at||0).getTime()>cut;}))continue;
+      var names=files.map(function(f){return dir+'/'+f.name;});
+      for(var j=0;j<names.length;j+=100)await SB.storage.from('client-docs').remove(names.slice(j,j+100));
+    }
+    try{localStorage.setItem('gorent_dr_sweep',day);}catch(e){}
+  }catch(e){}
+}
+setTimeout(drSweepPhotos,60000);setInterval(drSweepPhotos,3*3600*1000);
 async function drPush(){
   if(_drPushing||!drOnline()||!APP_USER)return;
   // Every 8 s this read EVERY draft kept on the device, photos included, even when nothing had
@@ -2692,7 +2725,7 @@ async function drPush(){
       var r=all[i];
       if(r.deleted){
         var d=await SB.from('work_drafts').delete().eq('id',r.id);
-        if(!d.error){await drDel(r.id);sent(r.id);}else _drDirty=true;
+        if(!d.error){await drDel(r.id);sent(r.id);drDropPhotos(r.id);}else _drDirty=true;
         continue;
       }
       if(r.pushed){sent(r.id);continue;}
