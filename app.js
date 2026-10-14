@@ -1708,7 +1708,7 @@ function bkToVeh(b,vr,today){
     st:(vr.status==='rented'||out)?'rented':'available',odo:vr.odo||0,dmgd:[],
     svc:{lastKm:vr.svc_last_km||0,intKm:vr.svc_interval_km||10000,date:vr.svc_last_date||''},
     lic:{expiry:vr.lic_expiry||''},tyres:{lastKm:vr.tyre_last_km||0,intKm:vr.tyre_interval_km||22000},
-    blocked:vr.blocked_reason||null,bufferDays:vr.buffer_days||0};
+    blocked:vr.blocked_reason||null,bufferDays:vr.buffer_days||0,desc:vr.description||'',year:vr.year||null};
 }
 async function loadBookings(){
   try{
@@ -1731,9 +1731,9 @@ async function loadBookings(){
     ALL_FLEET_NOS=(vres.data||[]).map(function(v){return v.fleet_no;}).filter(Boolean);
     // Start km = last km recorded when the vehicle was returned (tablet check-ins)
     try{
-      var cr=await SB.from('checkins').select('fleet_no,odo_in,created_at').order('created_at',{ascending:false}).limit(1000);
-      var seen={};(cr.data||[]).forEach(function(c){if(c.fleet_no&&c.odo_in&&!seen[c.fleet_no])seen[c.fleet_no]=c;});
-      FLEET.forEach(function(v){var c=seen[v.fn];if(c){v.odo=c.odo_in;v.lastRet={km:c.odo_in,at:c.created_at};}});
+      var cr=await SB.from('checkins').select('fleet_no,odo_in,km_driven,received_by,created_at').order('created_at',{ascending:false}).limit(1000);
+      var seen={};(cr.data||[]).forEach(function(c){var f=fnNorm(c.fleet_no);if(f&&c.odo_in&&!seen[f])seen[f]=c;});
+      FLEET.forEach(function(v){var c=seen[fnNorm(v.fn)];if(c){v.odo=c.odo_in;v.lastRet={km:c.odo_in,at:c.created_at,drove:c.km_driven,by:c.received_by};}});
     }catch(e){}
     // Client names corrected on the tablet (Fleet Manager booking stays as it is)
     try{
@@ -3466,7 +3466,7 @@ function drawCO(){
       // odometer and fuel on one line under the chips
       (function(){
         var km=co.odometerOut||_cov.odo||'';
-        var src=_cov.lastRet?('↩ Last return '+Number(_cov.lastRet.km).toLocaleString()+' km · '+new Date(_cov.lastRet.at).toLocaleDateString('en-GB',{day:'numeric',month:'short'})):(_cov.odo?'From Fleet Manager':'No previous reading');
+        var src=coOdoSrc(_cov);
         var fuel=co.fuelOut||'Full';
         var fb=['Empty','1/4','1/2','3/4','Full'].map(function(f){
           var on=fuel===f;
@@ -3474,8 +3474,10 @@ function drawCO(){
         }).join('');
         return '<div class="fh-row">'
           +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:#333333;">🛣 ODO OUT'
-          +'<input type="number" inputmode="numeric" pattern="[0-9]*" id="co-odo-out" class="'+(km?'':'need-flash')+'" value="'+km+'" placeholder="Odo km" onfocus="this.select()" oninput="co.odometerOut=+this.value" '
-          +'style="width:110px;padding:5px 8px;font-size:16px;font-weight:900;background:#ffffff;border:2px solid '+(km?'var(--gb)':'var(--re)')+';border-radius:6px;color:#0f172a;"></label>'
+          +'<input type="number" inputmode="numeric" pattern="[0-9]*" id="co-odo-out" class="'+(co.odoDone?'':'need-flash')+'" value="'+km+'" placeholder="Odo km" onfocus="this.select()" oninput="co.odometerOut=+this.value" onchange="coOdoTyped(this.value)" '
+          +'style="width:110px;padding:5px 8px;font-size:16px;font-weight:900;background:#ffffff;border:2px solid '+(co.odoDone?'var(--gb)':'var(--re)')+';border-radius:6px;color:#0f172a;"></label>'
+          +(co.odoDone?'<span style="font-size:11px;font-weight:800;color:#12803c;">✓ checked'+(co.odoBy?' by '+_bx(co.odoBy):'')+'</span>'
+            :(km?'<button onclick="coOdoOk()" class="need-flash" style="padding:5px 10px;border-radius:6px;border:2px solid #0a5c2a;background:#12803c;color:#fff;font-weight:900;font-size:12px;">✓ Matches the dashboard</button>':''))
           +'<span style="font-size:10px;color:#444444;">'+src+'</span>'
           +'<div class="fh-fuel"><span style="font-size:12px;font-weight:900;color:#000000;margin-right:2px;">⛽ FUEL</span>'+fb+'</div>'
           +'</div>';
@@ -5096,7 +5098,12 @@ async function captureDriverDoc(event,driverIdx,field){
 // Contract details: insurance dropdown + tick boxes (fuel & admin, cross-border, windscreen, camping cover)
 var CT_INS={'1':{t:'Option 1 — Basic Cover',rate:230,dep:45000},'2':{t:'Option 2 — Extended Cover',rate:320,dep:30000},'3':{t:'Option 3 — Premium Cover (zero excess)',rate:490,dep:0}};
 // Add-on prices: follow the office Price list in PilotDesktop (app_settings.price_list), these are the 11 Oct 2026 values
-var PL_TYRE=180; // Camping equipment cover removed 12 Oct 2026 (owner): not sold any more; lost/damaged camping gear is the client's cost
+var PL_TYRE=180;
+// Classic Option (owner 14 Oct 2026): the 2.4 Hilux with soft-shell tents has its own, lower insurance
+// prices (Desktop APP price list: insB). Premium = 2.8 Hilux with hardshell tents (ins). Same deposits.
+var CT_INS_B={'1':195,'2':270,'3':415};
+function vehClassic(v){v=v||(co&&co.v)||{};return /^\s*2\.4/.test(String(v.desc||''));}
+function ctInsRate(k,v){return vehClassic(v)?CT_INS_B[k]:(CT_INS[k]&&CT_INS[k].rate);} // Camping equipment cover removed 12 Oct 2026 (owner): not sold any more; lost/damaged camping gear is the client's cost
 function plN(n){n=Number(n);return n%1?n.toFixed(2):String(n);}
 function ctMoney(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function ctDays(){var _pu=coPickupDate();return _pu&&co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(_pu))/86400000)):0;}
@@ -5118,6 +5125,7 @@ function loadDriverPrices(){
     if(isFinite(f)&&f>=0) EXTRA_DRIVER_FEE=f; if(isFinite(n)&&n>=0) EXTRA_DRIVER_FREE=Math.floor(n);
     // insurance and add-on prices too (same Price list as the quotes in PilotDesktop)
     if(v.ins)['1','2','3'].forEach(function(k){var r=Number(v.ins[k]);if(isFinite(r)&&r>=0&&CT_INS[k])CT_INS[k].rate=r;});
+    if(v.insB)['1','2','3'].forEach(function(k){var r=Number(v.insB[k]);if(isFinite(r)&&r>=0)CT_INS_B[k]=r;});
     var t=Number(v.tyre);if(isFinite(t)&&t>=0)PL_TYRE=t;
   },function(){}); }catch(e){}
 }
@@ -5139,7 +5147,7 @@ function ctBtn(on,html,js,tone){
 function ctInsButtons(c){
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+Object.keys(CT_INS).map(function(k){var o=CT_INS[k],on=c.insurance_option===k;
     var nm=o.t.replace(/^Option \d+ — /,'').replace(' (zero excess)','');
-    return ctBtn(on,(on?'✓ ':'')+nm+'<div style="font-size:12px;font-weight:700;opacity:.85;margin-top:2px;">N$'+o.rate+'/day · '+(o.dep?'deposit N$'+o.dep.toLocaleString('en-US'):'zero excess')+'</div>',"ctSet('insurance_option','"+k+"')");}).join('')+'</div>';
+    return ctBtn(on,(on?'✓ ':'')+nm+'<div style="font-size:12px;font-weight:700;opacity:.85;margin-top:2px;">N$'+ctInsRate(k)+'/day'+(vehClassic()?' (Classic)':'')+' · '+(o.dep?'deposit N$'+o.dep.toLocaleString('en-US'):'zero excess')+'</div>',"ctSet('insurance_option','"+k+"')");}).join('')+'</div>';
 }
 function ctMethodButtons(c){
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+CT_METHODS.map(function(m){var on=(c.deposit_method||'')===m;
@@ -6758,6 +6766,34 @@ function coReopen(step){
   coStep=step;goPage('co');drawCO();
   toast('Correct what is needed, then tap Release vehicle on the Handover step','ok');
 }
+// ── Odometer at check-out (owner 14 Oct 2026) ──
+// The km noted when the vehicle came back (check-in) is offered here. Staff confirm it against the
+// dashboard or type the correct reading before the vehicle goes out again. "Done" in the name keeps
+// it when two tablets merge (drKeepDone).
+function coOdoSrc(v){
+  var r=v&&v.lastRet;
+  if(!r)return v&&v.odo?'From Fleet Manager — check the dashboard':'No previous reading — type it from the dashboard';
+  var d='';try{d=new Date(r.at).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}catch(e){}
+  var t='↩ Returned at '+Number(r.km).toLocaleString()+' km · '+d+(r.by?' ('+_bx(r.by)+')':'');
+  if(r.drove!=null&&r.drove>=0)t+=' · last client drove '+Number(r.drove).toLocaleString()+' km';
+  if(co&&co.odoFixedFrom)t+=' · corrected from '+Number(co.odoFixedFrom).toLocaleString();
+  return t;
+}
+function coOdoOk(){
+  if(!co||!co.v)return;var km=+(co.odometerOut||co.v.odo||0);
+  if(!km){toast('Type the km from the dashboard first','err');var e=document.getElementById('co-odo-out');if(e)e.focus();return;}
+  co.odometerOut=km;co.odoDone=true;co.odoBy=(APP_USER&&APP_USER.name)||'';co.odoAt=new Date().toISOString();
+  drawCO();try{saveCOProgress();}catch(e){}
+}
+function coOdoTyped(val){
+  if(!co||!co.v)return;var km=+val||0;if(!km)return;
+  var ret=co.v.lastRet?+co.v.lastRet.km:0;
+  if(ret&&km<ret&&!confirm(km.toLocaleString()+' km is LOWER than the '+ret.toLocaleString()+' km noted when the vehicle came back. Is the dashboard really showing '+km.toLocaleString()+'?'))return;
+  co.odometerOut=km;
+  if(ret&&km!==ret)co.odoFixedFrom=ret;else delete co.odoFixedFrom;
+  co.odoDone=true;co.odoBy=(APP_USER&&APP_USER.name)||'';co.odoAt=new Date().toISOString();
+  drawCO();try{saveCOProgress();}catch(e){}
+}
 // Everything still outstanding, checked before the check-out is finalised
 // ── What is still open, step by step ─────────────────────────────
 // Steps: 0 Cleaning · 2 Equipment · 3 Mechanical · 4 Inspection · 5 Contract · 6 Handover.
@@ -6775,7 +6811,7 @@ function coStepMissing(n){
   if(n===2){
     if(!co.equipSig)m.push('✍️ Equipment not confirmed as packed (✓ Confirm — Equipment Packed)');
   }else if(n===4){
-    if(!co.odometerOut&&!v.odo)m.push('🛣 Odo reading not filled in (top of the screen)');
+    if(!co.odoDone)m.push('🛣 Odo reading: check it against the dashboard (top of the screen)');
     if(!(v.lic&&v.lic.expiry)&&!v._licExpiry)m.push('🚗 Licence disc date missing (top of the screen)');
     if(!d.veh)m.push('📄 Vehicle documents (disc, insurance papers) not checked');
     if(v.xb&&!d.xb)m.push('🌍 Cross-border papers not checked');
@@ -6957,7 +6993,7 @@ function coMissing(){
   if(unPrep.length)m.push('📦 Equipment: '+unPrep.length+' item'+(unPrep.length===1?'':'s')+' not checked');
   var unMech=L_MECH.filter(function(it){return it&&it[0]!=='__SECTION__'&&!(it[0]==='__CAMPING__'&&!v.camping)&&!(co.mechItems||{})[it[1]];}).map(function(it){return it[1];});
   if(unMech.length)m.push('🔩 Mechanical: '+unMech.length+' item'+(unMech.length===1?'':'s')+' not checked');
-  if(!co.odometerOut&&!v.odo)m.push('🛣 Current odo reading not filled in');
+  if(!co.odoDone)m.push('🛣 Odo reading not checked against the dashboard');
   if(!(v.lic&&v.lic.expiry)&&!v._licExpiry)m.push('🚗 Licence disc date missing');
   var d0=(co.drivers&&co.drivers[0])||{};
   if(!d0.name)m.push('👤 Client name not filled in');
@@ -10916,17 +10952,17 @@ function buildContractHTML(c,sigUrl){
       <!-- Option 1 -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='1'?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(c.insurance_option==='1')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 1 – Basic Cover</strong> | N$${plN(CT_INS['1'].rate)}/day | Security deposit N$45,000 — refunded 7 days after return if no damage.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 1 – Basic Cover</strong> | N$${plN(ctInsRate('1'))}/day | Security deposit N$45,000 — refunded 7 days after return if no damage.</div>
       </div>
       <!-- Option 2 -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='2'?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(c.insurance_option==='2')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 2 – Extended Cover</strong> | N$${plN(CT_INS['2'].rate)}/day | Security deposit N$30,000 — refunded 7 days after return if no damage.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 2 – Extended Cover</strong> | N$${plN(ctInsRate('2'))}/day | Security deposit N$30,000 — refunded 7 days after return if no damage.</div>
       </div>
       <!-- Option 3 -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='3'?'#f0f9f4;border-color:#1e8449':'#fff'};">
         ${chkBox(c.insurance_option==='3')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$${plN(CT_INS['3'].rate)}/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
+        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$${plN(ctInsRate('3'))}/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
       </div>
       <!-- Country deposit (2.1) -->
       <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:${c.country_deposit==='received'?'#f0f9f4;border-color:#1e8449':'#fff'};margin-bottom:5px;">
