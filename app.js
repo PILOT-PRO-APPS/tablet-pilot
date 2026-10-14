@@ -2645,7 +2645,7 @@ async function rfOpenSaved(which){
   banner('Opening…');
   var t='';try{var r=await fetch(u);t=r.ok?await r.text():'';}catch(e){}
   hideBanner();
-  if(!t){openExt('https://selfdrive4x4.github.io/pilottablet/#r='+encodeURIComponent(u));return;}
+  if(!t){openExt('https://pilot-pro-apps.github.io/tablet-pilot/#r='+encodeURIComponent(u));return;}
   openDoc(t,which==='ret'?'Return report':'Handover document');
 }
 function drBlobToData(b){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=rej;r.readAsDataURL(b);});}
@@ -7421,7 +7421,7 @@ function coHandoverExtras(){
 // app on GitHub Pages, which serves real HTML: it loads the stored document and renders it.
 // The storage link rides in the # fragment, which browsers never send to any server, so the
 // client's document link never leaves their phone.
-var VIEWER_FALLBACK='https://selfdrive4x4.github.io/pilottablet/view.html';
+var VIEWER_FALLBACK='https://pilot-pro-apps.github.io/tablet-pilot/view.html';
 function clientDocLink(signedUrl){
   if(!signedUrl)return '';
   try{
@@ -7441,7 +7441,7 @@ async function saveHandoverLink(html){
   }catch(e){return '';}
 }
 // The guest information pack (info.html, next to the app) — sent with the handover document
-function guideLink(){try{if(location.protocol==='http:'||location.protocol==='https:')return location.origin+location.pathname.replace(/[^\/]*$/,'')+'info.html';}catch(e){}return 'https://selfdrive4x4.github.io/pilottablet/info.html';}
+function guideLink(){try{if(location.protocol==='http:'||location.protocol==='https:')return location.origin+location.pathname.replace(/[^\/]*$/,'')+'info.html';}catch(e){}return 'https://pilot-pro-apps.github.io/tablet-pilot/info.html';}
 function sendGuideWA(){
   var phone=((document.getElementById('send-wa')||{}).value||'').trim();
   if(!phone){toast('Enter WhatsApp number','err');return;}
