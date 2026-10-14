@@ -2652,12 +2652,20 @@ function drBlobToData(b){return new Promise(function(res,rej){var r=new FileRead
 async function drUnpack(val){
   var paths=[];
   (function scan(x){if(typeof x==='string'){if(x.indexOf('draftimg:')===0)paths.push(x.slice(9));}else if(Array.isArray(x))x.forEach(scan);else if(x&&typeof x==='object')for(var k in x)scan(x[k]);})(val);
-  for(var i=0;i<paths.length;i++){
-    var p=paths[i];if(DR_IMGD[p])continue;
-    var dl=await SB.storage.from('client-docs').download(p);
+  // 14 Oct: photos were fetched one at a time with no time limit, so on a slow Blackview
+  // "Loading work from …" could hang for ever. Now 4 at a time, 40 s limit each, with progress.
+  var need=paths.filter(function(p,i){return !DR_IMGD[p]&&paths.indexOf(p)===i;}),done=0,next=0;
+  function prog(){try{if(need.length&&document.getElementById('upload-banner').style.display==='block'){var b=document.getElementById('upload-banner');b.textContent=b.textContent.replace(/ — photo \d+ of \d+$/,'')+' — photo '+done+' of '+need.length;}}catch(e){}}
+  async function one(p){
+    var dl=await Promise.race([SB.storage.from('client-docs').download(p),
+      new Promise(function(_,rj){setTimeout(function(){rj(new Error('photo download too slow'));},40000);})]);
     if(dl.error||!dl.data)throw new Error('photo not available yet');
-    DR_IMGD[p]=await drBlobToData(dl.data);
+    DR_IMGD[p]=await drBlobToData(dl.data);done++;prog();
   }
+  async function worker(){while(next<need.length){await one(need[next++]);}}
+  prog();
+  var ws=[];for(var w=0;w<Math.min(4,need.length);w++)ws.push(worker());
+  await Promise.all(ws);
   return (function walk(x){
     if(typeof x==='string')return x.indexOf('draftimg:')===0?DR_IMGD[x.slice(9)]:x;
     if(Array.isArray(x))return x.map(walk);
@@ -2821,7 +2829,7 @@ async function drLoadFor(kind,key){
   if(row){
     banner('Loading work from '+(row.updated_by||'another device'));
     try{var st=await drUnpack(row.data);hideBanner();drRestore(kind,st,row);return {src:'server',by:row.updated_by,device:row.device};}
-    catch(e){hideBanner();}
+    catch(e){hideBanner();try{toast('⚠ Could not load all photos from '+(row.updated_by||'the other tablet')+' — weak internet? Go back and open the vehicle again','err');}catch(_){}}
   }
   if(loc){try{var st1=JSON.parse(loc.json);drRestore(kind,st1,null);DR_LAST[id]={sig:drSig(st1),im:st1.im||null};return {src:'here',by:loc.by};}catch(e){}}
   return null;
