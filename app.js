@@ -2700,6 +2700,11 @@ async function drPush(){
       var chk=await SB.from('work_drafts').select('updated_at,updated_by,device,summary,data').eq('id',r.id).maybeSingle();
       if(chk.error){_drDirty=true;break;}
       var row=chk.data;
+      // Gone from the server although this tablet had sent it before: the job was finished or reset on
+      // another tablet. Re-sending it brought finished check-outs back as "in progress" (a workshop
+      // tablet left open on the vehicle while the office released it, 14 Oct 2026 test; stale drafts
+      // H-20, H-15, H-16 live). Close it here instead of creating it again.
+      if(!row&&(r.base||DR_BASEC[r.id])){try{await drApplyServer(r.id,false);}catch(e){}sent(r.id);delete DR_BASEC[r.id];continue;}
       var _other=!!(row&&row.device!==DR_DEV&&(!r.base||row.updated_at>r.base));   // another tablet saved since this one last synced
       if(row&&row.device!==DR_DEV&&row.summary&&Object.keys(row.summary).length&&(!r.base||row.updated_at>r.base)){   // (older-format rows have no summary: just replace them)
         drOtherDeviceNote(r,row);   // someone else has it open too — never interrupt the person in front of the screen
@@ -2767,7 +2772,12 @@ async function drPull(){
     await drTick();
     var open=[];if(co&&co.v&&!co._done)open.push(drId('checkout',co));if(ci&&ci.v&&!ci._done)open.push(drId('checkin',ci));
     for(var i=0;i<open.length;i++){
-      var id=open[i],row=DR_SRV[id];if(!row||row.device===DR_DEV)continue;
+      var id=open[i],row=DR_SRV[id];
+      if(!row){   // finished / reset on another tablet while it is open here
+        if(DR_BASEC[id]&&!_drPend[id]){try{var q0=await SB.from('work_drafts').select('id').eq('id',id).maybeSingle();if(!q0.error&&!q0.data){await drApplyServer(id,false);delete DR_BASEC[id];}}catch(e){}}
+        continue;
+      }
+      if(row.device===DR_DEV)continue;
       if(_drScanned&&Object.prototype.hasOwnProperty.call(DR_BASEC,id)){   // known here: no need to read the whole saved draft
         if(_drPend[id])continue;
         if(!DR_BASEC[id]||row.updated_at>DR_BASEC[id])await drApplyServer(id,false);
@@ -2802,8 +2812,20 @@ async function drApplyServer(id,force){
   if(_kept){try{if(kind==='checkout')saveCOProgress();else if(typeof saveCIProgress==='function')saveCIProgress();}catch(e){}}
   if(kind==='checkout'&&drPageOn('co'))try{drawCO();}catch(e){}
   if(kind==='checkin'&&drPageOn('ci'))try{drawCI();}catch(e){}
+  // What is on screen now IS the server copy (plus this tablet's own step and screen-only details).
+  // Without this, the 2-second save saw a "change" and sent the copy straight back: a tablet left
+  // open on a job re-uploaded the whole job after every save on the other tablet (ping-pong every
+  // few seconds while the office worked), and re-created the job after the office had finished it.
+  if(!_kept){try{drRebase(kind);}catch(e){}}
   if(!force)toast('↻ '+q.data.fleet_no+' updated by '+(q.data.updated_by||'another device'),'ok');
   return true;
+}
+function drRebase(kind){
+  var obj=kind==='checkout'?co:ci;if(!obj||!obj.v)return;
+  var id=drId(kind,obj),onPage=drPageOn(kind==='checkout'?'co':'ci');
+  var im=onPage?imarks:(DR_LAST[id]&&DR_LAST[id].im)||null;
+  var sig=drSig({o:obj,s:kind==='checkout'?coStep:ciStep,im:im,isz:onPage?isize:undefined,ret:kind==='checkin'?retSt:null});
+  DR_LAST[id]={sig:sig,im:im?JSON.parse(JSON.stringify(im)):null};
 }
 function drRestore(kind,st,row){
   var id=row?row.id:(kind+':'+drKeyOf(st.o));
@@ -5154,13 +5176,26 @@ var CT_XDEP_WORDS=['united states','america','american','canada','canadian','swi
   'austria','austrian','belgium','belgian','bulgaria','bulgarian','croatia','croatian','cyprus','cypriot','czech','czechia','czech republic','denmark','danish','estonia','estonian','finland','finnish',
   'france','french','germany','german','deutsch','deutschland','greece','greek','hungary','hungarian','ireland','irish','italy','italian','latvia','latvian','lithuania','lithuanian',
   'luxembourg','luxembourgish','malta','maltese','netherlands','dutch','holland','poland','polish','portugal','portuguese','romania','romanian','slovakia','slovak','slovenia','slovenian','slovene',
-  'spain','spanish','sweden','swedish','iceland','icelandic','liechtenstein','norway','norwegian','eu','european union'];
+  'spain','spanish','sweden','swedish','iceland','icelandic','liechtenstein','norway','norwegian','eu','european union',
+  // the same countries as printed in the passports' own languages (the passport reader copies what it sees):
+  // ITALIANA (H-11, 14 Oct), Française (H-28, Hi-44, 12 Oct) were not recognised, so the N$7,500 question was asked
+  'italiana','italiano','italienne','italienisch','repubblica italiana','francaise','francais','franzosisch','francese','francesa','republique francaise',
+  'deutsch','deutsche','deutscher','bundesrepublik deutschland','allemand','allemande','tedesca','tedesco','alemana','aleman',
+  'belge','belgisch','belgische','belga','belgie','belgique','belgien','britannique','britisch','britische','britannica','britanico','britanica',
+  'nederlandse','nederlander','neerlandaise','olandese','holandesa','koninkrijk der nederlanden','espanola','espanol','espagnole','spagnola','spanisch','reino de espana',
+  'portuguesa','portugues','portugaise','portoghese','osterreich','osterreichisch','osterreicher','republik osterreich','autrichienne','autrichien',
+  'schweizer','schweizerisch','schweizerin','suisse','svizzera','svizzero','suiza','confederation suisse','dansk','danske','svensk','svenska','sverige','norsk','norske','norge',
+  'suomi','suomalainen','polska','polskie','polski','ceska','ceska republika','cesky','ceske','slovenska','slovensky','slovenija','magyar','hellenic','ellada',
+  'eesti','latvija','latvijas','lietuvos','lietuva','eire','irlande','luxembourgeoise','luxembourgeois','luxemburgisch','romana','hrvatska','hrvatsko','islensk',
+  'americaine','americain','amerikanisch','estados unidos','etats unis','vereinigte staaten','canadienne','canadien','kanadisch',
+  'australienne','australien','australisch','japonaise','japonais','japanisch','neuseelandisch','russe','russisch','rossiyskaya federatsiya','singapourienne','singapourien'];
 // true = listed country (no extra deposit) · false = not listed · null = unknown / empty
 function ctCountryExempt(n){
   n=String(n||'').trim();if(!n)return null;
   var up=n.toUpperCase().replace(/[^A-Z]/g,'');
   if(up.length<=3&&CT_XDEP_CODES.indexOf(up)>=0)return true;
-  var lo=n.toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
+  var lo=n;try{lo=lo.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}catch(e){}   // Française → francaise, Österreich → osterreich
+  lo=lo.toLowerCase().replace(/[^a-z ]/g,' ').replace(/\s+/g,' ').trim();
   if(CT_XDEP_WORDS.indexOf(lo)>=0)return true;
   for(var i=0;i<CT_XDEP_WORDS.length;i++){var w=CT_XDEP_WORDS[i];if(w.length>4&&(' '+lo+' ').indexOf(' '+w+' ')>=0)return true;}
   return false;
@@ -7576,7 +7611,7 @@ async function startCI(fn){
   if(_early){ci.early=true;ci.dueBack=v.rt;ci.notes='EARLY RETURN — was due back '+v.rt+(ci.notes?'. '+ci.notes:'');}
   goPage('ci');drawCI();
   // Km and fuel at departure: take them from this booking's check-out record if it exists
-  try{SB.from('checkouts').select('odo_out,fuel_out,prep_checklist,damage_panels,return_time,return_place,return_address,return_place_time').eq('booking_id',bkKey(v)).order('created_at',{ascending:false}).limit(1).then(function(r){
+  try{SB.from('checkouts').select('odo_out,fuel_out,prep_checklist,damage_panels,return_time,return_place,return_address,return_place_time').in('booking_id',[bkKey(v),bkAltKey(bkKey(v))].filter(Boolean)).order('created_at',{ascending:false}).limit(1).then(function(r){
     var row=r&&r.data&&r.data[0];if(!ci||ci.fn!==fn)return;
     ci._coLoaded=!!row;if(!row){try{drawCI();}catch(e){}return;}
     if(Array.isArray(row.damage_panels)&&row.damage_panels.length){
@@ -7593,6 +7628,10 @@ async function startCI(fn){
   },function(){});}catch(e){}
 }
 
+// Km at departure for this rental: the booking's own check-out reading (loaded in startCI) comes first.
+// The check-in row used to save the vehicle's last known km (ci.v.odo) instead, so odo_out / km_driven
+// in the checkins table were wrong whenever the two differed (H-05, 14 Oct 2026: 143,240 km instead of 2,871).
+function ciOdoOut(){try{return +(ci.odometerOut||(ci.v&&ci.v.odo)||0)||0;}catch(e){return 0;}}
 function drawCI(){
   try{_drawCI();}finally{try{ciQuickInject();}catch(e){}}
 }
@@ -9086,8 +9125,8 @@ async function completeCI(){
   const damaged=allItems.filter(i=>retSt[i]==='dmg');
   var _ciRes;try{_ciRes=await SB.from('checkins').insert({
     booking_id:ci.fn+'_'+ci.v.pu,fleet_no:ci.fn,client:ci.v.cl,
-    received_by:ci.receivedBy,odo_in:(+ci.odoIn||null),odo_out:(+ci.v.odo||null),
-    km_driven:((+ci.odoIn&&+ci.v.odo)?(+ci.odoIn)-(+ci.v.odo):null),
+    received_by:ci.receivedBy,odo_in:(+ci.odoIn||null),odo_out:(+ciOdoOut()||null),
+    km_driven:((+ci.odoIn&&+ciOdoOut())?(+ci.odoIn)-(+ciOdoOut()):null),
     force_closed_by:ci.forceClosedBy||null,force_closed_at:ci.forceClosedAt||null,force_closed_reason:ci.forceClosedReason||null,fuel_in:ci.fuelIn,fuel_out:ci.v.fuelOut,
     fuel_short:(!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut),new_damage:newDmg.length>0,
     new_damage_panels:newDmg,equipment_status:retSt,
@@ -9120,7 +9159,7 @@ async function completeCI(){
     <div class="chg-veh-bar"><button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}</div>
     <div class="done"><div class="done-ico">${hasIssues?'⚠️':'✅'}</div>
       <div class="done-title">Return Complete</div>
-      <div class="done-sub">${ci.fn} · ${ci.v.cl}<br>${(+ci.odoIn&&+ci.v.odo)?((+ci.odoIn)-(+ci.v.odo)).toLocaleString()+' km · ':''}Received by ${ci.receivedBy||'—'}${ci.forceClosedBy?'<br><b style="color:var(--al)">Closed off by '+_bx(ci.forceClosedBy)+' with checks missing</b>':''}</div>
+      <div class="done-sub">${ci.fn} · ${ci.v.cl}<br>${(+ci.odoIn&&+ciOdoOut())?((+ci.odoIn)-(+ciOdoOut())).toLocaleString()+' km · ':''}Received by ${ci.receivedBy||'—'}${ci.forceClosedBy?'<br><b style="color:var(--al)">Closed off by '+_bx(ci.forceClosedBy)+' with checks missing</b>':''}</div>
     </div>
     ${hasIssues?`<div style="background:var(--rg);border:2px solid var(--re);border-radius:var(--r);padding:14px;margin-bottom:12px">
       <div style="font-size:14px;font-weight:800;color:var(--rl);margin-bottom:8px">${WARN_TRI} Recover from ${ci.v.cl}</div>
@@ -11452,7 +11491,7 @@ function guideCO(){
     var _i=coCsIdx(),_m=coCsLeft(CO_CS[_i].k),_nx=_i<3?CO_CS[_i+1]:null;
     var _go=_nx?function(){coCsGo(_i+1);}:null;
     if(!_m.length)return {done:true,text:'Step '+(_i+1)+' done ✓',next:_nx?'Next: Step '+(_i+2)+' · '+_nx.lbl+' →':'',go:_go};
-    return {text:'Still to do here: '+_m[0]+(_m.length>1?' (+'+(_m.length-1)+' more)':'')};
+    return {text:'Still to do here: '+_m[0]+(_m.length>1?' (+'+(_m.length-1)+' more)':''),el:coCsEl(_m[0])};
   }
   if(st===0){
     b=gAllGood(R);if(b)return t('Check the cleaning, then tap the green ✓ All good. Tap an item only if it is wrong.',b);
@@ -11536,6 +11575,34 @@ function guideCO(){
     if(!canDoStep(n))return {done:true,text:'✅ Your part is finished — the office does the rest.'};
     return {done:true,text:'✅ '+(CO_NAMES[st]||'This step')+' is finished',next:'Next: '+CO_NAMES[n]+' →',go:function(){coGoStep(n);window.scrollTo(0,0);var s=document.getElementById('co-body');if(s)s.scrollTop=0;}};
   }
+  return null;
+}
+// Client steps: the bar named what was open ("Still to do here: Insurance…") but had no "Show me ↓",
+// so staff had to hunt for it on a long page. Find the box for the first open item.
+function coCsEl(item){
+  try{
+    var R=document.getElementById('cos')||document,$=function(id){return document.getElementById(id);},vis=function(e){return e&&e.offsetParent?e:null;};
+    var m=/^(Main driver|Driver (\d+)):/.exec(item||''),i=m?(m[2]?(+m[2]-1):0):0;
+    var par=function(e){return e?e.parentNode:null;};
+    if(/passport photo/.test(item))return vis(par($('fi-drv-'+i+'-passportImg')));
+    if(/licence photo/.test(item))return vis(par($('fi-drv-'+i+'-licFront')));
+    if(/: name$/.test(item))return gFind(R,'input',function(x){return /as on passport/.test(x.placeholder||'')&&!x.value&&x.offsetParent;});
+    if(/^Return time/.test(item))return vis($('ct-rtime-box'));
+    if(/^WiFi/.test(item))return vis($('ct-wifi-box'));
+    if(/^Return place/.test(item))return vis($('ct-raddr'))||vis($('ct-rptime-box'))||vis($('ct-remote'));
+    if(/Insurance/.test(item))return vis($('ct-ins'));
+    if(/Windscreen/.test(item))return vis($('ct-aws'));
+    if(/Deposit method/.test(item))return vis($('ct-dmethod'));
+    if(/Adumo transaction/.test(item))return vis($('ct-dref'));
+    if(/by country|7,500/.test(item))return vis($('ct-xdep'));
+    if(/Cross-border/.test(item))return vis($('ct-xb'));
+    if(/driver fee/i.test(item)){var f=$('ct-edf');return vis(f&&(f.closest('label,div')||f));}
+    if(/not fully paid/.test(item))return vis($('co-pay'));
+    if(/signs the contract/.test(item))return gFind(R,'button',function(x){return gTxt(x,'Preview Full Contract')&&x.offsetParent;});
+    if(/^Explain: /.test(item)){var t=item.slice(9);return gFind(R,'div[onclick]',function(x){return (x.getAttribute('onclick')||'').indexOf('tapHOSection(')>=0&&(x.textContent||'').indexOf(t)>=0&&x.offsetParent;});}
+    if(/signs the handover/.test(item))return vis($('co-c-sig'));
+    if(/^Release/.test(item))return gFind(R,'button',function(x){return (x.getAttribute('onclick')||'')==='coRelease()'&&x.offsetParent;});
+  }catch(e){}
   return null;
 }
 function guideCI(){
