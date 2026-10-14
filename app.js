@@ -3293,14 +3293,23 @@ function coClientFilter(){
       pw.parentNode.insertBefore(ab,pw);
     }
     // Damage pictures were marked in the workshop: folded away here, one tap to show them to the client
+    // Owner 13 Oct: the drawings stay open until "Done" is tapped, then fold away (one tap re-opens them)
     var iw=R.querySelector('.ins-wrap');
-    if(iw&&!co._hoDiag){
+    if(iw){
       var n=(co.dmgd||[]).length;
-      iw.style.display='none';
-      var b=document.createElement('button');b.type='button';b.className='btn s';b.style.cssText='width:100%;margin:6px 0 10px;font-size:15px;';
-      b.textContent='🗺 Show the damage pictures to the client'+(n?' ('+n+' marked)':' (no damage marked)');
-      b.onclick=function(){co._hoDiag=true;iw.style.display='';b.remove();try{VIEWS.forEach(function(v){buildIG(v);});renderIS();}catch(e){}};
-      iw.parentNode.insertBefore(b,iw);
+      if(!co.hoDmgDone||co._hoDiag){
+        iw.style.display='';
+        var d=document.createElement('button');d.type='button';d.className='btn g';d.style.cssText='width:100%;margin:8px 0 10px;font-size:16px;';
+        d.textContent='✓ Done — damage checked with the client';
+        d.onclick=function(){co.hoDmgDone=true;co._hoDiag=false;saveCOProgress();drawCO();};
+        iw.parentNode.insertBefore(d,iw.nextSibling);
+      }else{
+        iw.style.display='none';
+        var b=document.createElement('button');b.type='button';b.className='btn s';b.style.cssText='width:100%;margin:6px 0 10px;font-size:15px;';
+        b.textContent='✓ Damage checked'+(n?' ('+n+' marked)':' (no damage marked)')+' — tap to open the pictures again';
+        b.onclick=function(){co._hoDiag=true;iw.style.display='';b.remove();try{VIEWS.forEach(function(v){buildIG(v);});renderIS();}catch(e){}};
+        iw.parentNode.insertBefore(b,iw);
+      }
     }
   }
 }
