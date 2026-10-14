@@ -212,7 +212,7 @@ const STAFF_ROSTER=[
   {name:'Joe',      role:'prep'},   // 'Joe' again from 11 Oct 2026 (was 'Joe' 3–11 Oct 2026 (same PIN)
   {name:'Peter',    role:'admin'},
   // Christina removed 11 Oct 2026 (owner: "can be removed entirely"); her PIN is switched off in staff_pins
-  {name:'Abia',     role:'prep'},
+  // Abia removed 14 Oct 2026 (owner); her PIN is switched off in staff_pins
   {name:'Beverly',  role:'prep'},   // added 12 Oct 2026: contract role (client steps 1–3 + Documentation)
 ];
 // ── WHO MAY DO WHAT: the one place to change it ──────────────────
@@ -223,7 +223,7 @@ const STAFF_ROSTER=[
 //  contract = the contract step (5 = client steps 1–3: passport & details, payment & cover, contract)
 //             and the Documentation page only (Beverly, since 12 Oct 2026; Christina 3–11 Oct 2026)
 // Simon removed from the tablet 3 Oct 2026 (owner's request).
-const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Abia:'staff',Beverly:'contract','Joe':'manager',Peter:'peter'};
+const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Beverly:'contract','Joe':'manager',Peter:'peter'};
 const NO_HANDOVER=['Beverly'];
 function roleOf(n){return ROLE[n]||'staff';}
 function namesWithRole(){var r=[].slice.call(arguments);return STAFF_ROSTER.map(function(x){return x.name;}).filter(function(n){return r.indexOf(roleOf(n))>=0;});}
