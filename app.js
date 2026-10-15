@@ -5128,9 +5128,9 @@ async function captureDriverDoc(event,driverIdx,field){
 
 
 // ── STEP 2: Contract ─────────────────────────────────────────────
-// Contract details: insurance dropdown + tick boxes (fuel & admin, cross-border, windscreen, camping cover)
+// Contract details: insurance dropdown + tick boxes (cross-border, windscreen & tyre). Prices = staff price list from 13 Oct 2026.
 var CT_INS={'1':{t:'Option 1 — Basic Cover',rate:230,dep:45000},'2':{t:'Option 2 — Extended Cover',rate:320,dep:30000},'3':{t:'Option 3 — Premium Cover (zero excess)',rate:490,dep:0}};
-// Add-on prices: follow the office Price list in PilotDesktop (app_settings.price_list), these are the 11 Oct 2026 values
+// Add-on prices: follow the office Price list in PilotDesktop (app_settings.price_list); defaults = staff price list from 13 Oct 2026
 var PL_TYRE=180;
 // Classic Option (owner 14 Oct 2026): the 2.4 Hilux with soft-shell tents has its own, lower insurance
 // prices (Desktop APP price list: insB). Premium = 2.8 Hilux with hardshell tents (ins). Same deposits.
@@ -5142,9 +5142,8 @@ function ctMoney(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFra
 function ctDays(){var _pu=coPickupDate();return _pu&&co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(_pu))/86400000)):0;}
 function ctSet(k,v){(co.contract=co.contract||{})[k]=v;if(k==='country_deposit')co.contract.country_deposit_auto=false;if(k==='insurance_option'){var o=CT_INS[v];co.contract.deposit_amount=o?o.dep:null;}drawCO();try{ctAskRefresh();}catch(e){}}
 // ── EXTRA DRIVER FEE ───────────────────────────────────────────────────────
-// The first additional driver (the second driver on the contract) is FREE; every further
-// additional driver is N$220 once-off per rental, taken at collection (owner 2026-10-09; was
-// N$280 for every additional driver). Counted from the drivers actually captured, so nobody
+// The renter + 1 additional driver are FREE; from the 3rd driver an admin fee per driver, once per rental,
+// taken at collection (amount from the Price list). Counted from the drivers actually captured, so nobody
 // has to remember to add it up — and it is flagged red until the money has been taken.
 var EXTRA_DRIVER_FEE=350, EXTRA_DRIVER_FREE=1; // owner 2026-10-09 11:10: 2 drivers free (renter + 1), 3rd driver onwards N$350 admin fee each
 function extraDriverCount(){
