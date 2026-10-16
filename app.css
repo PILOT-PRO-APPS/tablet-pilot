@@ -378,7 +378,7 @@ input[type=file]{display:none;}
 .bdg.a{background:var(--ag);color:var(--al);border:1px solid var(--am);}
 .bdg.b{background:var(--bs);color:var(--be);border:1px solid var(--bl);}
 .bdg.x{background:var(--g2);color:var(--g5);border:1px solid var(--g3);}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--g1);border:1px solid var(--g3);border-radius:24px;padding:10px 20px;font-size:13px;font-weight:700;color:var(--tx);z-index:999;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--g1);border:1px solid var(--g3);border-radius:24px;padding:10px 20px;font-size:13px;font-weight:700;color:var(--tx);z-index:2147483000;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;}
 .toast.show{opacity:1;}
 .toast.ok{border-color:var(--gb);color:var(--se);}
 .toast.err{border-color:var(--re);color:var(--rl);}

@@ -213,7 +213,7 @@ const STAFF_ROSTER=[
   {name:'Peter',    role:'admin'},
   // Christina removed 11 Oct 2026 (owner: "can be removed entirely"); her PIN is switched off in staff_pins
   // Abia removed 14 Oct 2026 (owner); her PIN is switched off in staff_pins
-  {name:'Beverly',  role:'prep'},   // added 12 Oct 2026: contract role (client steps 1–3 + Documentation)
+  {name:'Beverly',  role:'prep'},   // added 12 Oct 2026; full check-out + check-in (manager) since 16 Oct 2026
 ];
 // ── WHO MAY DO WHAT: the one place to change it ──────────────────
 //  staff   = check-out steps 1–4 (prep, mechanical, camping, inspection) — no contracts, check-ins, office pages
@@ -223,8 +223,9 @@ const STAFF_ROSTER=[
 //  contract = the contract step (5 = client steps 1–3: passport & details, payment & cover, contract)
 //             and the Documentation page only (Beverly, since 12 Oct 2026; Christina 3–11 Oct 2026)
 // Simon removed from the tablet 3 Oct 2026 (owner's request).
-const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Beverly:'contract','Joe':'manager',Peter:'peter'};
-const NO_HANDOVER=['Beverly'];
+// Beverly: manager from 16 Oct 2026 (owner: "beverly can complete full check in and check out"); was 'contract' 12–16 Oct
+const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Beverly:'manager','Joe':'manager',Peter:'peter'};
+const NO_HANDOVER=[];
 function roleOf(n){return ROLE[n]||'staff';}
 function namesWithRole(){var r=[].slice.call(arguments);return STAFF_ROSTER.map(function(x){return x.name;}).filter(function(n){return r.indexOf(roleOf(n))>=0;});}
 // Check a staff PIN on the server. Returns {ok, name, role} or {ok:false, reason, wait_minutes}
@@ -3290,7 +3291,7 @@ function coCsLeft(k){
 }
 function coCsGo(i){
   i=Math.max(0,Math.min(3,i));
-  if(!canDoStep(i<=2?5:6)){toast('The handover is done by Joe or Peter — your part is steps 1–3','err');return;}
+  if(!canDoStep(i<=2?5:6)){toast('The handover is done by Joe, Beverly or Peter — your part is steps 1–3','err');return;}
   window._coLeftSkip=true;
   try{
     if(i<=2){co._cs=i;if(coStep!==5){coStep=5;}drawCO();}
@@ -5497,7 +5498,16 @@ function coStep2(){
     <div class="step-sub">Fill in details, client reads contract, then signs</div></div>
   </div>
   ${coLeftInline(CO_BEFORE_CONTRACT,'🔒 Contract locked — staff checks still open')}
-  <button class="btn ${coLeftCount(CO_BEFORE_CONTRACT)?'s':'g'}" onclick="previewAndSignContract()">${coLeftCount(CO_BEFORE_CONTRACT)?'🔒 Contract locked — '+coLeftCount(CO_BEFORE_CONTRACT)+' checks open':'📋 Preview Full Contract &amp; Sign →'}</button>`;
+  <div class="ct-sign-how" style="border:3px solid #1d6b3d;background:#f0fdf4;border-radius:14px;padding:14px 16px;margin-bottom:12px;">
+    <div style="font-size:18px;font-weight:900;color:#14532d;margin-bottom:8px;">✍️ Where the client signs</div>
+    <div style="font-size:15px;font-weight:700;color:#1f2937;line-height:1.7;">
+      1. Tap <b>📋 Preview Full Contract &amp; Sign</b> below and hand the tablet to the client.<br>
+      2. The client reads the contract. The green <b>Go to signature ↓</b> button (top right) jumps to the end.<br>
+      3. At the end: type their <b>full name</b>, write their <b>initials</b> in the small green box and <b>sign</b> in the big green box.<br>
+      4. The client taps <b>✍️ I have read and accept — Sign Rental Contract</b>.
+    </div>
+  </div>
+  <button class="btn ${coLeftCount(CO_BEFORE_CONTRACT)?'s':'g'}" style="font-size:18px;padding:18px;" onclick="previewAndSignContract()">${coLeftCount(CO_BEFORE_CONTRACT)?'🔒 Contract locked — '+coLeftCount(CO_BEFORE_CONTRACT)+' checks open':'📋 Preview Full Contract &amp; Sign →'}</button>`;
 }
 
 function calcDays(){
@@ -5651,7 +5661,10 @@ function _previewAndSignContract(){
           <div style="font-size:14px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.4px;">✍️ Your initials <span style="font-weight:600;text-transform:none;color:#777;">— placed in every "Initial here" box</span></div>
           <button onclick="window._ctIniClr&&window._ctIniClr()" style="background:#f5f5f5;border:1px solid #ccc;border-radius:6px;padding:5px 12px;font-size:14px;font-weight:700;color:#555;cursor:pointer;">Clear</button>
         </div>
-        <canvas id="ct-ini-canvas" style="display:block;width:260px;max-width:100%;height:120px;margin:6px 14px;border:2px dashed #bbb;border-radius:8px;cursor:crosshair;touch-action:none;background:#fff;"></canvas>
+        <div style="position:relative;width:260px;max-width:calc(100% - 28px);margin:8px 14px 10px;border:3px dashed #1d6b3d;border-radius:10px;background:#fff;overflow:hidden;">
+          <div id="ct-ini-hint" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;color:#9cc3ab;font-size:18px;font-weight:900;">✍️ Initials here</div>
+          <canvas id="ct-ini-canvas" style="position:relative;display:block;width:100%;height:120px;cursor:crosshair;touch-action:none;background:transparent;"></canvas>
+        </div>
       </div>
 
       <!-- Signature canvas -->
@@ -5660,7 +5673,11 @@ function _previewAndSignContract(){
           <div style="font-size:14px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:.4px;">✍️ Sign below</div>
           <button onclick="clrContractSig()" style="background:#f5f5f5;border:1px solid #ccc;border-radius:6px;padding:5px 12px;font-size:14px;font-weight:700;color:#555;cursor:pointer;">Clear</button>
         </div>
-        <canvas id="ct-sig-canvas" style="display:block;width:100%;height:260px;cursor:crosshair;touch-action:none;background:#fff;"></canvas>
+        <div style="position:relative;margin:10px 14px 12px;border:3px dashed #1d6b3d;border-radius:12px;background:#fff;overflow:hidden;">
+          <div id="ct-sig-hint" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;color:#9cc3ab;font-size:22px;font-weight:900;text-align:center;">✍️ Client signs here<div style="font-size:14px;font-weight:700;margin-top:4px;">with a finger, inside this box</div></div>
+          <div style="position:absolute;left:24px;right:24px;bottom:56px;border-bottom:2px solid #cfe3d6;pointer-events:none;"></div>
+          <canvas id="ct-sig-canvas" style="position:relative;display:block;width:100%;height:260px;cursor:crosshair;touch-action:none;background:transparent;"></canvas>
+        </div>
       </div>
 
       <!-- Sign button -->
@@ -5678,6 +5695,11 @@ function _previewAndSignContract(){
   // Top bar shortcut to the signature
   (function(){var top=modal.firstElementChild;if(!top)return;var b=document.createElement('button');b.textContent='Go to signature ↓';b.setAttribute('style','background:#3ddc84;border:none;border-radius:8px;color:#052010;padding:8px 12px;font-weight:800;font-size:14px;margin-left:auto;margin-right:8px;cursor:pointer;');b.onclick=function(){var bar=document.getElementById('ct-sig-bar');if(bar)bar.scrollIntoView({behavior:'smooth',block:'start'});};var last=top.lastElementChild;top.insertBefore(b,last);})();
 
+  // "Sign here" / "Initials here" hints in the boxes, gone as soon as there is ink (16 Oct 2026)
+  (function(){var iv=setInterval(function(){var m=document.getElementById('contract-modal');if(!m){clearInterval(iv);return;}
+    var a=document.getElementById('ct-sig-hint'),b=document.getElementById('ct-ini-hint');
+    if(a)a.style.display=(co._sigStrokes&&co._sigStrokes.length)?'none':'flex';
+    if(b)b.style.display=(co._iniStrokes&&co._iniStrokes.length)?'none':'flex';},250);})();
   // Init initials pad (strokes kept on the check-out, like the signature)
   try{var _ip=ctPad(document.getElementById('ct-ini-canvas'),(co._iniStrokes=Array.isArray(co._iniStrokes)?co._iniStrokes:[]));
     window._ctHasIni=_ip.has;window._ctGetIni=_ip.get;window._ctIniClr=_ip.clr;}catch(e){console.error('initials pad',e);}
@@ -5911,14 +5933,14 @@ async function submitContractSig(){
   }
   if(window._ctHasIni&&!window._ctHasIni()){
     const ic=document.getElementById('ct-ini-canvas');
-    if(ic){try{ic.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}ic.style.outline='3px solid #e74c3c';setTimeout(()=>ic.style.outline='',1500);}
+    if(ic){try{ic.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}var _w=ic.parentNode;_w.style.outline='4px solid #e74c3c';setTimeout(()=>_w.style.outline='',1500);}
     toast('Please write your initials in the small box first','err');
     return;
   }
   if(!window._ctHasSig||!window._ctHasSig()){
     const cv=document.getElementById('ct-sig-canvas');
-    if(cv){try{cv.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}cv.style.outline='3px solid #e74c3c';setTimeout(()=>cv.style.outline='',1200);}
-    toast('Please sign in the white box first','err');
+    if(cv){try{cv.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}var _w=cv.parentNode;_w.style.outline='4px solid #e74c3c';setTimeout(()=>_w.style.outline='',1500);}
+    toast('Please sign in the green box first','err');
     const btn=document.getElementById('ct-sign-btn');
     if(btn){const orig=btn.textContent;btn.textContent='⚠ Please sign above first';btn.style.background='#e74c3c';btn.style.color='#fff';setTimeout(()=>{btn.textContent=orig;btn.style.background='#3ddc84';btn.style.color='#052010';},2000);}
     return;
@@ -5953,8 +5975,9 @@ async function signContract(sigData){
   const cln=(co.clientName||'unknown').replace(/[^a-zA-Z0-9]/g,'_');
   const sigPath=`bookings/${bkKey(co.v)}/contract/sig_${co.fn}_${Date.now()}.png`;
   try{
-    await SB.storage.from('client-docs').upload(sigPath,sigBlob,{contentType:'image/png',upsert:true});
-    const _su=await SB.storage.from('client-docs').createSignedUrl(sigPath,60*60*24*365);
+    // Weak WiFi used to leave "Saving signed contract..." on screen for ever (16 Oct 2026): every call has a time limit now
+    await withTimeout(SB.storage.from('client-docs').upload(sigPath,sigBlob,{contentType:'image/png',upsert:true}),30000);
+    const _su=await withTimeout(SB.storage.from('client-docs').createSignedUrl(sigPath,60*60*24*365),15000);
     if(_su&&_su.data&&_su.data.signedUrl)co.contract.client_sig_url=_su.data.signedUrl;
   }catch(e){}
   // Save to DB
@@ -5988,7 +6011,8 @@ async function saveContractRow(row,html){
   for(k in row){if(Object.prototype.hasOwnProperty.call(row,k))payload[k]=row[k];}
   var dropped=[],tries=0;
   while(tries<12){
-    var res=await SB.from('rental_contracts').insert(payload);
+    var res=await withTimeout(SB.from('rental_contracts').insert(payload),45000);
+    if(res===null)res={error:{message:'No answer from the server after 45 s (weak internet?)'}};
     if(!res||!res.error)return {ok:true,dropped:dropped};
     var msg=String((res.error&&res.error.message)||'');
     var m=msg.match(/'([A-Za-z0-9_]+)' column/)||msg.match(/column "?([A-Za-z0-9_]+)"?/);
@@ -5999,8 +6023,8 @@ async function saveContractRow(row,html){
     var kept=false;
     try{
       var p='bookings/'+bkKey(co.v)+'/contract/UNSAVED_contract_'+Date.now()+'.html';
-      var up=await SB.storage.from('client-docs').upload(p,new Blob([html||''],{type:'text/html'}),{contentType:'text/html;charset=utf-8',upsert:true});
-      kept=!(up&&up.error);
+      var up=await withTimeout(SB.storage.from('client-docs').upload(p,new Blob([html||''],{type:'text/html'}),{contentType:'text/html;charset=utf-8',upsert:true}),30000);
+      kept=!!(up&&!up.error);
     }catch(e){}
     try{localStorage.setItem('gorent_unsaved_contract_'+co.fn+'_'+Date.now(),html||'');}catch(e){}
     return {ok:false,error:res.error,dropped:dropped,kept:kept};
@@ -6573,7 +6597,7 @@ function coReleaseBox(){
   var ready=handoverClosed();
   var me=(APP_USER&&APP_USER.name)||'';
   if(!ready)return '<div style="text-align:center;font-size:13px;color:var(--g5);margin:6px 0 10px;">When the client has signed, <b>Release vehicle</b> appears here.</div>';
-  if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask Joe or Peter</div>';
+  if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask Joe, Beverly or Peter</div>';
   return '<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
     +'<button class="btn g" style="font-size:18px;padding:18px;" onclick="coRelease()">✅ Release vehicle</button>'
     +'<div style="font-size:12px;color:var(--g5);margin-top:6px;text-align:center;">Released by '+_bx(me)+' · anything still open is shown before it goes</div></div>';
@@ -6927,7 +6951,7 @@ function coFixLine(i){
   else if(/handover|explained/i.test(x)){cs=3;}
   else if(/equipment not confirmed/i.test(x)){step=2;}
   else if(/odo|disc date|vehicle documents|cross-border papers/i.test(x)){step=4;}
-  if(cs!==null&&!canDoStep(cs===3?6:5)){toast('That part is done by the office (Joe or Peter)','err');return;}
+  if(cs!==null&&!canDoStep(cs===3?6:5)){toast('That part is done by the office (Joe, Beverly or Peter)','err');return;}
   if(cs!==null){coCsGo(cs);}else if(step!==null){window._coLeftSkip=true;try{coGoStep(step);}finally{window._coLeftSkip=false;}}
   setTimeout(function(){
     if(sel){var el=document.querySelector(sel);if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}}
