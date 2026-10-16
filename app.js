@@ -5247,9 +5247,8 @@ function ctXdepSync(c){c=c||(co.contract=co.contract||{});if(c!==co.contract)ret
   if(ex===true&&!c.country_deposit){c.country_deposit='exempt';c.country_deposit_auto=true;}
   else if(ex!==true&&c.country_deposit==='exempt'&&c.country_deposit_auto){delete c.country_deposit;delete c.country_deposit_auto;}}
 // show the question? (also keeps it visible once staff answered it by hand, so it can be changed)
-function ctXdepAsk(c){c=c||co.contract||{};try{ctXdepSync(c);}catch(e){}
-  if(c.country_deposit==='received'||(c.country_deposit==='exempt'&&!c.country_deposit_auto))return true;
-  return ctCountryExempt(ctPassNat())===false;}
+// Owner 16 Oct 2026: the N$7,500 country deposit is discontinued — never asked any more (old contracts keep their value).
+function ctXdepAsk(c){return false;}
 function ctXdepOpen(c){c=c||co.contract||{};return ctXdepAsk(c)&&c.country_deposit!=='received'&&c.country_deposit!=='exempt';}
 function ctXdepButtons(c){
   var v=c.country_deposit,nat=ctPassNat(),ex=ctCountryExempt(nat);
@@ -5352,7 +5351,7 @@ function ctDetailsForm(){
     +remoteBox
     +insSel
     +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;">Extra cover — client must take or decline each</div>'
-    +'<div id="ct-aws">'+choice('addon_windscreen','🛞 Windscreen &amp; Tyre cover','N$'+plN(PL_TYRE)+' per day · 1 windscreen, '+(days>14?'2 tyres':'1 tyre')+' · rims excluded','N$'+plN(PL_TYRE)+'/day','N$'+plN(PL_TYRE)+' × '+days+' = '+ctMoney(wsT))+'</div>'
+    +'<div id="ct-aws">'+choice('addon_windscreen','🛞 Windscreen &amp; Tyre cover','N$'+plN(PL_TYRE)+' per day · 1 windscreen, '+(days>21?'2 tyres':'1 tyre')+' · rims excluded','N$'+plN(PL_TYRE)+'/day','N$'+plN(PL_TYRE)+' × '+days+' = '+ctMoney(wsT))+'</div>'
     +(ws?'<div style="display:flex;justify-content:space-between;padding:8px 14px;margin:-2px 0 8px;border-top:1px dashed var(--g3);font-size:15px;font-weight:900;"><span style="color:var(--g5);">Cover total ('+days+' days)</span><span style="color:var(--se);">'+ctMoney(wsT)+'</span></div>':'')
     ;
   return h;
@@ -10840,8 +10839,8 @@ function buildContractHTML(c,sigUrl){
   const fDT=d=>d?new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
   const days=c.total_days||0;
 
-  // Tyre cover: 1 tyre ≤14 days, 2 tyres >14 days
-  const tyreCover = days>14 ? '2 tyres per rental' : '1 tyre per rental';
+  // Tyre cover: 1 tyre up to 21 days, 2 tyres for longer rentals (owner 16 Oct 2026; was 14)
+  const tyreCover = days>21 ? '2 tyres per rental' : '1 tyre per rental';
 
   // Blank field box
   const box=(label,val,w='100%',h='32px')=>`
@@ -10902,7 +10901,7 @@ function buildContractHTML(c,sigUrl){
     The individual who signs this Agreement ("you" / "the Renter") is solely responsible for:
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
       <div>• Paying all rental fees, insurance waiver fees, penalties, and fines.<br>• Ensuring full compliance with this Agreement, including speed limits and restricted-area rules.<br>• Supervising all additional drivers and passengers — their actions are your liability.</div>
-      <div>• Additional charges apply for drivers under 25 or over 65 years old.<br>• Minimum driver age: 23 years. Licence held for a minimum of 1 year.<br>• Foreign renters: valid International Driving Permit (IDP) required — no copies accepted.</div>
+      <div>• No extra charge for younger drivers; we do not rent to drivers under 23.<br>• Minimum driver age: 23 years. Licence held for a minimum of 1 year.<br>• Foreign renters: valid International Driving Permit (IDP) required — no copies accepted.</div>
     </div>
   </div>
 
@@ -10996,12 +10995,6 @@ function buildContractHTML(c,sigUrl){
         ${chkBox(c.insurance_option==='3')}
         <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$${plN(ctInsRate('3'))}/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
       </div>
-      <!-- Country deposit (2.1) -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:${c.country_deposit==='received'?'#f0f9f4;border-color:#1e8449':'#fff'};margin-bottom:5px;">
-        ${chkBox(c.country_deposit==='received')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Additional Security Deposit by Country (N$7,500.00) received</strong><br>
-        <span style="font-size:9.5px;color:#555;">${c.country_deposit==='exempt'?'Not applicable — citizen or permanent resident of a country listed in Section 2.1'+(c.client_nationality?' ('+c.client_nationality+')':'')+'.':'See Section 2.1. Fully refunded once the vehicle is returned undamaged and all return conditions are met.'}</span></div>
-      </div>
     </div>
     <div>
       <!-- Windscreen add-on -->
@@ -11024,13 +11017,6 @@ function buildContractHTML(c,sigUrl){
     Signing confirms you have read and understood. Botswana and other countries outside Namibia carry their own additional deposit and rules — see Section 6.2.
   </div>
 
-  <!-- 2.1 COUNTRY DEPOSIT -->
-  <div style="font-size:14px;font-weight:700;margin-bottom:4px;">2.1 ADDITIONAL SECURITY DEPOSIT BY COUNTRY</div>
-  <div style="font-size:13px;color:#333;margin-bottom:14px;line-height:1.6;">
-    As part of our insurance and fraud-prevention requirements, an additional security deposit may apply depending on the Renter's country of citizenship or permanent residency. This is a general policy and is not a reflection on any individual guest. Proof of citizenship or permanent residency (e.g. passport) is required at vehicle collection, and any additional deposit is confirmed at the time of booking.<br>
-    <strong>No additional deposit:</strong> citizens or permanent residents of the United States of America, Canada, Switzerland, European Union member states &amp; EEA countries, the United Kingdom, Australia, New Zealand, Japan, Singapore and the Russian Federation.<br>
-    <strong>All other countries — additional N$7,500.00 security deposit</strong>. Fully refunded once the vehicle is returned undamaged and all return conditions are met.
-  </div>
   ${ini()}
 
   <!-- 3. EXCLUSIONS SUMMARY -->
@@ -11045,7 +11031,7 @@ function buildContractHTML(c,sigUrl){
       • <strong style="color:#c0392b;">Rims — excluded from all cover.</strong> Renter pays full replacement value at OEM product cost for any rim damage<br>
       • Steering damage — potholes, rocks, kerbs, or off-road driving<br>
       • <strong style="color:#c0392b;">Missing rims</strong> or missing tyres — full OEM replacement value<br>
-      • Tyres — beyond the add-on limit (1 tyre for rentals up to 14 days; 2 tyres for rentals longer than 14 days)</div>
+      • Tyres — beyond the add-on limit (1 tyre for rentals up to 21 days; 2 tyres for rentals longer than 21 days)</div>
       <div>• Sandblast / sandstorm damage to paint or glass<br>
       • Single-vehicle accidents (rollovers, collisions with animals or objects)<br>
       • Stationary objects — walls, poles, gates, trees, rocks<br>
@@ -11104,7 +11090,7 @@ function buildContractHTML(c,sigUrl){
       • Side windows, rear windows, canopy windows, side mirrors — never covered under any insurance option<br>
       • <strong style="color:#c0392b;">Rim damage — rims are excluded from cover;</strong> bent, cracked, or kerbed rims are the Renter's full cost at OEM product replacement value<br>
       • <strong style="color:#c0392b;">Missing rims</strong> or missing tyres — full OEM replacement value per item</div>
-      <div>• Tyre damage beyond add-on limits — see Section 2 (1 tyre for rentals up to 14 days, 2 tyres for rentals longer than 14 days); any tyre beyond that limit is the Renter's full cost<br>
+      <div>• Tyre damage beyond add-on limits — see Section 2 (1 tyre for rentals up to 21 days, 2 tyres for rentals longer than 21 days); any tyre beyond that limit is the Renter's full cost<br>
       • Water crossing — any crossing deeper than axle depth, and in any case never deeper than 700mm (the Toyota Hilux manufacturer-specified maximum wading depth). Depth must be checked on foot before entering; damage from crossings beyond this depth is never covered<br>
       • Sandstorm / sandblast damage to paint or glass<br>
       • Personal belongings — theft or loss<br>
@@ -11179,19 +11165,19 @@ function buildContractHTML(c,sigUrl){
   <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">6. NO-GO AREAS &amp; TRAVEL OUTSIDE NAMIBIA</div>
   <div style="font-size:13px;font-weight:700;margin-bottom:4px;">6.1 NAMIBIA — PROHIBITED NO-GO AREAS</div>
   <div style="background:#fdf5f5;border:2px solid #e74c3c;border-radius:4px;padding:9px 12px;margin-bottom:6px;font-size:13px;line-height:1.6;">
-    <strong>THESE AREAS ARE ABSOLUTELY PROHIBITED. Entry into any of the highlighted No-Go areas listed in Section 6.1 — whether accidental or intentional — constitutes a serious breach and results in: a fine of N$30,000; immediate and permanent cancellation of ALL insurance cover; the Renter becomes personally liable for all damage, in addition to the fine. GR treats GPS data as primary evidence of entry into a No-Go area. No exceptions.</strong><br>
-    <span style="font-size:12px;color:#555;">This N$30,000 fine, and the immediate cancellation of insurance and personal liability that come with it, apply ONLY to entry into the No-Go areas listed below. They do not apply to other breaches of this Agreement — those are penalised under their own specific clauses elsewhere in this Agreement.</span>
+    <strong>THESE AREAS ARE ABSOLUTELY PROHIBITED. Entry into any of the highlighted No-Go areas listed in Section 6.1 — whether accidental or intentional — constitutes a serious breach and results in: a penalty of N$30,000 payable; immediate and permanent cancellation of ALL insurance cover; the Renter becomes personally liable for all damage, in addition to the penalty. GR treats GPS data as primary evidence of entry into a No-Go area. No exceptions.</strong><br>
+    <span style="font-size:12px;color:#555;">This N$30,000 penalty, and the immediate cancellation of insurance and personal liability that come with it, apply ONLY to entry into the No-Go areas listed below. They do not apply to other breaches of this Agreement — those are penalised under their own specific clauses elsewhere in this Agreement.</span>
   </div>
   <div style="font-size:13px;line-height:1.6;margin-bottom:10px;color:#c0392b;font-weight:700;">
-    • Van Zyl's Pass<br>• Khaudum National Park<br>• Sandwich Harbour<br>• Sperrgebiet (Diamond Area 1 &amp; 2)<br>• Skeleton Coast north of Möwe Bay<br>• Remote Damaraland backcountry (unmarked tracks)<br>• Diamond Coast / Bogenfels area<br>• Off-piste dunes near Walvis Bay and Swakopmund<br>• Any unmarked road not gazetted / maintained by the Namibia Roads Authority (NRA)
+    • Van Zyl's Pass<br>• Khaudum National Park<br>• Sandwich Harbour<br>• Sperrgebiet (Diamond Area 1 &amp; 2)<br>• Skeleton Coast north of Möwe Bay<br>• Remote Damaraland backcountry (unmarked tracks)<br>• Diamond Coast / Bogenfels area<br>• Off-piste dunes near Walvis Bay and Swakopmund<br>• Driving on any beach<br>• Any unmarked road not gazetted / maintained by the Namibia Roads Authority (NRA)
   </div>
   <div style="border:2px solid #2c5aa0;border-radius:4px;padding:9px 12px;margin-bottom:10px;font-size:13px;line-height:1.6;">
     <div style="font-weight:800;color:#2c5aa0;margin-bottom:4px;">6.2 BOTSWANA &amp; OTHER COUNTRIES — A SEPARATE SET OF RULES</div>
     Travel into Botswana or any other country outside Namibia is treated entirely separately from Namibian travel and carries its own caution areas, its own deposit, and its own breakdown rule, all set out below. These rules apply in addition to — not instead of — the rest of this Agreement.<br>
     <strong>6.2.1 Botswana — Travel With Caution (Permitted)</strong><br>
     <span style="color:#b9770e;font-weight:700;">• Central Kalahari Game Reserve (CKGR)<br>• Moremi Game Reserve / Okavango Delta<br>• Savuti<br>• Makgadikgadi Pans<br>• Nxai Pans<br>• Cut lines and hunting areas with no maintained roads</span><br>
-    <span style="font-size:12px;"><strong>These Botswana areas are permitted but demanding:</strong> deep sand, heavy mud, water crossings and fragile salt pans, with little or no cellular coverage. The N$30,000 No-Go fine in 6.1 does NOT apply here; instead the N$30,000 additional deposit (6.2.2) applies and all breakdown, towing and recovery costs are the Renter's responsibility (6.2.3).<br>
-    <strong>Other countries:</strong> South Africa — written itinerary submitted and approved before departure. Zimbabwe &amp; Zambia — Victoria Falls area only, with prior written approval. Angola, or any other country not explicitly authorised in writing — PROHIBITED.</span><br>
+    <span style="font-size:12px;"><strong>These Botswana areas are permitted but demanding:</strong> deep sand, heavy mud, water crossings and fragile salt pans, with little or no cellular coverage. The N$30,000 No-Go penalty in 6.1 does NOT apply here; instead the N$30,000 additional deposit (6.2.2) applies and all breakdown, towing and recovery costs are the Renter's responsibility (6.2.3).<br>
+    <strong>Other countries:</strong> South Africa — written itinerary submitted and approved before departure. Zimbabwe — Victoria Falls area only, with prior written approval, and only via Botswana: cross at the Kazungula border to Victoria Falls and return the same way. Zambia, Angola, or any other country not explicitly authorised in writing — PROHIBITED.</span><br>
     <strong>6.2.2 Botswana &amp; Other Countries — Additional Deposit</strong><br>
     <strong>A N$30,000 additional cross-border damage deposit is required</strong> before departure for any travel into Botswana or any other country outside Namibia. This deposit is in addition to the security deposit selected under Section 2 and any other deposits stated in this Agreement, and is refunded 7 days after return if no damage.<br>
     <strong>6.2.3 Botswana &amp; Other Countries — Breakdowns Are the Renter's Responsibility</strong><br>
@@ -11201,8 +11187,8 @@ function buildContractHTML(c,sigUrl){
     • Go Rent cannot supply a replacement vehicle in these areas.<br>
     • Go Rent is not liable for any loss, cost, delay, or breakdown time lost as a result of a breakdown occurring in Botswana or any other country outside Namibia.<br>
     See also "Vehicle Recovery Outside Namibia" below.<br>
-    <strong>6.2.4 Botswana, Zambia &amp; Zimbabwe — Third-Party Cover / Road Permit</strong><br>
-    Namibian insurance cover does <strong>not</strong> automatically extend across these borders. It is the Renter's own responsibility to purchase any third-party insurance and/or road permit required by the country being entered (for example, the cross-border charge payable at the Botswana, Zambia, or Zimbabwe border post) before crossing. This is separate from, and in addition to, the N$30,000 additional deposit in 6.2.2 and the GR insurance option selected under Section 2. Go Rent takes no responsibility for a Renter turned back, fined, or delayed at a border post for not holding the required local cover or permit.<br>
+    <strong>6.2.4 Botswana &amp; Zimbabwe — Third-Party Cover / Road Permit</strong><br>
+    Namibian insurance cover does <strong>not</strong> automatically extend across these borders. It is the Renter's own responsibility to purchase any third-party insurance and/or road permit required by the country being entered (for example, the cross-border charge payable at the Botswana or Zimbabwe border post) before crossing. This is separate from, and in addition to, the N$30,000 additional deposit in 6.2.2 and the GR insurance option selected under Section 2. Go Rent takes no responsibility for a Renter turned back, fined, or delayed at a border post for not holding the required local cover or permit.<br>
     <span style="font-size:12px;color:#555;">Road conditions note (all areas above): These areas involve deep sand, heavy mud (wet season), corrugated gravel, severe potholes, and water crossings. High-clearance 4x4 and an experienced driver are essential. A guided convoy is strongly recommended.</span><br>
     <strong>VEHICLE RECOVERY OUTSIDE NAMIBIA</strong><br>
     If the vehicle becomes undrivable outside Namibia, the Renter bears ALL costs to return it to Namibia: all towing and recovery fees, cross-border transport, import/export documentation, customs duties, and third-party charges. Go Rent accepts no liability for any cross-border recovery. GR roadside assistance is limited strictly to within Namibia.
@@ -11273,7 +11259,6 @@ function buildContractHTML(c,sigUrl){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       ${[
         ['Rental period', days?days+' days':'—'],
-        ['Country security deposit (2.1)', c.country_deposit==='received'?'N$ 7,500.00 received':(c.country_deposit==='exempt'?'Not applicable':'—')],
         ['Cross-border deposit', c.cross_border_deposit?'N$ 30,000.00 received':(c.cross_border?'Not received':'N/A')],
         ['Windscreen & Tyre add-on', c.addon_windscreen?'Selected':'Not selected'],
         ['Deposit method', (c.deposit_method||'—')+(c.deposit_ref?' · ref '+c.deposit_ref:'')],
