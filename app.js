@@ -7596,9 +7596,10 @@ function handoverWAText(){
   L.push('Return: '+(waDate(rdate)||'-')+(rtime?' at '+rtime:'')+' - '+place);
   if(hq)L.push('Office hours Mon-Fri 07:30-16:00. Weekend or holiday returns must be arranged with us in advance.');
   L.push('Fuel: '+(co.fuelOut||'Full')+' at departure. DIESEL ONLY. Please bring the vehicle back FILLED UP COMPLETELY - fill up just before you return, we check the fuel again at the return. If not completely full, a N$250 fee plus the fuel needed is charged.');
-  if(co.v.xb||c.cross_border)L.push('Cross-border: '+(co.v.xb||c.cross_border)+'. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
+  if(co.v.xb||c.cross_border)L.push('Cross-border: '+(co.v.xb||c.cross_border)+'. Zimbabwe: Victoria Falls only, with our written approval, via Botswana (Kazungula border). Zambia, Angola and other countries are not allowed. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
   L.push('','Please remember:',
-    '- Go Rent speed limits apply (GPS tracked): one speeding event cancels all insurance.',
+    '- Go Rent speed limits apply (GPS tracked): one speeding event cancels all insurance and costs N$1,500.',
+    '- No-Go areas (contract 6.1), incl. driving on any beach: N$30,000 penalty and all insurance cancelled.',
     '- No driving after sunset outside towns.',
     '- Any accident or damage: call us first and get a police report within 24 hours.',
     '- Want to extend? Ask at least 2 days before your return date.');
