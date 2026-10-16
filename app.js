@@ -10901,7 +10901,7 @@ function buildContractHTML(c,sigUrl){
     The individual who signs this Agreement ("you" / "the Renter") is solely responsible for:
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
       <div>• Paying all rental fees, insurance waiver fees, penalties, and fines.<br>• Ensuring full compliance with this Agreement, including speed limits and restricted-area rules.<br>• Supervising all additional drivers and passengers — their actions are your liability.</div>
-      <div>• No extra charge for younger drivers; we do not rent to drivers under 23.<br>• Minimum driver age: 23 years. Licence held for a minimum of 1 year.<br>• Foreign renters: valid International Driving Permit (IDP) required — no copies accepted.</div>
+      <div>• No extra charge for younger drivers; we do not rent to drivers under 23.<br>• Minimum driver age: 23 years. Licence held for a minimum of 1 year.<br>• Licence not in English: a valid International Driving Permit (IDP) is also required — no copies accepted.</div>
     </div>
   </div>
 
