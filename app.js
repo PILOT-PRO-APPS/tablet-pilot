@@ -3501,11 +3501,9 @@ function drawCO(){
       (function(){
         var km=co.odometerOut||_cov.odo||'';
         var src=coOdoSrc(_cov);
-        var fuel=co.fuelOut||'Full';
-        var fb=['Empty','1/4','1/2','3/4','Full'].map(function(f){
-          var on=fuel===f;
-          return '<button onclick="co.fuelOut=\''+f+'\';drawCO();" style="border:2px solid '+(on?'#0a5c2a':'rgba(11,58,34,.3)')+';background:'+(on?'#12803c':'#ffffff')+';color:'+(on?'#ffffff':'#333333')+';">'+f+'</button>';
-        }).join('');
+        // Owner 17 Oct 2026: every vehicle goes out FULL of DIESEL (no fuel deposit, no level picker)
+        co.fuelOut='Full';
+        var fb='<span style="padding:4px 10px;border-radius:6px;background:#12803c;color:#fff;font-weight:900;font-size:13px;">FULL · DIESEL</span>';
         return '<div class="fh-row">'
           +'<label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:#333333;">🛣 ODO OUT'
           +'<input type="number" inputmode="numeric" pattern="[0-9]*" id="co-odo-out" class="'+(co.odoDone?'':'need-flash')+'" value="'+km+'" placeholder="Odo km" onfocus="this.select()" oninput="co.odometerOut=+this.value" onchange="coOdoTyped(this.value)" '
@@ -6253,7 +6251,7 @@ function applyDraft(d){
   co.contract=Object.assign(co.contract||{},x.contract||{});
   (x.drivers||[]).forEach(function(d2,i){ co.drivers[i]=Object.assign(co.drivers[i]||{},d2); });
   if(x.odometerOut)co.odometerOut=x.odometerOut;
-  if(x.fuelOut)co.fuelOut=x.fuelOut;
+  co.fuelOut='Full'; // always out full of diesel (owner 17 Oct 2026)
   if(x.returnTime)co.returnTime=x.returnTime;
   if(x.clientName)co.clientName=x.clientName;
   if(x.bookedBy)co.bookedBy=x.bookedBy;
@@ -6568,7 +6566,11 @@ function coStep5_client(){
         `<div class="signed">✅<div class="signed-name">${v.cl} — Handover accepted</div><div class="signed-time">${co.custAt}</div></div>`:
       coLeftCount(CO_BEFORE_HANDOVER)?
         `<div style="padding:12px 14px;border-radius:10px;background:var(--rg);border:2px solid var(--re);"><div style="color:var(--rl);font-size:16px;font-weight:900;">🔒 Before the client signs — ${coLeftCount(CO_BEFORE_HANDOVER)} thing${coLeftCount(CO_BEFORE_HANDOVER)===1?'':'s'} to sort out. Tap ✓ OK right here:</div>${coLeftHTML(CO_BEFORE_HANDOVER)}</div>`:
-        `<div style="font-size:14px;color:var(--g5);margin-bottom:10px;">⛽ DIESEL ONLY · ✅ All equipment received · I accept responsibility for the vehicle and contents</div>
+        `<div id="ho-fuel-accept" style="background:#fff7e6;border:3px solid #e07b00;border-radius:12px;padding:12px 14px;margin-bottom:10px;color:#3b2300;">
+          <div style="font-size:17px;font-weight:900;margin-bottom:4px;">⛽ Fuel — the client accepts by signing:</div>
+          <div style="font-size:15px;font-weight:700;line-height:1.5;">• The tank is <b>FULL</b> now.<br>• This vehicle takes <b>DIESEL ONLY</b>.<br>• I bring it back <b>FILLED UP COMPLETELY</b> with diesel. If it is not full: <b>N$250 + the fuel</b>.</div>
+        </div>
+        <div style="font-size:14px;color:var(--g5);margin-bottom:10px;">✅ All equipment received · I accept responsibility for the vehicle and contents</div>
         <div class="sig-area" style="border-color:var(--gb)">
           <div class="sig-hdr" style="background:#15532f;border-bottom-color:var(--gb)">
             <span class="sig-lbl" style="color:var(--se)">${v.cl} — sign here</span>
@@ -7408,7 +7410,7 @@ async function completeCO(){
     <div class="meta-item"><div class="meta-label">Pickup</div><div class="meta-value">${coPickupDate()||'—'}</div></div>
     <div class="meta-item"><div class="meta-label">Return</div><div class="meta-value">${co.v.rt||'—'}</div></div>
     <div class="meta-item"><div class="meta-label">Odometer out</div><div class="meta-value">${(co.odometerOut||co.v.odo||0).toLocaleString()} km</div></div>
-    <div class="meta-item"><div class="meta-label">Fuel level</div><div class="meta-value">⛽ ${co.fuelOut||'Full'} — RETURN SAME</div></div>
+    <div class="meta-item"><div class="meta-label">Fuel level</div><div class="meta-value">⛽ FULL · DIESEL — RETURN FULL</div></div>
   </div>
 
   <h2>🏕 Equipment Issued</h2>
@@ -7428,10 +7430,10 @@ async function completeCO(){
 
   <h2>✍️ Client Signature</h2>
   <div class="sig-box">
-    <p style="margin:0 0 8px;font-size:14px;"><strong>${co.clientName||co.v.cl}</strong> confirms receipt of the above equipment, acknowledges the vehicle condition, confirms the fuel level at departure, and agrees:</p>
+    <p style="margin:0 0 8px;font-size:14px;"><strong>${co.clientName||co.v.cl}</strong> confirms receipt of the above equipment, acknowledges the vehicle condition, confirms the tank is full of diesel at departure, and agrees:</p>
     <ul style="font-size:14px;color:#444;margin:6px 0;padding-left:18px;line-height:1.8;">
-      <li>Fuel level: <strong>${co.fuelOut||'Full'}</strong> — must be returned at the same level</li>
-      <li>⛽ DIESEL ONLY — misfuelling costs are entirely at my expense</li>
+      <li>⛽ The tank is <strong>FULL</strong> at handover and the vehicle takes <strong>DIESEL ONLY</strong> — misfuelling costs are entirely at my expense</li>
+      <li>I return the vehicle <strong>FILLED UP COMPLETELY</strong> with diesel; if it is not full, N$250 plus the fuel is charged</li>
       <li>All equipment listed above received in working condition</li>
       <li>New damage on return is my responsibility</li>
       <li>I have read and signed the rental agreement</li>
@@ -7595,7 +7597,7 @@ function handoverWAText(){
   L.push('Pickup: '+(waDate(coPickupDate())||'today'));
   L.push('Return: '+(waDate(rdate)||'-')+(rtime?' at '+rtime:'')+' - '+place);
   if(hq)L.push('Office hours Mon-Fri 07:30-16:00. Weekend or holiday returns must be arranged with us in advance.');
-  L.push('Fuel: '+(co.fuelOut||'Full')+' at departure. DIESEL ONLY. Please bring the vehicle back FILLED UP COMPLETELY - fill up just before you return, we check the fuel again at the return. If not completely full, a N$250 fee plus the fuel needed is charged.');
+  L.push('Fuel: FULL tank of DIESEL at departure. DIESEL ONLY. Please bring the vehicle back FILLED UP COMPLETELY - fill up just before you return, we check the fuel again at the return. If not completely full, a N$250 fee plus the fuel needed is charged.');
   if(co.v.xb||c.cross_border)L.push('Cross-border: '+(co.v.xb||c.cross_border)+'. Zimbabwe: Victoria Falls only, with our written approval, via Botswana (Kazungula border). Zambia, Angola and other countries are not allowed. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
   L.push('','Please remember:',
     '- Go Rent speed limits apply (GPS tracked): one speeding event cancels all insurance and costs N$1,500.',
@@ -11231,7 +11233,7 @@ function buildContractHTML(c,sigUrl){
     <strong>7.3 EARLY RETURN</strong><br>
     No refund or credit for early return under any circumstances.<br>
     <strong>7.4 FUEL</strong><br>
-    Vehicle must be returned with a full tank of fuel. Failure results in a N$250 fee plus shortfall fuel cost. Wrong fuel (e.g. petrol in diesel) = negligence — Renter bears all repair and recovery costs.
+    The vehicle is handed over with a full tank of diesel (DIESEL ONLY) and must be returned filled up completely with diesel. Failure results in a N$250 fee plus shortfall fuel cost. No fuel deposit is taken. Wrong fuel (e.g. petrol in diesel) = negligence — Renter bears all repair and recovery costs.
   </div>
   ${ini()}
   <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
