@@ -7151,6 +7151,10 @@ function payPanelInner(v){
     h+='<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Client paid '+payFmt(st.owing)+' now — tap how:</div>'
       +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+b('adumo','💳 Adumo')+b('card','💳 Card machine')+b('cash','💵 Cash')+'</div>'
       +'<div style="font-size:12px;color:#64748b;margin-top:6px;">Paid a different amount, by EFT, or need a payment link? The office does that in the Desktop APP.</div>';
+  }else{
+    // Owner 17 Oct 2026: nothing owing according to the Desktop APP (Adumo records) → staff take NO money. Only Peter may override.
+    h+='<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">'+(st.total>0?'Paid according to the Desktop APP (Adumo records) — do NOT take any payment from the client.':'The Desktop APP does not know what is owing — do NOT take money; the office checks it.')+'</div>';
+    if(APP_USER&&APP_USER.name===(st.override_by||'Peter'))h+='<button onclick="payOverride(\''+_bx(v.bid)+'\')" style="margin-top:8px;padding:10px 14px;border-radius:10px;border:2px solid #b45309;background:#fffbeb;color:#92400e;font-size:14px;font-weight:900;cursor:pointer;">Peter only: record a payment anyway (override)</button>';
   }
   return h+'</div>';
 }
@@ -7233,6 +7237,20 @@ async function payQuick(bid,method){
     if(!x)return;res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};}
   res._at=Date.now();PAY_ST[bid]=res;
   toast('✓ '+payFmt(amt)+' paid by '+lbl+' — saved','ok');
+  try{var _pp=document.getElementById('pay-pop');if(_pp)_pp.remove();}catch(e){}
+  if(co&&co.v&&co.v.bid===bid)drawCO();
+}
+// Peter only (owner 17 Oct 2026): record money although the Desktop APP shows nothing owing. The server checks the name again.
+async function payOverride(bid){
+  if(!APP_USER||APP_USER.name!=='Peter'){toast('Only Peter can override','err');return;}
+  var st=PAY_ST[bid]||await payLoad(bid,true);
+  var a=await askBox({title:'⚠ Override — record a payment anyway?',text:(st&&st.total>0?'The Desktop APP shows this rental as fully paid ('+payFmt(st.paid)+' of '+payFmt(st.total)+').':'The Desktop APP does not know this rental\'s total.')+'\n\nOnly record money the client really paid now. Management is told about this override.',ok:'Yes, record it',cancel:'Back'});
+  if(!a.ok)return;
+  var x=await payForm({title:'💵 Override payment (Peter)',text:'Amount the client paid now, how, and the slip number.',amount:'',methods:true,reference:true,ok:'Save — override',
+    submit:function(f){return payCall({action:'record',booking_id:bid,name:APP_USER.name,pin:f.pin,amount:f.amount,method:f.method,reference:f.reference,confirm_extra:true});}});
+  if(!x)return;
+  x.res._at=Date.now(); PAY_ST[bid]=x.res;
+  toast('Override: '+payFmt(x.form.amount)+' saved','ok');
   try{var _pp=document.getElementById('pay-pop');if(_pp)_pp.remove();}catch(e){}
   if(co&&co.v&&co.v.bid===bid)drawCO();
 }
