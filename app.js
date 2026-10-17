@@ -1676,6 +1676,9 @@ async function loadClients(){
 var BOOKINGS_LOADED=false;
 var DISCS={};var ALL_FLEET_NOS=[];
 var DISC_WARN_DAYS=45;
+// Owner 17 Oct 2026: warn when the licence disc runs out DURING a rental (before the vehicle comes back)
+function discDuringRental(v){var e=(v&&(v._licExpiry||(v.lic&&v.lic.expiry)))||'',rt=(v&&(v.return_date_new||v.rt))||'';if(!e||!rt)return '';return e<rt&&e>=localYMD()?e:'';}
+function discDuringTxt(v){var e=discDuringRental(v);if(!e)return '';var f=function(x){return new Date(x+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});};return 'Licence disc expires '+f(e)+(v.pu&&e<v.pu?' — before this rental starts ('+f(v.pu)+')':' — during this rental (back '+f(v.return_date_new||v.rt)+')')+'. Renew it before handover.';}
 function discDaysLeft(exp){if(!exp)return null;var t=new Date();t.setHours(0,0,0,0);return Math.round((new Date(exp+'T00:00:00')-t)/86400000);}
 function _bx(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function _isRemoteLoc(l){return !!(l&&String(l).trim()&&!/windhoek|whk|hkia|hosea|go rent|office|diehl/i.test(l));}
@@ -2174,6 +2177,8 @@ function _renderOV(){
     var remN=_ovRemote.length;
     var bits=[];
     if(discN)bits.push('<b style="color:#92400e;">'+discN+' licence disc'+(discN>1?'s':'')+' due</b>');
+    var durN=[];try{var _t=localYMD();FLEET.forEach(function(x){if(x.cl&&(x.return_date_new||x.rt)>=_t&&discDuringRental(x)&&durN.indexOf(x.fn)<0)durN.push(x.fn);});}catch(e){}
+    if(durN.length)bits.push('<b style="color:#c53030;">⚠ Disc runs out during a booking: '+durN.join(', ')+'</b>');
     if(remN)bits.push('<b style="color:#c53030;">'+remN+' remote collection'+(remN>1?'s':'')+'</b>');
     if(staffN)bits.push(staffN+' working now');
     var open=!!window._ovInfoOpen;
@@ -3475,7 +3480,9 @@ function drawCO(){
         var svcKm=(_cov.svc&&_cov.svc.lastKm&&_cov.svc.intKm)?(_cov.svc.lastKm+_cov.svc.intKm-_cov.odo):null;
         var tyreKm=(_cov.tyres&&_cov.tyres.lastKm&&_cov.tyres.intKm)?(_cov.tyres.lastKm+_cov.tyres.intKm-_cov.odo):null;
         var warnCol=function(km,soon){return km<=0?'color:var(--rl);':km<soon?'color:var(--al);':'';};
-        var missing=!licExp, bad=licExp&&licDiff<0, soon=licExp&&licDiff<=DISC_WARN_DAYS;
+        var during=discDuringRental(_cov);
+        var missing=!licExp, bad=(licExp&&licDiff<0)||!!during, soon=licExp&&licDiff<=DISC_WARN_DAYS;
+        if(during)licTxt='⚠ Disc ends '+new Date(during+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' — during rental';
         var disc='<button onclick="co._discEdit=!co._discEdit;drawCO();" class="'+((missing||soon||bad)?'disc-flash':'')+'" style="'
           +((missing||bad)?'background:#d13636;color:#fff;border:1px solid #ff8a8a;':soon?'background:#e08a00;color:#fff;border:1px solid #f0c27a;':'')+'">'
           +'<span class="disc-ico"></span><span class="fh-t">'+licTxt+' ✎</span></button>';
@@ -6870,6 +6877,7 @@ function coStepMissing(n){
   }else if(n===4){
     if(!co.odoDone)m.push('🛣 Odo reading: check it against the dashboard (top of the screen)');
     if(!(v.lic&&v.lic.expiry)&&!v._licExpiry)m.push('🚗 Licence disc date missing (top of the screen)');
+    if(discDuringRental(v))m.push('🚗 '+discDuringTxt(v));
     if(!d.veh)m.push('📄 Vehicle documents (disc, insurance papers) not checked');
     if(v.xb&&!d.xb)m.push('🌍 Cross-border papers not checked');
   }else if(n===5){
@@ -7052,6 +7060,7 @@ function coMissing(){
   if(unMech.length)m.push('🔩 Mechanical: '+unMech.length+' item'+(unMech.length===1?'':'s')+' not checked');
   if(!co.odoDone)m.push('🛣 Odo reading not checked against the dashboard');
   if(!(v.lic&&v.lic.expiry)&&!v._licExpiry)m.push('🚗 Licence disc date missing');
+  if(discDuringRental(v))m.push('🚗 '+discDuringTxt(v));
   var d0=(co.drivers&&co.drivers[0])||{};
   if(!d0.name)m.push('👤 Client name not filled in');
   if(!d0.passportImg)m.push('🛂 No passport photo');
