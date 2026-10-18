@@ -825,6 +825,86 @@ function custLink(v,html){
   var cl=String(v.cl||'').replace(/[\'\\"<>]/g,'');
   return '<span onclick="event.stopPropagation();tdOpen(\''+String(v.bid).replace(/[\'\\"<>]/g,'')+'\',\''+cl+'\')" title="View quote / booking form" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px;">'+html+' <span style="font-size:.7em;">📄</span></span>';
 }
+// ── 💰 Quote & payments (owner 18 Oct): the full quote, what was paid and what is still outstanding ──
+// Read live from the Desktop APP's records (bookings, quotes, payments) through tablet_booking_money; nothing is stored on the tablet.
+var QM_SEC=['security_fuel','security_cross_border','security_other'],QM_RENT=['booking_deposit','rental_payment'];
+var QM_CAT={booking_deposit:'Booking deposit',rental_payment:'Rental payment',security_fuel:'Fuel & admin deposit',security_cross_border:'Cross-border deposit',security_other:'Security deposit (insurance)',other:'Other'};
+function qmN(x){var n=Math.round(Number(x||0)*100)/100;return 'N$ '+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});}
+function qmMeth(m){m=String(m||'');return /adumo_link/i.test(m)?'Adumo link':/adumo/i.test(m)?'Adumo':/swipe|card/i.test(m)?'Card machine':/cash/i.test(m)?'Cash':/eft|bank/i.test(m)?'EFT':m;}
+function qmBtn(bid,client,key){
+  if(!APP_USER||(!bid&&!key))return '';
+  var a=function(s){return String(s||'').replace(/[\'\\"<>]/g,'');};
+  return '<button onclick="event.stopPropagation();qmOpen(\''+a(bid)+'\',\''+a(client)+'\',\''+a(key)+'\')" style="margin-left:10px;padding:10px 16px;border-radius:22px;border:2px solid #15803d;background:#dcfce7;color:#14532d;font-size:15px;font-weight:900;cursor:pointer;">💰 Quote &amp; payments</button>';
+}
+async function qmOpen(bid,client,key){
+  tdShell('💰 '+_bx(client||'Booking')+' — quote &amp; payments','<div style="padding:14px;color:var(--g5);">Loading from the Desktop APP…</div>');
+  var d=null,err='';
+  try{var r=await withTimeout(SB.rpc('tablet_booking_money',{p_bid:bid||null,p_key:key||null}),20000);
+    if(!r)err='No answer — check the internet';else if(r.error)err=r.error.message;else d=r.data;}catch(e){err=(e&&e.message)||'No connection';}
+  var body=document.getElementById('td-body');if(!body)return;
+  if(!d||!d.found){body.innerHTML='<div class="al warn">'+_bx(err||'This booking was not found in the Desktop APP')+'</div>';return;}
+  body.innerHTML=qmHTML(d);
+}
+function qmHTML(d){
+  var b=d.booking||{},q=d.quote,pays=d.payments||[];
+  var rentIn=0,secIn=0,secOut=0,rentOut=0;
+  pays.forEach(function(p){var a=+p.amount||0,s=QM_SEC.indexOf(p.cat)>=0,r=QM_RENT.indexOf(p.cat)>=0;
+    if(p.dir==='out'){if(s)secOut+=a;else if(r)rentOut+=a;}else{if(s)secIn+=a;else if(r)rentIn+=a;}});
+  var price=+b.rental_total||(q?+q.total:0)||0,paid=rentIn-rentOut,owing=Math.max(0,Math.round((price-paid)*100)/100),held=secIn-secOut;
+  // security deposits still to take: from the quote, else the booking (fuel & admin deposit is no longer taken since 13 Oct 2026)
+  var want=[];
+  if(q&&q.deps&&q.deps.length)q.deps.forEach(function(x){want.push({l:x.label,a:+x.amount||0});});
+  else{
+    if(b.damage_deposit&&/need|yes|req/i.test(b.damage_deposit)&&!/not/i.test(b.damage_deposit))want.push({l:'Damage / cross-border deposit (booking)',a:+b.damage_dep_amount||0});
+    if(b.fuel_admin_deposit&&/need|yes/i.test(b.fuel_admin_deposit)&&!/not/i.test(b.fuel_admin_deposit)&&String(b.pickup||'')<'2026-10-13')want.push({l:'Fuel & admin deposit (booking)',a:+b.fuel_admin_dep_amount||0});
+  }
+  var wantTot=want.reduce(function(t,x){return t+x.a;},0),secLeft=Math.max(0,wantTot-held);
+  var tile=function(l,v,c,sub){return '<div style="flex:1;min-width:150px;background:var(--g0);border:2px solid '+c+';border-radius:12px;padding:10px 12px;"><div style="font-size:11px;font-weight:900;letter-spacing:.5px;text-transform:uppercase;color:var(--g5);">'+l+'</div><div style="font-size:22px;font-weight:900;color:'+c+';">'+v+'</div>'+(sub?'<div style="font-size:12px;color:var(--g5);">'+sub+'</div>':'')+'</div>';};
+  var h='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
+    +tile('Rental price',price?qmN(price):'—','var(--tx)',b.rental_total?'from the booking':(q?'from quote '+_bx(q.quote_no):'not set'))
+    +tile('Paid so far',qmN(paid),'#15803d','booking deposit + payments')
+    +tile('Still to pay',price?(owing>0.5?qmN(owing):'✓ Fully paid'):'—',owing>0.5?'#b91c1c':'#15803d',owing>0.5?'can be paid on arrival':'nothing outstanding')
+    +'</div>';
+  // on arrival box
+  var arr=[];
+  if(owing>0.5)arr.push('Rental balance <b>'+qmN(owing)+'</b>');
+  if(secLeft>0.5)arr.push('Security deposit <b>'+qmN(secLeft)+'</b> (refundable)');
+  h+='<div style="border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:16px;font-weight:800;'+(arr.length?'background:#fef2f2;border:2px solid #b91c1c;color:#7f1d1d;':'background:#dcfce7;border:2px solid #15803d;color:#14532d;')+'">'
+    +(arr.length?'💳 To collect on arrival: '+arr.join(' + ')+(owing>0.5&&secLeft>0.5?' = <b>'+qmN(owing+secLeft)+'</b>':''):'✅ Nothing to collect on arrival')
+    +'</div>';
+  // security deposits
+  if(want.length||held){
+    h+='<div style="font-size:15px;font-weight:900;margin:6px 0;">🛡 Security deposits</div><div style="font-size:14px;">'
+      +want.map(function(x){return '<div>• '+_bx(x.l)+(x.a?' — '+qmN(x.a):'')+'</div>';}).join('')
+      +'<div style="margin-top:4px;color:'+(held>0?'#15803d':'var(--g5)')+';font-weight:800;">Held now: '+qmN(held)+(secOut?' (after '+qmN(secOut)+' paid back)':'')+'</div></div>';
+  }
+  // payments
+  h+='<div style="font-size:15px;font-weight:900;margin:14px 0 6px;">🧾 Payments received</div>';
+  h+=pays.length?'<table style="width:100%;border-collapse:collapse;font-size:14px;">'+pays.map(function(p){
+      var out=p.dir==='out';return '<tr style="border-top:1px solid var(--g3);"><td style="padding:6px 4px;white-space:nowrap;">'+_bx(p.at?fmtDay(p.at):'')+'</td><td style="padding:6px 4px;">'+_bx(QM_CAT[p.cat]||p.cat||'')+(out?' — paid back':'')+'</td><td style="padding:6px 4px;color:var(--g5);">'+_bx(qmMeth(p.method))+'</td><td style="padding:6px 4px;text-align:right;font-weight:900;color:'+(out?'#b91c1c':'#15803d')+';">'+(out?'− ':'')+qmN(p.amount)+'</td></tr>';
+    }).join('')+'</table>'
+    :'<div style="font-size:14px;color:var(--g5);">No payments recorded yet'+(b.deposit_paid&&/yes/i.test(b.deposit_paid)&&+b.deposit_amount?' — the booking says a deposit of '+qmN(b.deposit_amount)+' was paid'+(b.deposit_via?' via '+_bx(b.deposit_via):'')+'. Check with the office.':'.')+'</div>';
+  // the quote
+  h+='<div style="font-size:15px;font-weight:900;margin:16px 0 6px;">📄 '+(q?'Quote '+_bx(q.quote_no)+(q.status?' · '+_bx(q.status):''):'Booking')+'</div>';
+  if(q&&q.lines&&q.lines.length){
+    h+='<table style="width:100%;border-collapse:collapse;font-size:14px;">'+q.lines.map(function(l){
+      return '<tr style="border-top:1px solid var(--g3);"><td style="padding:6px 4px;"><div style="font-weight:800;">'+_bx(l.label||'')+'</div>'+(l.detail?'<div style="font-size:12px;color:var(--g5);">'+_bx(l.detail)+'</div>':'')+'</td><td style="padding:6px 4px;text-align:right;white-space:nowrap;font-weight:900;">'+(l.free?'Included':qmN(l.amount))+'</td></tr>';
+    }).join('')+'<tr style="border-top:2px solid var(--tx);"><td style="padding:8px 4px;font-weight:900;">Total'+(q.days?' · '+_bx(q.days)+' days':'')+'</td><td style="padding:8px 4px;text-align:right;font-weight:900;font-size:16px;">'+qmN(q.total)+'</td></tr></table>';
+    if(b.rental_total&&q.total&&Math.abs(+b.rental_total-+q.total)>1)h+='<div style="font-size:12px;color:var(--al);margin-top:4px;">⚠ The booking total ('+qmN(b.rental_total)+') differs from this quote — the booking total is used above.</div>';
+    if(q.client_note)h+='<div style="font-size:13px;margin-top:6px;"><b>Note on the quote:</b> '+_bx(q.client_note)+'</div>';
+  }else{
+    var row=function(l,v){return v&&v!=='No'&&v!=='None'?'<tr style="border-top:1px solid var(--g3);"><td style="padding:6px 4px;color:var(--g5);">'+l+'</td><td style="padding:6px 4px;font-weight:800;">'+_bx(v)+'</td></tr>':'';};
+    h+='<div style="font-size:13px;color:var(--g5);margin-bottom:4px;">This booking was quoted in the old system, so there is no itemised quote here — what was booked:</div>'
+      +'<table style="width:100%;border-collapse:collapse;font-size:14px;">'
+      +row('Quote / booking no.',b.quote||b.id)+row('Dates',(b.pickup?fmtDay(b.pickup):'')+' → '+(b.return?fmtDay(b.return):''))
+      +row('Vehicle',b.fleet_no)+row('Camping / people',[b.camping,b.pax].filter(Boolean).join(' · '))+row('Drivers',b.drivers?String(b.drivers):'')
+      +row('Cross-border',b.cross_border)+row('Airport transfer',b.airport_transfer)+row('Extra fuel',b.extra_fuel)+row('Satellite phone',b.satphone)+row('Baby seat',b.baby_seat)
+      +row('Special equipment',b.special_equipment)+row('Collect / return',[b.pickup_loc,b.dropoff_loc].filter(Boolean).join(' → '))
+      +'<tr style="border-top:2px solid var(--tx);"><td style="padding:8px 4px;font-weight:900;">Rental total</td><td style="padding:8px 4px;font-weight:900;font-size:16px;">'+(price?qmN(price):'—')+'</td></tr></table>';
+  }
+  h+='<div style="font-size:12px;color:var(--g5);margin-top:12px;">Live from the Desktop APP. Payments are recorded in the Desktop APP; a payment taken on this tablet shows here once saved.</div>';
+  return h;
+}
 function tdClose(){ var m=document.getElementById('td-modal'); if(m) m.remove(); }
 function tdShell(title,inner){
   tdClose();
@@ -1865,6 +1945,7 @@ function showBookingDetail(v){
       +'<div style="font-size:14px;">Pickup/drop-off outside Windhoek — arrange vehicle transfer in advance.</div></div></div>';
   }
   h+=row(cell('Client',custLink(v,_bx(v.cl))),cell('Quote #',col(_bx(b.quote||v.quote||'—'),'#d97706')));
+  h+='<div style="margin:4px 0 12px;">'+qmBtn(v.bid,v.cl,v.fn&&v.pu?v.fn+'_'+v.pu:'').replace('margin-left:10px;','')+'</div>';
   h+=row(cell('Fleet / Vehicle','<span style="font-family:Menlo,monospace;color:#d97706;">'+_bx(v.fn)+(model?' · '+model:'')+'</span>'),cell('Nationality',_bx(b.nationality||'—')));
   h+=row(cell('Pickup date',col(_dmy(v.pu),'#2a9d5c')),cell('Return date',col(_dmy(v.rt),'#2563eb')));
   h+=row(cell('Camping / PAX',_bx(b.camping||'—')),'');
@@ -3503,6 +3584,7 @@ function drawCO(){
     '<div class="chg-veh-bar">'
       +'<button onclick="coChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>'
       +tdBtn(_cov.bid,_cov.cl)
+      +qmBtn(_cov.bid,_cov.cl,co.fn&&_cov.pu?co.fn+'_'+_cov.pu:'')
     +'</div>'+
     '<div class="fhdr">'+
       // fleet number, client and the check-out badge on one line
@@ -7829,7 +7911,7 @@ function _drawCI(){
 
   document.getElementById('ci-body').innerHTML=`
     <div class="chg-veh-bar">
-      <button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}
+      <button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}${qmBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl,ci.fn&&ci.v?ci.fn+'_'+ci.v.pu:'')}
     </div>
     <div class="fhdr">
       <div class="fh-top">
@@ -9390,7 +9472,7 @@ async function completeCIRun(){
   // Read-only tablet: Fleet Manager data (vehicles/bookings) is never changed from here
   const hasIssues=newDmg.length||((!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut))||missing.length||damaged.length;
   document.getElementById('ci-body').innerHTML=`
-    <div class="chg-veh-bar"><button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}</div>
+    <div class="chg-veh-bar"><button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}${qmBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl,ci.fn&&ci.v?ci.fn+'_'+ci.v.pu:'')}</div>
     <div class="done"><div class="done-ico">${hasIssues?'⚠️':'✅'}</div>
       <div class="done-title">Return Complete</div>
       <div class="done-sub">${ci.fn} · ${ci.v.cl}<br>${(+ci.odoIn&&+ciOdoOut())?((+ci.odoIn)-(+ciOdoOut())).toLocaleString()+' km · ':''}Received by ${ci.receivedBy||'—'}${ci.forceClosedBy?'<br><b style="color:var(--al)">Closed off by '+_bx(ci.forceClosedBy)+' with checks missing</b>':''}</div>
