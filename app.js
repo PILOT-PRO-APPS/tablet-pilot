@@ -8238,6 +8238,11 @@ function ciFinishBox(hasIssues){
     +'</div>';
 }
 async function ciFinish(){
+  if(window._ciFinishing){toast('Saving the return… please wait','ok');return;}
+  window._ciFinishing=true;
+  try{return await ciFinishRun();}finally{window._ciFinishing=false;}
+}
+async function ciFinishRun(){
   var open=ciCompletion().filter(function(x){return !x.ok;});
   if(open.length&&!(await ciPeterOverride(open)))return;
   if(!ci.forceClosedBy&&!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut&&!(ci.fuelPhotos&&ci.fuelPhotos.length)){toast('Fuel is short — take a photo of the fuel receipt first','err');return;}
@@ -8259,8 +8264,16 @@ function signMgmtCI(){return ciFinish();}
 // ── Management: open deposit decisions ──
 var WARN_TRI='<svg class="wtri" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22L12 2z" fill="#e11d2e"/><path d="M11 9h2v6h-2zm0 8h2v2h-2z" fill="#fff"/></svg>';
 var DEP_PENDING=[];
+// One entry per return: duplicate saves of the same check-in (same booking) are shown once; _ids holds every row id
+function depUniq(rows){
+  var by={},out=[];
+  (rows||[]).forEach(function(r){var k=bkNorm(r.booking_id||r.id);
+    if(by[k]){by[k]._ids.push(r.id);if(!by[k].report_link&&r.report_link)by[k].report_link=r.report_link;return;}
+    var c=Object.assign({},r);c._ids=[r.id];by[k]=c;out.push(c);});
+  return out;
+}
 async function refreshDeposits(){
-  try{var r=await SB.from('checkins').select('id,booking_id,fleet_no,client,deposit_due').eq('deposit_status','pending');if(!r.error){DEP_PENDING=r.data||[];showDepositBanner();}}catch(e){}
+  try{var r=await SB.from('checkins').select('id,booking_id,fleet_no,client,deposit_due').eq('deposit_status','pending');if(!r.error){DEP_PENDING=depUniq(r.data);showDepositBanner();}}catch(e){}
 }
 // Deposits tab only flashes while a decision is actually waiting
 function depTabLabel(){return DEP_PENDING.length?WARN_TRI+' Deposits ('+DEP_PENDING.length+')':'✅ Deposits';}
@@ -8284,7 +8297,7 @@ async function loadDeposits(){
   el.innerHTML='<div style="color:var(--g5);padding:20px;text-align:center">Loading...</div>';
   var r=await SB.from('checkins').select('id,booking_id,fleet_no,client,received_by,created_at,km_driven,fuel_in,fuel_out,fuel_short,new_damage_panels,missing_items,damaged_items,client_notes,manager_notes,report_link,deposit_due').eq('deposit_status','pending').order('deposit_due',{ascending:true});
   if(r.error){el.innerHTML='<div class="al warn">Could not load: '+_bx(r.error.message)+'</div>';return;}
-  DEP_PENDING=r.data||[];
+  DEP_PENDING=depUniq(r.data);
   var today=localYMD();
   showDepositBanner();
   if(!DEP_PENDING.length){el.innerHTML='<div class="al ok" style="text-align:center;">✅ No deposit decisions waiting</div>';return;}
@@ -8365,8 +8378,9 @@ async function saveDeposit(id){
   if(ret===''&&ded===''){toast('Enter the amount returned and/or deducted','err');return;}
   if(+ded>0&&!notes){toast('Write the reason for the deduction — the client sees it','err');return;}
   var who=(APP_USER&&APP_USER.name)||'';
+  var _dep=DEP_PENDING.filter(function(x){return x.id===id;})[0],_ids=(_dep&&_dep._ids)||[id];
   var up=await SB.from('checkins').update({deposit_status:'decided',deposit_decision:reason,deposit_returned:ret===''?null:+ret,deposit_deducted:ded===''?null:+ded,
-    deposit_notes:notes,deposit_decided_by:who,deposit_decided_at:new Date().toISOString(),manager_name:who,manager_signed_at:new Date().toISOString()}).eq('id',id).select('id,fleet_no,client,booking_id');
+    deposit_notes:notes,deposit_decided_by:who,deposit_decided_at:new Date().toISOString(),manager_name:who,manager_signed_at:new Date().toISOString()}).in('id',_ids).select('id,fleet_no,client,booking_id');
   if(up.error||!up.data||!up.data.length){toast('Not saved: '+((up.error&&up.error.message)||'no access'),'err');return;}
   var c=up.data[0];
   try{SB.from('management_alerts').update({resolved:true,resolved_by:who,resolved_at:new Date().toISOString()}).eq('fleet_no',c.fleet_no).eq('resolved',false).then(function(){},function(){});}catch(e){}
@@ -9320,6 +9334,11 @@ function ciReportHTML(){
     +'</div></div>';
 }
 async function completeCI(){
+  if(window._ciSaving)return;
+  window._ciSaving=true;
+  try{return await completeCIRun();}finally{window._ciSaving=false;}
+}
+async function completeCIRun(){
   if(!drOnline()){askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the return when the internet is back.'});return;}
   ci._done=true;
   try{localStorage.removeItem(ipKey(ci.fn));}catch(e){}
@@ -9330,7 +9349,7 @@ async function completeCI(){
   const allItems=RET_GROUPS.flatMap(g=>g.items);
   const missing=allItems.filter(i=>retSt[i]==='missing').map(ciQtyLabel);
   const damaged=allItems.filter(i=>retSt[i]==='dmg');
-  var _ciRes;try{_ciRes=await SB.from('checkins').insert({
+  var _ciRow={
     booking_id:ci.fn+'_'+ci.v.pu,fleet_no:ci.fn,client:ci.v.cl,
     received_by:ci.receivedBy,odo_in:(+ci.odoIn||null),odo_out:(+ciOdoOut()||null),
     km_driven:((+ci.odoIn&&+ciOdoOut())?(+ci.odoIn)-(+ciOdoOut()):null),
@@ -9347,7 +9366,15 @@ async function completeCI(){
     item_checks:ciItemChecks(),equipment_checked_by:ciEqChecks(),receiver_log:ci.rcvLog||[],
     signature_urls:ci._sigUrls||{},report_link:ci._reportLink||null,
     created_at:new Date().toISOString(),
-  });}catch(e){_ciRes={error:{message:'no connection'}};}
+  };
+  var _ciRes;try{
+    // One row per return: if this return was already saved (double tap, second tablet, redo), update that row
+    var _k=_ciRow.booking_id,_ks=[_k,bkNorm(_k),bkAltKey(_k)].filter(function(x,i,a){return x&&a.indexOf(x)===i;});
+    var _ex=await withTimeout(SB.from('checkins').select('id').in('booking_id',_ks).order('created_at',{ascending:false}).limit(1),15000).catch(function(){return null;});
+    var _exId=_ex&&!_ex.error&&_ex.data&&_ex.data[0]&&_ex.data[0].id;
+    if(_exId){_ciRes=await SB.from('checkins').update(_ciRow).eq('id',_exId).select('id');if(!_ciRes.error&&!(_ciRes.data&&_ciRes.data.length))_ciRes={error:{message:'no access to update the earlier save'}};}
+    else _ciRes=await SB.from('checkins').insert(_ciRow);
+  }catch(e){_ciRes={error:{message:'no connection'}};}
   if(_ciRes&&_ciRes.error){toast('Return not saved: '+_ciRes.error.message+' — nothing lost, try again','err');ci._done=false;ci.depositPending=false;drMarkLocal('checkin',ci.fn,ci.v.cl,ci.receivedBy||'',false);return;}
   try{drFinish(drId('checkin',ci));}catch(e){}
   // Alert management about any return issue (damage, fuel, missing or damaged equipment)
