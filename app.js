@@ -8301,6 +8301,7 @@ async function loadDeposits(){
       +(c.manager_notes?'<div style="font-size:13px;margin-top:6px;"><b>Team notes:</b> '+_bx(c.manager_notes)+'</div>':'')
       +(c.client_notes?'<div style="font-size:13px;margin-top:2px;"><b>Client notes:</b> '+_bx(c.client_notes)+'</div>':'')
       +(c.report_link?'<a href="'+_bx(c.report_link)+'" target="_blank" style="display:inline-block;margin-top:8px;font-weight:800;color:var(--se);">📋 Open the check-in report (photos, signatures)</a>':'')
+      +'<div id="dep-paid-'+c.id+'" class="dep-paid" style="margin-top:10px;padding:10px 12px;border-radius:10px;border:2px solid var(--g3,#cbd5e1);font-size:14px;color:var(--g5);">💳 Deposit paid: loading…</div>'
       +'<div class="fg" style="margin-top:10px;">'
         +'<div class="fi"><label>Decision</label><select id="dep-r-'+c.id+'" style="color-scheme:light">'+DEP_REASONS.map(function(o,i){return '<option'+(i===4?' selected':'')+'>'+o+'</option>';}).join('')+'</select></div>'
         +'<div class="fi"><label>Returned to client (N$)</label><input id="dep-a-'+c.id+'" type="number" inputmode="decimal" min="0" placeholder="0"></div>'
@@ -8310,6 +8311,53 @@ async function loadDeposits(){
       +'<button class="btn g" onclick="saveDeposit('+JSON.stringify(c.id).replace(/"/g,'&quot;')+')">✅ Save deposit decision</button>'
       +'</div>';
   }).join('');
+  depPaidLoad(DEP_PENDING);
+}
+// ── What the client paid as deposit (payments ledger, contract, booking) ──
+// Read through tablet_deposit_info (SECURITY DEFINER): the tablet login cannot read `payments` directly.
+var DEP_CAT={security_fuel:'Fuel & admin deposit',security_cross_border:'Cross-border deposit',security_country:'Country deposit',security_other:'Security deposit (insurance)'};
+function depN(x){var n=Number(x||0);return 'N$ '+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});}
+function depPaidHTML(d){
+  d=d||{};var led=d.ledger||[],ct=d.contract,bk=d.booking;
+  var inn=0,out=0,lines=[];
+  led.forEach(function(p){
+    var a=+p.amount||0,lbl=DEP_CAT[p.cat]||'Deposit',when=p.paid_at?fmtDay(p.paid_at):'',m=p.method?String(p.method).replace(/^adumo$/i,'Adumo'):'';
+    if(p.dir==='out'){out+=a;lines.push('<div style="color:var(--al);">↩ Already paid back: '+_bx(lbl)+' '+depN(a)+(when?' · '+_bx(when):'')+'</div>');}
+    else{inn+=a;lines.push('<div>✓ '+_bx(lbl)+' <b>'+depN(a)+'</b>'+(m?' · '+_bx(m):'')+(when?' · '+_bx(when):'')+'</div>');}
+  });
+  var held=inn-out,head,col;
+  if(led.length){head='💳 Deposit paid: '+depN(held)+(out?' still held':'');col=held>0?'var(--gb)':'var(--am)';}
+  else{
+    // nothing in the payments record → show what the contract / booking asked for
+    var exp=[];
+    if(ct){
+      if(+ct.deposit_amount>0)exp.push('Security deposit (insurance option '+_bx(ct.insurance_option||'')+') '+depN(ct.deposit_amount)+(ct.deposit_method?' · '+_bx(ct.deposit_method):'')+(ct.deposit_paid?' · ticked paid':''));
+      if(+ct.fuel_deposit>0)exp.push('Fuel deposit '+depN(ct.fuel_deposit)+(ct.fuel_deposit_received?' · ticked received on the contract':''));
+      if(ct.country_deposit==='received')exp.push('Country deposit N$ 7,500 · ticked received on the contract');
+      if(ct.cross_border_deposit===true)exp.push('Cross-border deposit · ticked on the contract');
+    }
+    if(bk){
+      if(bk.fuel_admin_deposit&&!/not\s*req/i.test(bk.fuel_admin_deposit))exp.push('Fuel & admin deposit: '+_bx(bk.fuel_admin_deposit)+(bk.fuel_admin_dep_amount?' · '+depN(bk.fuel_admin_dep_amount):'')+' (booking)');
+      if(bk.damage_deposit&&!/not\s*req/i.test(bk.damage_deposit))exp.push('Damage deposit: '+_bx(bk.damage_deposit)+(bk.damage_dep_amount?' · '+depN(bk.damage_dep_amount):'')+' (booking)');
+    }
+    head='💳 Deposit paid: not in the payments record';col='var(--am)';
+    lines=exp.length?exp.map(function(t){return '<div>• '+t+'</div>';}):['<div>No security deposit on the contract or booking.</div>'];
+    lines.push('<div style="color:var(--al);font-weight:700;margin-top:4px;">⚠ Check Adumo before refunding.</div>');
+  }
+  if(bk&&+bk.deposit_amount>0)lines.push('<div style="color:var(--g5);font-size:12px;margin-top:4px;">Booking deposit towards the rental (not a security deposit): '+depN(bk.deposit_amount)+(bk.deposit_via?' · '+_bx(bk.deposit_via):'')+(bk.deposit_paid?' · paid: '+_bx(bk.deposit_paid):'')+'</div>');
+  return {html:'<div style="font-size:16px;font-weight:900;color:var(--g9,inherit);margin-bottom:4px;">'+head+'</div>'+lines.join(''),col:col,held:led.length?held:null};
+}
+async function depPaidLoad(list){
+  var keys=(list||[]).map(function(c){return c.booking_id;}).filter(Boolean);
+  var data={};
+  if(keys.length){try{var r=await SB.rpc('tablet_deposit_info',{p_keys:keys});if(!r.error&&r.data)data=r.data;}catch(e){}}
+  (list||[]).forEach(function(c){
+    var el=document.getElementById('dep-paid-'+c.id);if(!el)return;
+    if(!data[c.booking_id]){el.innerHTML='💳 Deposit paid: could not load (check the internet)';return;}
+    var x=depPaidHTML(data[c.booking_id]);
+    el.innerHTML=x.html;el.style.borderColor=x.col;el.style.color='inherit';
+    if(x.held!=null){var a=document.getElementById('dep-a-'+c.id);if(a)a.placeholder=String(x.held);}
+  });
 }
 async function saveDeposit(id){
   var g=function(k){var e=document.getElementById('dep-'+k+'-'+id);return e?e.value:'';};
