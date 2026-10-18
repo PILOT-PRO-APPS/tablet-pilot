@@ -214,6 +214,7 @@ const STAFF_ROSTER=[
   // Christina removed 11 Oct 2026 (owner: "can be removed entirely"); her PIN is switched off in staff_pins
   // Abia removed 14 Oct 2026 (owner); her PIN is switched off in staff_pins
   {name:'Beverly',  role:'prep'},   // added 12 Oct 2026; full check-out + check-in (manager) since 16 Oct 2026
+  {name:'Joretha',  role:'prep'},   // added 18 Oct 2026 (owner): manager + money screens + quote/booking-form PDFs
 ];
 // ── WHO MAY DO WHAT: the one place to change it ──────────────────
 //  staff   = check-out steps 1–4 (prep, mechanical, camping, inspection) — no contracts, check-ins, office pages
@@ -224,7 +225,7 @@ const STAFF_ROSTER=[
 //             and the Documentation page only (Beverly, since 12 Oct 2026; Christina 3–11 Oct 2026)
 // Simon removed from the tablet 3 Oct 2026 (owner's request).
 // Beverly: manager from 16 Oct 2026 (owner: "beverly can complete full check in and check out"); was 'contract' 12–16 Oct
-const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Beverly:'manager','Joe':'manager',Peter:'peter'};
+const ROLE={Bonga:'staff',Dixon:'staff',Vince:'staff',Beverly:'manager',Joretha:'manager','Joe':'manager',Peter:'peter'};
 const NO_HANDOVER=[];
 function roleOf(n){return ROLE[n]||'staff';}
 function namesWithRole(){var r=[].slice.call(arguments);return STAFF_ROSTER.map(function(x){return x.name;}).filter(function(n){return r.indexOf(roleOf(n))>=0;});}
@@ -811,7 +812,7 @@ function isAdmin(){ return !!(APP_USER && roleOf(APP_USER.name)==='peter'); }
 // on the management list (Supabase app_settings.tablet_doc_viewers), logs every look in
 // doc_access_log and hands back 5-minute links. The PIN is asked once and kept in memory
 // (never stored) for 10 minutes. Change who may see them in BOTH places.
-const DOC_VIEWERS=['Peter','Joe'];
+const DOC_VIEWERS=['Peter','Joe','Joretha'];
 function canSeeBookingDocs(){ return !!(APP_USER&&DOC_VIEWERS.indexOf(APP_USER.name)>=0); }
 var _docPin=null;   // {name,pin,at} — memory only
 function tdBtn(bid,client){
@@ -831,7 +832,7 @@ var QM_SEC=['security_fuel','security_cross_border','security_other'],QM_RENT=['
 var QM_CAT={booking_deposit:'Booking deposit',rental_payment:'Rental payment',security_fuel:'Fuel & admin deposit',security_cross_border:'Cross-border deposit',security_other:'Security deposit (insurance)',other:'Other'};
 function qmN(x){var n=Math.round(Number(x||0)*100)/100;return 'N$ '+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});}
 function qmMeth(m){m=String(m||'');return /adumo_link/i.test(m)?'Adumo link':/adumo/i.test(m)?'Adumo':/swipe|card/i.test(m)?'Card machine':/cash/i.test(m)?'Cash':/eft|bank/i.test(m)?'EFT':m;}
-var QM_VIEWERS=['Peter','Joe','Beverly'];   // owner 18 Oct: prices and payments are for these three only
+var QM_VIEWERS=['Peter','Joe','Beverly','Joretha'];   // owner 18 Oct: prices and payments are for these three only
 function canSeeMoney(){return !!(APP_USER&&QM_VIEWERS.indexOf(APP_USER.name)>=0);}
 function qmBtn(bid,client,key){
   if(!canSeeMoney()||(!bid&&!key))return '';
@@ -839,7 +840,7 @@ function qmBtn(bid,client,key){
   return '<button onclick="event.stopPropagation();qmOpen(\''+a(bid)+'\',\''+a(client)+'\',\''+a(key)+'\')" style="margin-left:10px;padding:10px 16px;border-radius:22px;border:2px solid #15803d;background:#dcfce7;color:#14532d;font-size:15px;font-weight:900;cursor:pointer;">💰 Quote &amp; payments</button>';
 }
 async function qmOpen(bid,client,key){
-  if(!canSeeMoney()){toast('Only Peter, Joe and Beverly can view the quote and payments','err');return;}
+  if(!canSeeMoney()){toast('Only Peter, Joe, Beverly and Joretha can view the quote and payments','err');return;}
   tdShell('💰 '+_bx(client||'Booking')+' — quote &amp; payments','<div style="padding:14px;color:var(--g5);">Loading from the Desktop APP…</div>');
   var d=null,err='';
   try{var r=await withTimeout(SB.rpc('tablet_booking_money',{p_bid:bid||null,p_key:key||null}),20000);
@@ -7259,7 +7260,7 @@ function coFinishCheck(refresh){
 // tablet-payments (status without PIN; record/link need the staff member's PIN). Peter alone can release
 // with money still owing, with a reason — management is alerted.
 var PAY_ST={};
-var PAY_STAFF=['Joe','Peter','Beverly'];
+var PAY_STAFF=['Joe','Peter','Beverly','Joretha'];
 function payFmt(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 async function payLoad(bid,force){
   if(!bid)return null;
