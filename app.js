@@ -702,21 +702,51 @@ async function backupData(){
     return data;
   }catch(e){return null;}
 }
+// 18 Oct 2026: "not working to backup". The file download ran only after reading every table
+// TWICE (backupData, then backupToCloud read them all again) — 10–30 s with no sign of life, and by
+// then Safari/iPad and Fully (Blackview) no longer count it as a tap and silently drop the download.
+// Now: read once, show progress, upload the same copy off the tablet, then offer the file with a
+// fresh tap (works everywhere) plus a link to the cloud copy (works in Fully, where blob files don't).
+var _bkBusy=false;
 async function backupNow(auto){
+  if(_bkBusy){toast('Backup is already being made…');return false;}
+  _bkBusy=true;
   try{
+    if(!auto)toast('💾 Making the backup… (can take up to a minute)');
     var data=await backupData();
     if(!data)throw new Error('could not read the records');
-    try{await backupToCloud(true);}catch(e){}     // keep the off-tablet copy current as well
+    var n=(data.checkouts||[]).length+(data.checkins||[]).length+(data.rental_contracts||[]).length;
+    if(!n&&!(data.bookings||[]).length)throw new Error('no records came back — check the internet');
     var name='gorent-backup-'+localYMD()+'.json';
     var blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
     var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();
-    setTimeout(function(){URL.revokeObjectURL(url);a.remove();},2000);
+    var cloud=await backupUpload(data);                     // same copy, no second read
+    var signed='';
+    if(cloud){try{var su=await SB.storage.from('client-docs').createSignedUrl(cloud,3600,{download:name});signed=(su&&su.data&&su.data.signedUrl)||'';}catch(e){}}
     try{localStorage.setItem('gorent_backup_day',localYMD());}catch(e){}
-    var n=(data.checkouts||[]).length+(data.checkins||[]).length+(data.rental_contracts||[]).length;
-    toast('💾 Backup saved to this computer — '+n+' records','ok');
+    if(auto){URL.revokeObjectURL(url);return true;}
+    backupSaveBox(name,url,signed,n,blob.size,!!cloud);
     return true;
-  }catch(e){ if(!auto)toast('Backup failed: '+e.message,'err'); return false; }
+  }catch(e){ if(!auto)toast('Backup failed: '+(e&&e.message||e),'err'); return false; }
+  finally{_bkBusy=false;}
+}
+function backupSaveBox(name,url,signed,n,size,cloudOk){
+  var old=document.getElementById('bk-box');if(old)old.remove();
+  var d=document.createElement('div');d.id='bk-box';
+  d.setAttribute('style','position:fixed;inset:0;z-index:2147482000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:16px;');
+  var btn='display:block;text-align:center;padding:14px 16px;border-radius:10px;font-size:16px;font-weight:900;text-decoration:none;margin-top:10px;';
+  d.innerHTML='<div style="background:#fff;color:#111;border-radius:14px;max-width:440px;width:100%;padding:18px 18px 14px;box-shadow:0 10px 40px rgba(0,0,0,.4);">'
+    +'<div style="font-size:18px;font-weight:900;">💾 Backup ready</div>'
+    +'<div style="font-size:14px;margin-top:6px;color:#333;">'+n+' records · '+Math.max(1,Math.round(size/1024))+' KB'
+    +(cloudOk?' · also saved off the tablet ☁️':'')+'</div>'
+    +'<a id="bk-save" href="'+url+'" download="'+name+'" style="'+btn+'background:#145c30;color:#fff;">💾 Save the backup file</a>'
+    +(signed?'<a href="'+signed+'" style="'+btn+'background:#fff;color:#145c30;border:2px solid #145c30;">⬇️ Not saving? Download from the cloud copy</a>':'')
+    +'<div style="font-size:12px;color:#555;margin-top:8px;">The file goes to the Downloads folder ('+name+').</div>'
+    +'<button id="bk-close" style="'+btn+'width:100%;border:none;background:#eee;color:#111;cursor:pointer;">← Back</button></div>';
+  document.body.appendChild(d);
+  var close=function(){d.remove();setTimeout(function(){URL.revokeObjectURL(url);},60000);};
+  d.querySelector('#bk-close').onclick=close;
+  d.querySelector('#bk-save').addEventListener('click',function(){toast('💾 Backup saved — '+n+' records','ok');setTimeout(close,1500);});
 }
 function backupOnOpen(){
   try{
@@ -732,11 +762,21 @@ async function backupToCloud(auto){
   try{
     var data=await backupData();
     if(!data)return false;
+    var path=await backupUpload(data,auto);
+    if(!path)return false;
+    var n=(data.checkouts||[]).length+(data.checkins||[]).length+(data.rental_contracts||[]).length;
+    if(!auto)toast('\u2601\uFE0F Backup saved off the tablet \u2014 '+n+' records','ok');
+    return true;
+  }catch(e){ if(!auto)toast('Backup failed: '+(e&&e.message||e),'err'); return false; }
+}
+// Upload one backup copy to storage; returns its path, or '' if it failed.
+async function backupUpload(data,auto){
+  try{
     var day=localYMD();
     var path='backups/gorent-backup-'+day+'.json';
     var blob=new Blob([JSON.stringify(data)],{type:'application/json'});
     var up=await SB.storage.from('client-docs').upload(path,blob,{contentType:'application/json',upsert:true});
-    if(up&&up.error){ if(!auto)toast('Backup failed: '+up.error.message,'err'); return false; }
+    if(up&&up.error)return '';
     try{localStorage.setItem('gorent_backup_day',day);}catch(e){}
     // Keep only the newest 14 daily copies (12 Oct 2026: storage was full; each copy is ~3–5 MB).
     try{
@@ -744,10 +784,8 @@ async function backupToCloud(auto){
       var old=((ls&&ls.data)||[]).map(function(o){return o.name;}).filter(function(n){return /^gorent-backup-\d{4}-\d{2}-\d{2}\.json$/.test(n);}).sort().reverse().slice(7);   // keep a week (owner 14 Oct 2026: storage)
       if(old.length)await SB.storage.from('client-docs').remove(old.map(function(n){return 'backups/'+n;}));
     }catch(e){}
-    var n=(data.checkouts||[]).length+(data.checkins||[]).length+(data.rental_contracts||[]).length;
-    if(!auto)toast('\u2601\uFE0F Backup saved off the tablet \u2014 '+n+' records','ok');
-    return true;
-  }catch(e){ if(!auto)toast('Backup failed: '+(e&&e.message||e),'err'); return false; }
+    return path;
+  }catch(e){return '';}
 }
 function canSeeOverview(){ return !!(APP_USER && NO_OVERVIEW.indexOf(APP_USER.name)<0); }
 // The Documentation page: everyone who sees the overview pages, plus the contract role
