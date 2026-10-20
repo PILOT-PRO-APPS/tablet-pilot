@@ -1865,7 +1865,7 @@ function bkToVeh(b,vr,today){
     email:b.email||'',phone:b.phone||'',
     camping:camping,tent:camping,extraFuel:b.extra_fuel==='Yes',sleepingBags:camping?pax:0,fridge:camping,
     extras:[],special:remote?['Remote arrangements']:[],
-    st:(vr.status==='rented'||out)?'rented':'available',odo:vr.odo||0,dmgd:[],
+    st:(vr.status==='rented'||out)?'rented':'available',fmOut:vr.status==='rented',odo:vr.odo||0,dmgd:[],
     svc:{lastKm:vr.svc_last_km!=null?vr.svc_last_km:null,intKm:vr.svc_interval_km||10000,date:vr.svc_last_date||''},
     lic:{expiry:vr.lic_expiry||''},tyres:{lastKm:vr.tyre_last_km!=null?vr.tyre_last_km:null,intKm:(vr.tyre_interval_km&&vr.tyre_interval_km!==30000)?vr.tyre_interval_km:22000},
     blocked:vr.blocked_reason||null,bufferDays:vr.buffer_days||0,desc:vr.description||'',year:vr.year||null};
@@ -3272,7 +3272,11 @@ async function startCO(fn){
   if(!v){toast('Vehicle '+fn+' not found','err');return;}
   // Marked OUT in the Fleet Manager but never checked out on the tablet: that is exactly the
   // late collection Peter needs to finish, so it must not be a dead end.
-  if(v.st==='rented'&&!coIsDone(v)){
+  // Only the real OUT flag in the Fleet Manager counts here. v.st is also 'rented' for any booking whose
+  // pickup date has passed, so a next-morning collection (H-08 Finn Oestreich, landed 19 Oct 19:40,
+  // collecting 20 Oct) was refused for staff as "already out". Real double rentals are still stopped
+  // by dupCheckoutGate when the check-out is finished.
+  if(v.fmOut&&!coIsDone(v)){
     if(!isAdmin()){toast('Fleet Manager has '+fn+' as already out — ask Peter','err');return;}
     // A popup on every tap was disruptive — a short note is enough, the check-out just opens.
     toast(fn+' is OUT in the Fleet Manager with no tablet check-out — doing it now','warn');
