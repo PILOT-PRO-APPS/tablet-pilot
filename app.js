@@ -1656,7 +1656,13 @@ function renderCIPicker(){
   if(ci&&ci.v){drawCI();return;}
   var today=localYMD();
   var dd=function(v){return Math.round((new Date(v.rt+'T00:00:00')-new Date(today+'T00:00:00'))/86400000);};
-  var returning=FLEET.filter(function(v){var d=dd(v);return d>=0&&d<=7;}).sort(function(a,b){return a.rt>b.rt?1:-1;});
+  // A booking whose vehicle is still out with the previous client (checked out, no check-in) is not
+  // listed: tapping it filed returns under the wrong client (H-42 Monica, H-16 Antonio, Oct 2026).
+  var _blocked=function(v){return !coIsDone(v)&&!!prevOpenRental(v,45);};
+  // Overdue: checked out on the tablet, return date passed, no check-in. These used to be missing from
+  // the list altogether (only 'next 7 days' and 'early return' were shown).
+  var overdue=FLEET.filter(function(v){var d=dd(v);return v.rt&&d<0&&d>=-45&&coIsDone(v)&&!ciIsDone(v);}).sort(function(a,b){return a.rt>b.rt?1:-1;});
+  var returning=FLEET.filter(function(v){var d=dd(v);return d>=0&&d<=7&&!_blocked(v);}).sort(function(a,b){return a.rt>b.rt?1:-1;});
   // vehicles out on rental now that are due back later (early returns)
   // only vehicles that really left (checked out on the tablet, or OUT in the Fleet Manager) —
   // a booking that was never collected is not "out on rental" and cannot come back early
@@ -1664,7 +1670,7 @@ function renderCIPicker(){
   // today, collected or not, so it cannot tell.) Bookings never checked out on the tablet stay
   // listed — a vehicle may have gone out before the tablets — but last, and labelled.
   var _isOut=function(v){try{return coIsDone(v);}catch(e){return false;}};
-  var outNow=FLEET.filter(function(v){return v.pu&&v.rt&&v.pu<=today&&dd(v)>7&&!ciIsDone(v);})
+  var outNow=FLEET.filter(function(v){return v.pu&&v.rt&&v.pu<=today&&dd(v)>7&&!ciIsDone(v)&&!_blocked(v);})
     .sort(function(a,b){var oa=_isOut(a)?0:1,ob=_isOut(b)?0:1;if(oa!==ob)return oa-ob;return a.rt>b.rt?1:-1;});
   function _ciD(x){return x?new Date(x+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}):'?';}
   function row(v,early){
@@ -1672,9 +1678,10 @@ function renderCIPicker(){
     var dt=new Date(v.rt+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
     var badge=early?(_isOut(v)?'<span style="background:rgba(245,166,35,.2);color:var(--al);border:1px solid var(--am);font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;">OUT · due in '+d+' days</span>'
         :'<span style="background:var(--g2);color:var(--g5);font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;">No tablet check-out · due in '+d+' days</span>')
+      :d<0?'<span style="background:#b91c1c;color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">OVERDUE · was due '+dt+'</span>'
       :isToday?'<span style="background:#2a9d5c;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;">TODAY</span>'
       :'<span style="background:var(--g2);color:var(--g5);font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;">'+dt+'</span>';
-    var col=early?'var(--am)':isToday?'#2a9d5c':'var(--g3)';
+    var col=early?'var(--am)':d<0?'#b91c1c':isToday?'#2a9d5c':'var(--g3)';
     var srch=(v.fn+' '+(v.cl||'')+' '+(v.reg||'')).toLowerCase();
     var _ip=(typeof DR_SRV==='object'&&DR_SRV['checkin:'+(v.bid||v.fn)])||null;
     if(!_ip){try{for(var _i=0;_i<localStorage.length;_i++){var _k=localStorage.key(_i);if(_k&&_k.indexOf('ip_')===0&&_k.endsWith('_'+v.fn)){var _r=JSON.parse(localStorage.getItem(_k)||'null');if(_r&&_r.type==='checkin'){_ip={staff:_r.staff||_k.split('_')[1]};break;}}}}catch(e){}}
@@ -1691,10 +1698,14 @@ function renderCIPicker(){
       +((!_fin&&!early&&!_isOut(v))?'<div style="font-size:12px;font-weight:800;color:var(--g5);margin-top:4px;">⏸ No tablet check-out on file</div>':'')+_ipLine+'</div>'
       +'<div>'+badge+'</div></div></div>';
   }
+  var overRows=overdue.map(function(v){return row(v,false);}).join('');
   var rows=returning.map(function(v){return row(v,false);}).join('')||'<div style="padding:24px;text-align:center;color:var(--g5);font-size:13px;">No check-ins in the next 7 days</div>';
   var early=outNow.map(function(v){return row(v,true);}).join('')||'<div style="padding:16px;text-align:center;color:var(--g5);font-size:13px;">No other vehicles out on rental</div>';
   body.innerHTML='<div style="padding:16px;">'
     +'<input id="ci-find" type="search" placeholder="🔎 Find a vehicle — fleet no., client or registration" oninput="ciFilterPicker(this.value)" style="width:100%;padding:13px 14px;font-size:16px;border-radius:12px;border:2px solid var(--g3);background:var(--g0);color:var(--tx);margin-bottom:14px;">'
+    +(overRows?'<div style="font-size:13px;font-weight:900;color:#ef4444;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">⚠ Overdue — back already? Not checked in yet</div>'
+      +'<div style="font-size:12px;color:var(--g5);margin-bottom:12px;">Checked out on the tablet, return date passed, no check-in. Check these in first — the next client cannot get the vehicle until then.</div>'+overRows
+      +'<div style="height:14px;"></div>':'')
     +'<div style="font-size:13px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;">&#9664; Due back in the next 7 days</div>'+rows
     +'<div style="font-size:13px;font-weight:800;color:var(--al);text-transform:uppercase;letter-spacing:.5px;margin:22px 0 6px;">⏪ Early return — vehicles out on rental now</div>'
     +'<div style="font-size:12px;color:var(--g5);margin-bottom:12px;">Client brought it back before the due date? Tap the vehicle to check it in early.</div>'+early
@@ -1703,9 +1714,9 @@ function renderCIPicker(){
     el.addEventListener('click',function(){ if(this.dataset.bid)window._forceBid=this.dataset.bid; startCI(this.dataset.fn); });
   });
   // expected return time given at handover
-  try{var keys=returning.concat(outNow).map(function(v){return bkKey(v);});
+  try{var keys=overdue.concat(returning,outNow).map(function(v){return bkKey(v);});
     if(keys.length)SB.from('checkouts').select('booking_id,return_time,return_date_new').in('booking_id',keys).then(function(r){
-      (r&&r.data||[]).forEach(function(x){if(!x.return_time&&!x.return_date_new)return;returning.concat(outNow).forEach(function(v){if(bkKey(v)!==x.booking_id)return;
+      (r&&r.data||[]).forEach(function(x){if(!x.return_time&&!x.return_date_new)return;overdue.concat(returning,outNow).forEach(function(v){if(bkKey(v)!==x.booking_id)return;
         var el=document.querySelector('#ci-body .picker-row-ci[data-bid="'+(v.bid||'')+'"][data-fn="'+v.fn+'"] .ci-rt');if(el)el.textContent=(x.return_date_new&&x.return_date_new!==v.rt?'📅 moved to '+new Date(x.return_date_new+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+' ':'')+(x.return_time?(offHours(x.return_time)?'⚠ expected '+x.return_time+' — outside office hours, check with the client':'🕑 expected '+x.return_time):'');});});
     },function(){});}catch(e){}
 }
@@ -1925,12 +1936,41 @@ async function loadBookings(){
     return true;
   }catch(e){console.warn('loadBookings',e);return false;}
 }
+// An earlier rental of the same vehicle that was checked out on the tablet but never checked in.
+// days = how far back its return date may lie (dupCheckoutGate, which blocks Release, uses 7).
+function prevOpenRental(v,days){
+  if(!v||!v.fn||!v.pu)return null;
+  var cut=_addDays(localYMD(),-(days||7));
+  var l=FLEET.filter(function(x){return x.fn===v.fn&&x!==v&&x.pu&&x.rt&&x.pu<v.pu&&x.rt>=cut&&coIsDone(x)&&!ciIsDone(x);})
+    .sort(function(a,b){return a.pu>b.pu?1:-1;});
+  return l[0]||null;
+}
+function _poDate(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return d||'?';}}
+// Red line at the top of a check-out whose vehicle is still out with the previous client
+function coPrevOpenLine(){
+  if(!co||!co.v||co._done)return '';
+  var p=prevOpenRental(co.v,7);if(!p)return '';
+  var btn=canCheckIn()?'<button onclick="coGoPrevCI()" style="margin-left:8px;padding:6px 12px;border-radius:8px;border:none;background:#fff;color:#b91c1c;font-weight:900;font-size:13px;cursor:pointer;">Do that check-in →</button>':'';
+  return '<div id="co-prev-open" style="margin:8px 12px;padding:10px 12px;border-radius:10px;background:#b91c1c;color:#fff;font-size:14px;font-weight:800;line-height:1.35;">⛔ '+_bx(co.fn)+' is not checked in yet from '+_bx(p.cl||'the previous client')+' (due back '+_poDate(p.rt)+'). The vehicle can be prepared, but it can only be released after that check-in.'+btn+'</div>';
+}
+function coGoPrevCI(){
+  var p=co&&co.v?prevOpenRental(co.v,7):null;if(!p)return;
+  window._forceBid=p.bid||null;goPage('ci');startCI(p.fn);
+}
 // Pick the right booking when a vehicle has more than one in the window
 function pickVeh(fn,mode){
   if(window._forceBid){var f=FLEET.filter(function(x){return x.bid===window._forceBid&&x.fn===fn;})[0];window._forceBid=null;if(f)return f;}
   var list=FLEET.filter(function(x){return x.fn===fn;});
   if(list.length<2)return list[0];
   var today=localYMD();
+  // Check-in: the vehicle comes back from the rental that really went out (checked out on the tablet,
+  // no check-in yet), never from the next client's booking. Nearest-date picking filed H-42 (Tomas,
+  // back 19 Oct) under Monica's new booking on 21 Oct, and H-16 (Gabriele) under Antonio's (23 Oct 2026).
+  if(mode==='in'){
+    var open=list.filter(function(x){return x.pu&&x.pu<=today&&coIsDone(x)&&!ciIsDone(x);})
+      .sort(function(a,b){return a.pu>b.pu?1:-1;});
+    if(open.length)return open[0];
+  }
   var key=mode==='in'?'rt':'pu';
   list.sort(function(a,b){
     var da=Math.abs(new Date(a[key]+'T00:00:00')-new Date(today+'T00:00:00'));
@@ -3288,6 +3328,16 @@ async function startCO(fn){
     try{openRentalFile(bkKey(v),v.fn,v.cl||'');}catch(e){toast('Could not open the rental file','err');}
     return;
   }
+  // Previous client still not checked in: say so when the check-out STARTS, not only at Release after
+  // the client has signed (owner 23 Oct 2026: H-38, H-42, H-16). The workshop can still prepare the vehicle.
+  try{
+    var _po=prevOpenRental(v,7);window._poWarned=window._poWarned||{};
+    if(_po&&!window._poWarned[bkKey(v)]){
+      window._poWarned[bkKey(v)]=1;
+      askBox({title:'⚠ '+fn+' — previous client not checked in',danger:true,cancel:false,ok:'OK, understood',
+        text:fn+' is still out with '+(_po.cl||'the previous client')+' (due back '+_poDate(_po.rt)+') — that rental has no check-in on the tablet.\n\nYou can prepare the vehicle now, but it can only be released to '+(v.cl||'the new client')+' after that check-in is done.'+(canCheckIn()?' Use the red line at the top to do it.':' Tell the office.')});
+    }
+  }catch(e){}
   // Returning to a vehicle you left earlier: carry on where you stopped
   var _dk=v.bid||fn;
   // Work saved on this device or on another iPad/laptop: carry on from there
@@ -3628,6 +3678,7 @@ function drawCO(){
       +tdBtn(_cov.bid,_cov.cl)
       +qmBtn(_cov.bid,_cov.cl,co.fn&&_cov.pu?co.fn+'_'+_cov.pu:'')
     +'</div>'+
+    coPrevOpenLine()+
     '<div class="fhdr">'+
       // fleet number, client and the check-out badge on one line
       '<div class="fh-top">'+
@@ -7836,7 +7887,18 @@ function ciShowDone(v,r){
 }
 async function startCI(fn){
   if(!canCheckIn()){toast('🔒 Check-in is not available for '+(APP_USER?APP_USER.name:'you'),'err');return;}
-  const v=pickVeh(fn,'in');if(!v){toast('Vehicle not found','err');return;}
+  var v=pickVeh(fn,'in');if(!v){toast('Vehicle not found','err');return;}
+  // Tapped (or the list offered) the NEXT client's booking while the previous rental is still out:
+  // that return belongs to the previous client.
+  if(!coIsDone(v)&&!ciIsDone(v)){
+    var _po=prevOpenRental(v,45);
+    if(_po){
+      var _pa=await askBox({title:'⚠ This return belongs to '+(_po.cl||'the previous client'),danger:true,ok:'Check in '+(_po.cl||'that rental'),cancel:'Cancel',
+        text:fn+' went out to '+(_po.cl||'the previous client')+' on '+_poDate(_po.pu)+' (due back '+_poDate(_po.rt)+') and that rental has no check-in yet.\n\n'+(v.cl||'This booking')+' has not been checked out yet, so the vehicle coming back is '+(_po.cl||'that')+'\'s rental.'});
+      if(!_pa||!_pa.ok)return;
+      v=_po;
+    }
+  }
   // Already checked in? Show what was saved — never open a blank check-in over it
   // (a finished check-in used to reopen empty, which looked as if nothing had been saved).
   if(window._ciRedo!==bkKey(v)&&!(ci&&ci.v&&drKeyOf(ci)===(v.bid||fn)&&!ci._done)){
