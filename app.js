@@ -1125,7 +1125,7 @@ async function forceCompleteCO(fn,ev){
       force_closed_by:(APP_USER&&APP_USER.name)||'Peter',force_closed_at:now,force_closed_reason:why,
       created_at:now
     });
-    if(res&&res.error){toast('Could not close it off: '+res.error.message,'err');return;}
+    if(res&&res.error){if(!wrongRentalBox(res.error.message))toast('Could not close it off: '+res.error.message,'err');return;}
   }catch(e){toast('Could not close it off — check the connection','err');return;}
   try{await drFinish(drId('checkout',{v:v,fn:v.fn}));}catch(e){}
   try{await drFinishFleet(v.fn);}catch(e){}
@@ -1155,9 +1155,10 @@ async function forceCompleteCI(fn,bid,ev){
   try{
     var res=await SB.from('checkins').insert({booking_id:bkKey(v),fleet_no:v.fn,client:v.cl||'',manager_name:who,
       force_closed_by:who,force_closed_at:now,force_closed_reason:why,created_at:now});
-    if(res&&res.error){toast('Could not close it off: '+res.error.message,'err');return;}
+    if(res&&res.error){if(!wrongRentalBox(res.error.message))toast('Could not close it off: '+res.error.message,'err');return;}
   }catch(e){toast('Could not close it off — check the connection','err');return;}
   try{await drFinish(drId('checkin',{v:v,fn:v.fn}));}catch(e){}
+  try{overdueAlertResolve(v);}catch(e){}
   try{if(ci&&ci.fn===fn){ci={};ciStep=0;}}catch(e){}
   try{localStorage.removeItem(ipKey(fn));}catch(e){}
   await loadDoneSets();
@@ -1936,6 +1937,15 @@ async function loadBookings(){
     return true;
   }catch(e){console.warn('loadBookings',e);return false;}
 }
+// The database refuses a check-in filed under a booking that was never checked out while an earlier rental
+// of the same vehicle is still open (trigger checkins_right_rental, 23 Oct 2026). Explain it plainly.
+function wrongRentalBox(msg){
+  msg=String(msg||'');if(msg.indexOf('WRONG RENTAL')<0)return false;
+  var t=msg.replace(/^.*?WRONG RENTAL:\s*/,'');
+  askBox({title:'⛔ Saved under the wrong client',danger:true,cancel:false,ok:'OK',
+    text:t.replace(' — check in that rental.',' — that is the rental coming back.')+'\n\nNothing is lost: the work stays on this tablet. Go back to Check-In and open the vehicle again — the app opens the right rental.'});
+  return true;
+}
 // An earlier rental of the same vehicle that was checked out on the tablet but never checked in.
 // days = how far back its return date may lie (dupCheckoutGate, which blocks Release, uses 7).
 function prevOpenRental(v,days){
@@ -2077,7 +2087,7 @@ function ovSetFull(on){try{localStorage.setItem('gorent_dash_full',on?'1':'0');}
 function ovInfoToggle(){window._ovInfoOpen=!window._ovInfoOpen;renderOV();}
 function ovExpand(fn){window._ovExpanded=window._ovExpanded===fn?null:fn;renderOV();}
 
-function renderOV(){ try{ _renderOV(); } finally { try{showDepositBanner();}catch(e){} } }
+function renderOV(){ try{ _renderOV(); } finally { try{showDepositBanner();}catch(e){} try{showOverdueBanner();}catch(e){} } }
 function _renderOV(){
   const TODAY=localYMD();
   const todayD=new Date(TODAY);
@@ -2889,10 +2899,30 @@ async function drDropPhotos(id){
     for(var i=0;i<names.length;i+=100)await SB.storage.from('client-docs').remove(names.slice(i,i+100));
   }catch(e){}
 }
+// Leftover draft rows (23 Oct 2026): an emptied/old-format draft, or the draft of a rental that is already
+// finished (check-out done / check-in done), untouched for a day. They used to stay until someone tapped
+// 🗑 Reset, could show a finished job as "in progress", and a stale copy could be resumed by mistake.
+async function drSweepRows(){
+  if(!isAdmin()||!drOnline())return 0;
+  var r=await SB.from('work_drafts').select('id,kind,fleet_no,updated_at,ofn:data->o->>fn');if(r.error)return 0;
+  var cut=Date.now()-86400000,del=[];
+  ((r.data||[])).forEach(function(x){
+    if(!x||!x.id||new Date(x.updated_at||0).getTime()>cut)return;
+    if(DR_LAST&&DR_LAST[x.id])return;                       // open on this tablet right now
+    if(!x.ofn){del.push(x.id);return;}                      // empty or old format: the app ignores it
+    var i=String(x.id).indexOf(':'),kind=String(x.id).slice(0,i),key=String(x.id).slice(i+1);
+    var v=(FLEET||[]).filter(function(f){return String(f.bid||'')===key&&fnNorm(f.fn)===fnNorm(x.fleet_no||x.ofn);})[0];
+    if(!v)return;                                           // unknown booking: leave it alone
+    if((kind==='checkout'&&coIsDone(v))||(kind==='checkin'&&ciIsDone(v)))del.push(x.id);
+  });
+  for(var j=0;j<del.length;j+=50){try{await SB.from('work_drafts').delete().in('id',del.slice(j,j+50));}catch(e){}}
+  return del.length;
+}
 async function drSweepPhotos(){
   try{
     if(!isAdmin()||!drOnline())return;
     var day=localYMD();try{if(localStorage.getItem('gorent_dr_sweep')===day)return;}catch(e){}
+    try{await drSweepRows();}catch(e){}
     var w=await SB.from('work_drafts').select('id');if(w.error)return;
     var keep={};(w.data||[]).forEach(function(x){keep[String(x.id).replace(/[^A-Za-z0-9_-]/g,'_')]=1;});
     var l=await SB.storage.from('client-docs').list('drafts',{limit:1000});if(l.error)return;
@@ -8476,6 +8506,48 @@ function showDepositBanner(){
   b.onclick=openDeposits;
   ov.insertBefore(b,ov.firstChild);
 }
+// Returns not checked in (23 Oct 2026, H-38 Blakeman back 17 Oct, nothing done on the tablet):
+// checked out on the tablet, return date passed (from the morning after), no check-in.
+function overdueReturns(){
+  var today=localYMD(),cut=_addDays(today,-45);
+  return (FLEET||[]).filter(function(v){return v.rt&&v.rt<today&&v.rt>=cut&&coIsDone(v)&&!ciIsDone(v);})
+    .sort(function(a,b){return a.rt>b.rt?1:-1;});
+}
+function showOverdueBanner(){
+  var ov=document.getElementById('ov-body');if(!ov)return;
+  var old=document.getElementById('od-banner');if(old)old.remove();
+  if(!APP_USER||MANAGEMENT.indexOf(APP_USER.name)<0)return;
+  var l=overdueReturns();if(!l.length)return;
+  var b=document.createElement('div');b.id='od-banner';
+  b.setAttribute('style','margin:8px 10px 0;padding:12px 16px;border-radius:12px;border:2px solid #b91c1c;background:#b91c1c;color:#fff;font-weight:900;font-size:15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;');
+  b.innerHTML='<span>⛔ '+l.length+' vehicle'+(l.length===1?'':'s')+' back but not checked in: '
+    +l.slice(0,4).map(function(v){return _bx(v.fn)+' '+_bx(v.cl||'')+' (due '+_poDate(v.rt)+')';}).join(' · ')+(l.length>4?' …':'')
+    +'</span><span style="white-space:nowrap;">Check in →</span>';
+  b.onclick=function(){goPage('ci');};
+  ov.insertBefore(b,ov.firstChild);
+  try{overdueAlerts(l);}catch(e){}
+}
+var _odAlerted={};
+async function overdueAlerts(l){
+  if(!drOnline())return;
+  var todo=l.filter(function(v){return !_odAlerted[bkNorm(bkKey(v))];});if(!todo.length)return;
+  todo.forEach(function(v){_odAlerted[bkNorm(bkKey(v))]=1;});
+  var keys=[];todo.forEach(function(v){var k=bkKey(v);keys.push(k,bkNorm(k));var a=bkAltKey(k);if(a)keys.push(a);});
+  var r=await SB.from('management_alerts').select('booking_id').in('booking_id',keys).eq('kind','not_checked_in');
+  if(r.error)return;
+  var have={};((r.data||[])).forEach(function(x){have[bkNorm(x.booking_id)]=1;});
+  var rows=todo.filter(function(v){return !have[bkNorm(bkKey(v))];}).map(function(v){return {
+    booking_id:bkKey(v),fleet_no:v.fn,client:v.cl||'',received_by:'Tablet App',kind:'not_checked_in',
+    message:'NOT CHECKED IN — '+v.fn+'/'+(v.cl||'')+' was due back '+v.rt+' and has no check-in on the tablet. Do the check-in before the vehicle goes out again.',
+    created_at:new Date().toISOString()};});
+  if(rows.length)await SB.from('management_alerts').insert(rows);
+}
+// the alert closes itself when the check-in is saved
+function overdueAlertResolve(v){
+  try{var k=bkKey(v),ks=[k,bkNorm(k),bkAltKey(k)].filter(Boolean);
+    SB.from('management_alerts').update({resolved:true,resolved_by:(APP_USER&&APP_USER.name)||'Tablet App',resolved_at:new Date().toISOString()})
+      .in('booking_id',ks).eq('kind','not_checked_in').then(function(){},function(){});}catch(e){}
+}
 function openDeposits(){goPage('rp');setTimeout(function(){var t=document.getElementById('tab-dep');if(t)t.click();},50);}
 var DEP_REASONS=['Full deposit returned','Partial deduction — new damage','Partial deduction — missing equipment','Partial deduction — fuel shortage','Partial deduction — several issues','Full deduction — major damage','Withhold pending investigation'];
 async function loadDeposits(){
@@ -9561,8 +9633,9 @@ async function completeCIRun(){
     if(_exId){_ciRes=await SB.from('checkins').update(_ciRow).eq('id',_exId).select('id');if(!_ciRes.error&&!(_ciRes.data&&_ciRes.data.length))_ciRes={error:{message:'no access to update the earlier save'}};}
     else _ciRes=await SB.from('checkins').insert(_ciRow);
   }catch(e){_ciRes={error:{message:'no connection'}};}
-  if(_ciRes&&_ciRes.error){toast('Return not saved: '+_ciRes.error.message+' — nothing lost, try again','err');ci._done=false;ci.depositPending=false;drMarkLocal('checkin',ci.fn,ci.v.cl,ci.receivedBy||'',false);return;}
+  if(_ciRes&&_ciRes.error){if(!wrongRentalBox(_ciRes.error.message))toast('Return not saved: '+_ciRes.error.message+' — nothing lost, try again','err');ci._done=false;ci.depositPending=false;drMarkLocal('checkin',ci.fn,ci.v.cl,ci.receivedBy||'',false);return;}
   try{drFinish(drId('checkin',ci));}catch(e){}
+  try{overdueAlertResolve(ci.v);}catch(e){}
   // Alert management about any return issue (damage, fuel, missing or damaged equipment)
   var _fs=(!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut);
   if(newDmg.length||_fs||missing.length||damaged.length){
