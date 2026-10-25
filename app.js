@@ -7870,7 +7870,7 @@ function handoverWAText(){
   L.push('Fuel: FULL tank of DIESEL at departure. DIESEL ONLY. Please bring the vehicle back FILLED UP COMPLETELY - fill up just before you return, we check the fuel again at the return. If not completely full, a N$250 fee plus the fuel needed is charged.');
   if(co.v.xb||c.cross_border)L.push('Cross-border: '+(co.v.xb||c.cross_border)+'. Zimbabwe: Victoria Falls only, with our written approval, via Botswana (Kazungula border). Zambia, Angola and other countries are not allowed. Breakdowns outside Namibia are your cost, and buy the third-party cover / road permit at the border.');
   L.push('','Please remember:',
-    '- Please keep to the Go Rent speed limits (GPS tracked). A few km/h over does not cancel your insurance, but after an accident the insurance company may cancel the cover if you were speeding.',
+    '- Please keep to the Go Rent speed limits (GPS tracked): speeding is the main cause of accidents and rollovers on our roads. A few km/h over does not cancel your insurance, but after an accident the insurance company may cancel the cover if you were speeding.',
     '- No-Go areas (contract 6.1), incl. driving on any beach: N$30,000 penalty and all insurance cancelled.',
     '- No driving after sunset outside towns.',
     '- Any accident or damage: call us first and get a police report within 24 hours.',
@@ -11396,7 +11396,7 @@ function buildContractHTML(c,sigUrl){
     ).join('')}
   </table>
   <div style="background:#fdf5f5;border:1px solid #e74c3c;border-radius:4px;padding:8px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;">
-    <strong>SPEEDING AND YOUR INSURANCE:</strong> Exceeding the speed limit by a small margin does not by itself cancel the insurance; GR does not cancel cover for speeding alone. However, in the event of an accident, the insurance company, which monitors the vehicle's speed by GPS, may at its sole discretion reject the claim and cancel the insurance cover on the vehicle if the vehicle was speeding. The Renter is then personally liable for the damage. GR treats GPS data as primary evidence of the vehicle's speed.
+    <strong>SPEEDING AND YOUR INSURANCE:</strong> Speeding is the main cause of accidents and rollovers on Namibian roads. Exceeding the speed limit by a small margin does not by itself cancel the insurance; GR does not cancel cover for speeding alone. However, in the event of an accident, the insurance company, which monitors the vehicle's speed by GPS, may at its sole discretion reject the claim and cancel the insurance cover on the vehicle if the vehicle was speeding. The Renter is then personally liable for the damage. GR treats GPS data as primary evidence of the vehicle's speed.
   </div>
   <div style="font-size:13px;color:#333;margin-bottom:12px;line-height:1.6;">
     <strong>4.2 GPS TRACKING &amp; EVIDENCE</strong><br>
