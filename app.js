@@ -2722,7 +2722,7 @@ function drKeepDone(t,o){
       ['At','By'].forEach(function(s2){var kk=base+s2;if(o[kk]&&!t[kk])t[kk]=o[kk];});
       // The km checked on the other tablet goes with its "checked" mark (26 Oct 2026: before, only the
       // mark came across and this copy kept the old km, so the check-out saved the last return km)
-      if(k==='odoDone'){if(o.odometerOut)t.odometerOut=o.odometerOut;if(o.odoFixedFrom)t.odoFixedFrom=o.odoFixedFrom;else delete t.odoFixedFrom;}
+      if(k==='odoDone'){if(o.odometerOut)t.odometerOut=o.odometerOut;if(o.odoFixedFrom)t.odoFixedFrom=o.odoFixedFrom;else delete t.odoFixedFrom;if(o.odoLowerOk)t.odoLowerOk=true;else delete t.odoLowerOk;}
     }
     // Names and times on their own (e.g. "Change name" cleared one): only when this copy never had them
     else if(/(By|At)$/.test(k)&&o[k]&&t[k]===undefined){t[k]=o[k];n++;}
@@ -2730,7 +2730,7 @@ function drKeepDone(t,o){
   // Km checked on both tablets: the most recent check wins (its km, name and time)
   if(o.odoDone&&t.odoDone&&o.odoAt&&(!t.odoAt||String(o.odoAt)>String(t.odoAt))&&o.odometerOut&&+o.odometerOut!==+t.odometerOut){
     t.odometerOut=o.odometerOut;t.odoAt=o.odoAt;if(o.odoBy)t.odoBy=o.odoBy;
-    if(o.odoFixedFrom)t.odoFixedFrom=o.odoFixedFrom;else delete t.odoFixedFrom;n++;
+    if(o.odoFixedFrom)t.odoFixedFrom=o.odoFixedFrom;else delete t.odoFixedFrom;if(o.odoLowerOk)t.odoLowerOk=true;else delete t.odoLowerOk;n++;
   }
   // Ticked items: each item answered on either tablet is kept
   DR_MAPS.forEach(function(m){
@@ -5795,7 +5795,7 @@ function gatherContract(){
   if(co.collectedOn&&co.collectedOn!==co.v.pu){co.contract.booked_pickup_date=co.v.pu;co.contract.collection_note='Booked '+co.v.pu+', collected '+co.collectedOn;}
   co.contract.return_date=co.v.rt;
   if(co.returnTime)co.contract.return_time=co.returnTime;
-  co.contract.odo_out=+(co.odometerOut||co.v.odo||0)||co.v.odo;   // the km confirmed/typed at check-out, not the last return km
+  co.contract.odo_out=kmInt(co.odometerOut)||kmInt(co.v.odo)||null;   // the km confirmed/typed at check-out, not the last return km
   co.contract.fuel_out=co.fuelOut;
   // whatever was chosen on the collection / return buttons is what goes on the contract
   co.contract.pickup_location=placeValue('pickupArrangement')||co.contract.pickup_location||GR_HQ;
@@ -7086,6 +7086,17 @@ function coReopen(step){
 // The km noted when the vehicle came back (check-in) is offered here. Staff confirm it against the
 // dashboard or type the correct reading before the vehicle goes out again. "Done" in the name keeps
 // it when two tablets merge (drKeepDone).
+// Km columns in the database are whole numbers: "153806.5" or an 11-digit typo made the whole save fail.
+// kmInt gives a whole number, or null for anything that cannot be a reading (never an error).
+function kmInt(x){var n=Math.round(+String(x==null?'':x).replace(/[\s,']/g,''));return (n>0&&n<10000000)?n:null;}
+// What goes on the check-out record about the km (office can see it under "Notes while out")
+function coOdoNotes(){
+  var n=[],by=(co&&co.odoBy)||(APP_USER&&APP_USER.name)||'',at=new Date().toISOString();
+  var out=kmInt(co.odometerOut),ret=co.v&&co.v.lastRet?kmInt(co.v.lastRet.km):null;
+  if(co.odoAuto)n.push({at:at,by:by,text:'🛣 Km out '+(out||0).toLocaleString()+' not ticked as checked against the dashboard — taken from the screen'});
+  if(co.odoLowerOk&&out&&ret&&out<ret)n.push({at:at,by:by,text:'🛣 Km out '+out.toLocaleString()+' is LOWER than the last return ('+ret.toLocaleString()+') — confirmed by '+by+'. Check the return km.'});
+  return n.length?n:undefined;
+}
 function coOdoSrc(v){
   var r=v&&v.lastRet;
   if(!r)return v&&v.odo?'From Fleet Manager — check the dashboard':'No previous reading — type it from the dashboard';
@@ -7122,15 +7133,26 @@ function coFreshOdo(){
   }else if(+co.odometerOut!==newKm)co.odoFixedFrom=newKm;else delete co.odoFixedFrom;
 }
 function coOdoOk(){
-  if(!co||!co.v)return;var km=+(co.odometerOut||co.v.odo||0);
+  if(!co||!co.v)return;var km=kmInt(co.odometerOut)||kmInt(co.v.odo)||0;
   if(!km){toast('Type the km from the dashboard first','err');var e=document.getElementById('co-odo-out');if(e)e.focus();return;}
+  var _r=co.v.lastRet?kmInt(co.v.lastRet.km):null;if(_r&&km<_r){coOdoTyped(km);return;}   // lower: ask once, in the app
   co.odometerOut=km;co.odoDone=true;co.odoBy=(APP_USER&&APP_USER.name)||'';co.odoAt=new Date().toISOString();
   drawCO();try{saveCOProgress();}catch(e){}
 }
-function coOdoTyped(val){
-  if(!co||!co.v)return;var km=+val||0;if(!km)return;
+// The km never blocks the check-out (owner 26 Oct 2026: "make sure that km errors don't block the checkout").
+// A lower reading is asked once in an in-app box (browser confirm() is unreliable in Fully Kiosk);
+// "Yes" keeps it and records it, "No" puts the field back.
+async function coOdoTyped(val){
+  if(!co||!co.v)return;if(String(val==null?'':val).trim()==='')return;
+  var km=kmInt(val);
+  if(!km){toast('That km reading is not possible ('+val+') — type the number on the dashboard, whole km only','err');return;}
   var ret=co.v.lastRet?+co.v.lastRet.km:0;
-  if(ret&&km<ret&&!confirm(km.toLocaleString()+' km is LOWER than the '+ret.toLocaleString()+' km noted when the vehicle came back. Is the dashboard really showing '+km.toLocaleString()+'?'))return;
+  if(ret&&km<ret){
+    var _a=await askBox({title:'🛣 Km lower than the last return',danger:true,ok:'Yes — the dashboard shows '+km.toLocaleString(),cancel:'No — type it again',
+      text:km.toLocaleString()+' km is LOWER than the '+ret.toLocaleString()+' km noted when the vehicle came back.\n\nIf the dashboard really shows '+km.toLocaleString()+', the return km was probably typed wrong — tap Yes and carry on. It is recorded for the office.'});
+    if(!_a.ok){co.odometerOut=ret;co.odoDone=false;delete co.odoBy;delete co.odoAt;delete co.odoFixedFrom;delete co.odoLowerOk;drawCO();setTimeout(function(){var e=document.getElementById('co-odo-out');if(e){e.focus();try{e.select();}catch(_){}}},150);return;}
+    co.odoLowerOk=true;
+  }else delete co.odoLowerOk;
   co.odometerOut=km;
   if(ret&&km!==ret)co.odoFixedFrom=ret;else delete co.odoFixedFrom;
   co.odoDone=true;co.odoBy=(APP_USER&&APP_USER.name)||'';co.odoAt=new Date().toISOString();
@@ -7153,7 +7175,7 @@ function coStepMissing(n){
   if(n===2){
     if(!co.equipSig)m.push('✍️ Equipment not confirmed as packed (✓ Confirm — Equipment Packed)');
   }else if(n===4){
-    if(!co.odoDone)m.push('🛣 Odo reading: check it against the dashboard (top of the screen)');
+    // Odo reading: NOT a lock any more (26 Oct 2026). Unchecked = the km shown is used at Release (odoAuto).
     if(!(v.lic&&v.lic.expiry)&&!v._licExpiry)m.push('🚗 Licence disc date missing (top of the screen)');
     if(discDuringRental(v))m.push('🚗 '+discDuringTxt(v));
     if(!d.veh)m.push('📄 Vehicle documents (disc, insurance papers) not checked');
@@ -7336,7 +7358,6 @@ function coMissing(){
   if(unPrep.length)m.push('📦 Equipment: '+unPrep.length+' item'+(unPrep.length===1?'':'s')+' not checked');
   var unMech=L_MECH.filter(function(it){return it&&it[0]!=='__SECTION__'&&!(it[0]==='__CAMPING__'&&!v.camping)&&!(co.mechItems||{})[it[1]];}).map(function(it){return it[1];});
   if(unMech.length)m.push('🔩 Mechanical: '+unMech.length+' item'+(unMech.length===1?'':'s')+' not checked');
-  if(!co.odoDone)m.push('🛣 Odo reading not checked against the dashboard');
   if(!(v.lic&&v.lic.expiry)&&!v._licExpiry)m.push('🚗 Licence disc date missing');
   if(discDuringRental(v))m.push('🚗 '+discDuringTxt(v));
   var d0=(co.drivers&&co.drivers[0])||{};
@@ -7620,6 +7641,8 @@ async function completeCO(){
   if(!drOnline()){askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the check-out when the internet is back.'});return;}
   if(!(await payGate()))return;   // the rental must be paid in full before release (Peter can override)
   if(!(await dupCheckoutGate()))return;   // the vehicle must be checked in from the previous rental (Peter can override)
+  // Km not ticked as checked: the reading on screen goes out, marked as not checked (never a block, 26 Oct 2026)
+  if(!co.odoDone){var _ka=kmInt(co.odometerOut)||kmInt(co.v.odo);if(_ka){co.odometerOut=_ka;co.odoAuto=true;}}
   var _stBefore=co.v.st;
   co._done=true;
   try{localStorage.removeItem(ipKey(co.fn));}catch(e){}
@@ -7654,7 +7677,7 @@ async function completeCO(){
     signature_override:co.sigOverride?(co.sigOverride.by+' · '+co.sigOverride.at+' · '+co.sigOverride.reason):null,
     contract_override:co._ctOverride?(co._ctOverride.by+' · '+co._ctOverride.at+' · waived: '+co._ctOverride.items.join('; ')+' · reason: '+co._ctOverride.reason):null,
     manager_name:co.mgmtBy, manager_signed_at:(co.mgmtSig||co.mgmtCleared)?new Date().toISOString():null,
-    odo_out:co.odometerOut||co.v.odo, unchecked_prep:uncPrep, unchecked_mech:uncMech,
+    odo_out:kmInt(co.odometerOut)||kmInt(co.v.odo), out_notes:coOdoNotes(), unchecked_prep:uncPrep, unchecked_mech:uncMech,
     damage_panels:co.dmgd, prep_checklist:co.prepItems||{}, mech_checklist:co.mechItems||{}, mech_by:co.mechCheckBy||null, mech_who:co.mechWho||{}, return_time:co.returnTime||null,
     return_date_new:(co.contract&&co.contract.return_place_date&&co.contract.return_place_date!==co.v.rt&&co.contract.return_location&&co.contract.return_location!==GR_HQ)?co.contract.return_place_date:undefined, return_place:(co.contract&&co.contract.return_location)||null, return_address:(co.contract&&co.contract.return_address)||null, return_place_time:(co.contract&&co.contract.return_place_time)||null, doc_checks:co.docItems||{},
     created_at:new Date().toISOString(),
@@ -8041,6 +8064,30 @@ async function startCI(fn){
 // Km at departure for this rental: the booking's own check-out reading (loaded in startCI) comes first.
 // The check-in row used to save the vehicle's last known km (ci.v.odo) instead, so odo_out / km_driven
 // in the checkins table were wrong whenever the two differed (H-05, 14 Oct 2026: 143,240 km instead of 2,871).
+// Km at check-in never blocks the return (owner 26 Oct 2026). A reading LOWER than at check-out is asked
+// once in an in-app box; "Yes" keeps it (km driven saved empty, a note for the office), "No" clears the box.
+function ciKmDriven(){var i=kmInt(ci.odoIn),o=kmInt(ciOdoOut());return (i&&o&&i>=o)?i-o:null;}
+function ciKmNote(base){
+  var i=kmInt(ci.odoIn),o=kmInt(ciOdoOut());
+  if(!(ci.odoLowOk&&i&&o&&i<o))return base||null;
+  var t='🛣 Km in '+i.toLocaleString()+' is LOWER than km out '+o.toLocaleString()+' — confirmed by '+(ci.odoLowBy||ci.receivedBy||'')+'. One of the two readings is wrong; km driven left empty.';
+  return base?base+'\n'+t:t;
+}
+async function ciOdoLowAsk(){
+  var i=kmInt(ci.odoIn),o=kmInt(ciOdoOut());if(!(i&&o&&i<o)){delete ci.odoLowOk;return true;}
+  var a=await askBox({title:'🛣 Km lower than at check-out',danger:true,ok:'Yes — the dashboard shows '+i.toLocaleString(),cancel:'No — type it again',
+    text:i.toLocaleString()+' km is LOWER than the '+o.toLocaleString()+' km written at check-out.\n\nIf the dashboard really shows '+i.toLocaleString()+', the check-out km was probably typed wrong. Tap Yes and carry on — the office gets a note to check it.'});
+  if(a.ok){ci.odoLowOk=true;ci.odoLowBy=(APP_USER&&APP_USER.name)||ci.receivedBy||'';try{drTick();}catch(e){}return true;}
+  ci.odoIn='';delete ci.odoLowOk;var e=document.getElementById('ci-odo');if(e){e.value='';e.focus();}
+  var d=document.getElementById('ci-km-disp');if(d)d.textContent='';return false;
+}
+async function ciOdoChanged(val){
+  if(!ci||!ci.v)return;if(String(val==null?'':val).trim()==='')return;
+  var k=kmInt(val);if(!k){toast('That km reading is not possible ('+val+') — type the number on the dashboard, whole km only','err');return;}
+  ci.odoIn=k;var o=kmInt(ciOdoOut());
+  if(o&&k<o&&!ci.odoLowOk)await ciOdoLowAsk();
+  try{guideUpdate&&guideUpdate();}catch(e){}
+}
 function ciOdoOut(){try{return +(ci.odometerOut||(ci.v&&ci.v.odo)||0)||0;}catch(e){return 0;}}
 function drawCI(){
   try{_drawCI();}finally{try{ciQuickInject();}catch(e){}}
@@ -8156,8 +8203,8 @@ function ciStep0_CI(){
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
     <div>
       <div style="font-size:13px;font-weight:700;color:var(--g5);text-transform:uppercase;margin-bottom:4px;">🛣 Odometer IN (km) *</div>
-      <input type="number" inputmode="numeric" pattern="[0-9]*" id="ci-odo" value="${r.odoIn||''}" placeholder="Type km from dashboard" onfocus="this.select()"
-        oninput="ci.odoIn=+this.value||'';var _o=ci.odometerOut||ci.v.odo||0,_k=(+this.value)-_o;document.getElementById('ci-km-disp').textContent=(this.value&&_o&&_k>=0)?_k.toLocaleString()+' km driven':(this.value&&_o&&_k<0?'⚠ Lower than km out — check the reading':'')"
+      <input type="number" inputmode="numeric" pattern="[0-9]*" id="ci-odo" value="${r.odoIn||''}" placeholder="Type km from dashboard" onfocus="this.select()" onchange="ciOdoChanged(this.value)"
+        oninput="ci.odoIn=+this.value||'';delete ci.odoLowOk;var _o=ci.odometerOut||ci.v.odo||0,_k=(+this.value)-_o;document.getElementById('ci-km-disp').textContent=(this.value&&_o&&_k>=0)?_k.toLocaleString()+' km driven':(this.value&&_o&&_k<0?'⚠ Lower than km out — check the reading':'')"
         style="padding:12px 14px;font-size:16px;font-weight:700;background:var(--g0);border:2px solid var(--gb);border-radius:var(--rs);color:var(--tx);width:100%;">
       <div id="ci-km-disp" style="font-size:14px;color:var(--se);margin-top:4px;font-weight:700;">${km>0?km.toLocaleString()+' km driven':''}</div>
       <div style="font-size:13px;color:var(--g5);margin-top:2px;">ODO out: ${(ci.odometerOut||v.odo)?Number(ci.odometerOut||v.odo).toLocaleString()+' km':'not recorded'}</div>
@@ -8778,12 +8825,12 @@ async function signRetCheck(){
   const domVal=(function(){var _e=document.getElementById('ci-rcv');return _e?_e.value:undefined;})();if(domVal)ci.receivedBy=domVal;
   if(!ci.receivedBy){toast('Select your name first','err');return;}
   if(!hasSig('ci-ret-sig')){toast('Sign below to confirm','err');return;}
-  ci.odoIn=+(function(){var _e=document.getElementById('ci-odo');return _e?_e.value:undefined;})()||ci.odoIn;
+  ci.odoIn=kmInt((function(){var _e=document.getElementById('ci-odo');return _e?_e.value:undefined;})())||kmInt(ci.odoIn)||'';
   ci.fuelIn=(function(){var _e=document.getElementById('ci-fuel');return _e?_e.value:undefined;})()||ci.fuelIn;
   if(!ci.fuelIn){toast('Check the fuel gauge and select the fuel level','err');return;}
   if(!ci.odoIn){toast('Type the odometer reading (km) from the dashboard','err');return;}
   var _oo=ci.odometerOut||ci.v.odo||0;
-  if(_oo&&ci.odoIn<_oo){toast('Odometer IN ('+ci.odoIn+') is lower than km OUT ('+_oo+') — check the reading','err');return;}
+  if(_oo&&ci.odoIn<_oo&&!ci.odoLowOk){if(!(await ciOdoLowAsk()))return;}
   if(!retSt['WiFi device']){toast('Check the WiFi device first (top of this step)','err');return;}
   if(!retSt['USB charger']){toast('Check the USB charger first (top of this step)','err');return;}
   if(!ci.custSig){toast('The client signs first (end of Step 1)','err');return;}
@@ -9644,15 +9691,15 @@ async function completeCIRun(){
   const damaged=allItems.filter(i=>retSt[i]==='dmg');
   var _ciRow={
     booking_id:ci.fn+'_'+ci.v.pu,fleet_no:ci.fn,client:ci.v.cl,
-    received_by:ci.receivedBy,odo_in:(+ci.odoIn||null),odo_out:(+ciOdoOut()||null),
-    km_driven:((+ci.odoIn&&+ciOdoOut())?(+ci.odoIn)-(+ciOdoOut()):null),
+    received_by:ci.receivedBy,odo_in:kmInt(ci.odoIn),odo_out:kmInt(ciOdoOut()),
+    km_driven:ciKmDriven(),
     force_closed_by:ci.forceClosedBy||null,force_closed_at:ci.forceClosedAt||null,force_closed_reason:ci.forceClosedReason||null,fuel_in:ci.fuelIn,fuel_out:ci.v.fuelOut,
     fuel_short:(!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut),new_damage:newDmg.length>0,
     new_damage_panels:newDmg,equipment_status:retSt,
     missing_items:missing,damaged_items:damaged,
     customer_signed_at:ci.custSig?new Date().toISOString():null,
     manager_name:ci.mgmtName,manager_signed_at:(ci.mgmtSig||ci.mgmtDecided)?new Date().toISOString():null,
-    deposit_decision:ci.deposit,manager_notes:ci.mgmtNotes,client_notes:ci.notes,
+    deposit_decision:ci.deposit,manager_notes:ciKmNote(ci.mgmtNotes),client_notes:ci.notes,
     deposit_status:ci.depositPending?'pending':((ci.mgmtSig||ci.mgmtDecided)?'decided':null),deposit_due:ci.depositPending?ci.depositDue:null,
     deposit_decided_by:(!ci.depositPending&&(ci.mgmtSig||ci.mgmtDecided))?ci.mgmtName:null,deposit_decided_at:(!ci.depositPending&&(ci.mgmtSig||ci.mgmtDecided))?new Date().toISOString():null,
     fuel_receipts:ci.fuelPhotos||[],
@@ -9687,7 +9734,7 @@ async function completeCIRun(){
     <div class="chg-veh-bar"><button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}</div>
     <div class="done"><div class="done-ico">${hasIssues?'⚠️':'✅'}</div>
       <div class="done-title">Return Complete</div>
-      <div class="done-sub">${ci.fn} · ${ci.v.cl}<br>${(+ci.odoIn&&+ciOdoOut())?((+ci.odoIn)-(+ciOdoOut())).toLocaleString()+' km · ':''}Received by ${ci.receivedBy||'—'}${ci.forceClosedBy?'<br><b style="color:var(--al)">Closed off by '+_bx(ci.forceClosedBy)+' with checks missing</b>':''}</div>
+      <div class="done-sub">${ci.fn} · ${ci.v.cl}<br>${ciKmDriven()!=null?ciKmDriven().toLocaleString()+' km · ':''}Received by ${ci.receivedBy||'—'}${ci.forceClosedBy?'<br><b style="color:var(--al)">Closed off by '+_bx(ci.forceClosedBy)+' with checks missing</b>':''}</div>
     </div>
     ${hasIssues?`<div style="background:var(--rg);border:2px solid var(--re);border-radius:var(--r);padding:14px;margin-bottom:12px">
       <div style="font-size:14px;font-weight:800;color:var(--rl);margin-bottom:8px">${WARN_TRI} Recover from ${ci.v.cl}</div>
@@ -12046,7 +12093,7 @@ function guideCI(){
     if(!retSt['USB charger'])return t('Is the USB charger back? Tap Returned or Not returned.',document.getElementById('ci-usb-box'));
     if(!ci.odoIn)return t('Type the kilometres from the dashboard.',document.getElementById('ci-odo'));
     var _oo0=ci.odometerOut||(ci.v&&ci.v.odo)||0;
-    if(_oo0&&+ci.odoIn<_oo0)return t('The km ('+ci.odoIn+') are LOWER than at check-out ('+_oo0+') — check the dashboard and type it again.',document.getElementById('ci-odo'));
+    if(_oo0&&+ci.odoIn<_oo0&&!ci.odoLowOk)return t('The km ('+ci.odoIn+') are LOWER than at check-out ('+_oo0+') — check the dashboard. Type it again, or tap outside the box to keep it.',document.getElementById('ci-odo'));
     if(!ci.fuelIn)return t('Look at the fuel gauge and choose the level.',document.getElementById('ci-fuel'));
     var items=L_CI.filter(function(x,i){return x[0]!=='__SECTION__'&&x[0]!=='__OPTIONAL__'&&ciShow(x,i)&&ciStep1Item(i);});
     for(var j=0;j<items.length;j++){var l=items[j][1],x=ci.retItems[l];if(!(x&&(x.st!==undefined?x.st:x))){
@@ -12065,7 +12112,7 @@ function guideCI(){
   var _eqo=ciOpenBeforeSign().filter(function(o){return o.s===2;});
   if(_eqo.length)return {done:true,text:'Equipment first: '+_eqo[0].t,next:'← Step 2 · Equipment',go:function(){ciStep=2;drawCI();window.scrollTo(0,0);}};
   var _oo3=ci.odometerOut||(ci.v&&ci.v.odo)||0;
-  if(!ci.retSig&&_oo3&&+ci.odoIn<_oo3)return {done:true,text:'The km ('+ci.odoIn+') are lower than at check-out ('+_oo3+') — fix it in Step 1',next:'← Step 1 · km',go:function(){ciStep=0;drawCI();setTimeout(function(){var e=document.getElementById('ci-odo');if(e){e.scrollIntoView({block:'center'});e.focus();}},150);}};
+  if(!ci.retSig&&_oo3&&+ci.odoIn<_oo3&&!ci.odoLowOk)return {done:true,text:'The km ('+ci.odoIn+') are lower than at check-out ('+_oo3+') — fix it in Step 1',next:'← Step 1 · km',go:function(){ciStep=0;drawCI();setTimeout(function(){var e=document.getElementById('ci-odo');if(e){e.scrollIntoView({block:'center'});e.focus();}},150);}};
   if(!ci.retSig)return t('Check the report, then YOU sign to confirm you received the vehicle.',document.getElementById('ci-staff-sign'));
   var x2=ciIssues();
   if(x2.fuelShort&&!(ci.fuelPhotos&&ci.fuelPhotos.length))return t('Fuel is short: take a photo of the fuel receipt.',gFind(R,'div',function(e){return /Fuel receipt/.test(e.textContent)&&e.querySelector('input[type=file]')&&e.textContent.length<400;}));
