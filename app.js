@@ -2720,9 +2720,17 @@ function drKeepDone(t,o){
       t[k]=o[k];n++;
       var base=k.replace(/(Sig|Signed|Done|Cleared)$/,'');
       ['At','By'].forEach(function(s2){var kk=base+s2;if(o[kk]&&!t[kk])t[kk]=o[kk];});
+      // The km checked on the other tablet goes with its "checked" mark (26 Oct 2026: before, only the
+      // mark came across and this copy kept the old km, so the check-out saved the last return km)
+      if(k==='odoDone'){if(o.odometerOut)t.odometerOut=o.odometerOut;if(o.odoFixedFrom)t.odoFixedFrom=o.odoFixedFrom;else delete t.odoFixedFrom;}
     }
     // Names and times on their own (e.g. "Change name" cleared one): only when this copy never had them
     else if(/(By|At)$/.test(k)&&o[k]&&t[k]===undefined){t[k]=o[k];n++;}
+  }
+  // Km checked on both tablets: the most recent check wins (its km, name and time)
+  if(o.odoDone&&t.odoDone&&o.odoAt&&(!t.odoAt||String(o.odoAt)>String(t.odoAt))&&o.odometerOut&&+o.odometerOut!==+t.odometerOut){
+    t.odometerOut=o.odometerOut;t.odoAt=o.odoAt;if(o.odoBy)t.odoBy=o.odoBy;
+    if(o.odoFixedFrom)t.odoFixedFrom=o.odoFixedFrom;else delete t.odoFixedFrom;n++;
   }
   // Ticked items: each item answered on either tablet is kept
   DR_MAPS.forEach(function(m){
@@ -3634,6 +3642,7 @@ function campPax(v){try{var n=parseInt(String((v&&v.pax)||'').replace(/\D/g,''),
 function drawCO(){
   try{coAutoWho();}catch(e){}
   try{coFillFromBooking();}catch(e){}
+  try{coFreshOdo();}catch(e){}
   sigScope('co:'+((co&&co.fn)||''));   // ink belongs to this vehicle's check-out only
   // Safety guard
   if(!co||!co.v){
@@ -5786,7 +5795,7 @@ function gatherContract(){
   if(co.collectedOn&&co.collectedOn!==co.v.pu){co.contract.booked_pickup_date=co.v.pu;co.contract.collection_note='Booked '+co.v.pu+', collected '+co.collectedOn;}
   co.contract.return_date=co.v.rt;
   if(co.returnTime)co.contract.return_time=co.returnTime;
-  co.contract.odo_out=co.v.odo;
+  co.contract.odo_out=+(co.odometerOut||co.v.odo||0)||co.v.odo;   // the km confirmed/typed at check-out, not the last return km
   co.contract.fuel_out=co.fuelOut;
   // whatever was chosen on the collection / return buttons is what goes on the contract
   co.contract.pickup_location=placeValue('pickupArrangement')||co.contract.pickup_location||GR_HQ;
@@ -7083,8 +7092,34 @@ function coOdoSrc(v){
   var d='';try{d=new Date(r.at).toLocaleDateString('en-GB',{day:'numeric',month:'short'});}catch(e){}
   var t='↩ Returned at '+Number(r.km).toLocaleString()+' km · '+d+(r.by?' ('+_bx(r.by)+')':'');
   if(r.drove!=null&&r.drove>=0)t+=' · last client drove '+Number(r.drove).toLocaleString()+' km';
-  if(co&&co.odoFixedFrom)t+=' · corrected from '+Number(co.odoFixedFrom).toLocaleString();
+  if(co&&co.odoFixedFrom){
+    var _d=(+co.odometerOut||0)-(+co.odoFixedFrom||0);
+    t+=_d>0?' · now +'+_d.toLocaleString()+' km since the return (driven in town)':' · corrected from '+Number(co.odoFixedFrom).toLocaleString();
+  }
   return t;
+}
+// A check-out started (or saved as a draft) BEFORE the vehicle's latest check-in keeps the old km in its
+// own copy of the vehicle (co.v). Bring the latest return km in whenever the check-out is drawn
+// (owner 26 Oct 2026: "we put in the km when check in, the system must store that km").
+function coFreshOdo(){
+  if(!co||!co.v||co._done||typeof FLEET==='undefined')return;
+  var f=null;
+  for(var i=0;i<FLEET.length;i++){var x=FLEET[i];
+    if(co.v.bid&&x.bid===co.v.bid){f=x;break;}
+    if(!f&&fnNorm(x.fn)===fnNorm(co.fn)&&x.lastRet)f=x;}
+  if(!f||!f.lastRet||!f.lastRet.km)return;
+  var o=co.v.lastRet;
+  if(o&&String(o.at)===String(f.lastRet.at)&&+o.km===+f.lastRet.km)return;
+  if(o&&o.at&&f.lastRet.at&&String(f.lastRet.at)<String(o.at))return;   // never go back to an older return
+  var oldKm=+(co.v.odo||0),newKm=+f.lastRet.km;
+  co.v.lastRet=f.lastRet;co.v.odo=newKm;
+  if(!co.odoDone){
+    if(!+co.odometerOut||+co.odometerOut===oldKm)co.odometerOut=newKm;   // not typed yet: show the new return km
+  }else if(+co.odometerOut<newKm){
+    // the km "checked" earlier is lower than the return that came in since then: check it again
+    co.odoDone=false;delete co.odoBy;delete co.odoAt;delete co.odoFixedFrom;co.odometerOut=newKm;
+    try{toast('Km updated from the latest check-in ('+newKm.toLocaleString()+') — check it against the dashboard again','err');}catch(e){}
+  }else if(+co.odometerOut!==newKm)co.odoFixedFrom=newKm;else delete co.odoFixedFrom;
 }
 function coOdoOk(){
   if(!co||!co.v)return;var km=+(co.odometerOut||co.v.odo||0);
