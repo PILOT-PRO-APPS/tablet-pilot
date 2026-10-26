@@ -8485,8 +8485,8 @@ function ciReportHeader(){
       +row('Client signed',r.sigOverride?('⚠ CLOSED BY '+_bx(r.sigOverride.by)+' — no client signature'):('✅ '+_bx(r.custAt||'')),!!r.sigOverride)
     +'</div>'
     +'<div style="padding:12px 16px;font-size:15px;font-weight:900;background:'+(x.any?'var(--rg)':'var(--sg)')+';color:'+(x.any?'var(--rl)':'var(--se)')+';">'
-      +(x.any?'⚠ ISSUES FOUND — management decides the deposit (by '+fmtDay(nextWorkingDay())+')'
-             :'✅ ALL CLEAR — full deposit can be released')
+      +(x.any?'⚠ ISSUES FOUND — the office follows up'
+             :'✅ ALL CLEAR')
     +'</div></div>';
 }
 function ciGroup(n){return n<=1?0:n===2?2:3;}
@@ -8514,22 +8514,11 @@ function ciCloseSection(){
     +'</div>';
 }
 // ONE way to close a check-in: "Finish return".
-// Clean return → full deposit released now. Issues → decide the deposit now, or leave it for the
-// Deposits list (due the next working day). Only people who may do check-ins (managers, Peter) get here.
+// No deposit choice on the tablet: clean return saved as before, issues go to the office (pending).
 function ciFinishBox(hasIssues){
-  if(!isManagement())return '<div style="background:var(--g1);border:3px solid '+(hasIssues?'var(--re)':'var(--gb)')+';border-radius:var(--r);padding:14px;">'
-    +'<div style="font-weight:800;margin-bottom:8px;">Deposit: '+(hasIssues?'⏳ management decides (by '+fmtDay(nextWorkingDay())+')':'✅ Full deposit returned')+'</div>'
-    +'<div class="fi"><label>Notes for management (optional)</label><textarea id="ci-hnotes" oninput="ci.mgmtNotes=this.value" placeholder="What happened, what the client said, quotes needed..." style="min-height:56px">'+_bx(ci.mgmtNotes||'')+'</textarea></div>'
-    +'<button class="btn '+(hasIssues?'r':'g')+'" style="font-size:17px;padding:18px;'+(hasIssues?'background:#c0392b;color:#fff;':'')+'" onclick="ciFinish()">✅ Finish return</button>'
-    +'<div style="font-size:12px;color:var(--g5);margin-top:6px;text-align:center;">Closed by '+_bx((APP_USER&&APP_USER.name)||'')+' · the client gets the return report on WhatsApp next</div>'
-    +'</div>';
-  var sel=ci.finishDep||(hasIssues?'':'Full deposit returned');
-  var opts=(hasIssues?[['','⏳ Decide later — goes to the Deposits list (by '+fmtDay(nextWorkingDay())+')']]:[])
-    .concat(DEP_REASONS.map(function(o){return [o,o];}));
+  // Owner 26 Oct: no deposit / refund on the tablet check-in — the office (Desktop APP) keeps track of deposits
   return '<div style="background:var(--g1);border:3px solid '+(hasIssues?'var(--re)':'var(--gb)')+';border-radius:var(--r);padding:14px;">'
-    +'<div class="fi"><label>Deposit</label><select id="ci-dep" onchange="ci.finishDep=this.value" style="color-scheme:light">'
-      +opts.map(function(o){return '<option value="'+_bx(o[0])+'"'+(o[0]===sel?' selected':'')+'>'+_bx(o[1])+'</option>';}).join('')
-    +'</select></div>'
+    +(hasIssues?'<div style="font-weight:800;margin-bottom:8px;color:var(--rl);">⚠ Issues found — the office follows up</div>':'')
     +'<div class="fi"><label>Notes for management (optional)</label><textarea id="ci-hnotes" oninput="ci.mgmtNotes=this.value" placeholder="What happened, what the client said, quotes needed..." style="min-height:56px">'+_bx(ci.mgmtNotes||'')+'</textarea></div>'
     +'<button class="btn '+(hasIssues?'r':'g')+'" style="font-size:17px;padding:18px;'+(hasIssues?'background:#c0392b;color:#fff;':'')+'" onclick="ciFinish()">✅ Finish return</button>'
     +'<div style="font-size:12px;color:var(--g5);margin-top:6px;text-align:center;">Closed by '+_bx((APP_USER&&APP_USER.name)||'')+' · the client gets the return report on WhatsApp next</div>'
@@ -8545,7 +8534,7 @@ async function ciFinishRun(){
   if(open.length&&!(await ciPeterOverride(open)))return;
   if(!ci.forceClosedBy&&!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut&&!(ci.fuelPhotos&&ci.fuelPhotos.length)){toast('Fuel is short — take a photo of the fuel receipt first','err');return;}
   var el=document.getElementById('ci-dep');var dec=el?el.value:(ci.finishDep||'');
-  if(!isManagement())dec='';   // staff: clean return = full deposit (below), issues = pending for management
+  dec='';   // tablet never decides the deposit (owner 26 Oct); saved as before: clean = no deposit issue, issues = pending for the office
   var n=document.getElementById('ci-hnotes');if(n)ci.mgmtNotes=n.value;
   var x=ciIssues();
   if(!x.any&&!dec)dec='Full deposit returned';
@@ -9658,7 +9647,6 @@ function ciReportHTML(){
     +row('Fuel',_bx(v.fuelOut||'Full')+' out → '+_bx(ci.fuelIn||'—')+' in')
     +row('Vehicle received by',_bx(ci.receivedBy||'—'))
     +row('Checked and signed off by',_bx(ci.mgmtName||'—'))
-    +row('Deposit decision',_bx(ci.deposit||'Full deposit returned'))
     +'</table>'
     +h('Return result')
     +(issues.length?'<ul style="font-size:14px;line-height:1.7;padding-left:20px;margin:0;">'+issues.join('')+'</ul>':'<p style="font-size:14px;color:#15803d;font-weight:bold;">✔ No new damage, all equipment returned and fuel level matched.</p>')
@@ -9742,8 +9730,7 @@ async function completeCIRun(){
       ${(!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut)?`<div style="font-size:14px;color:var(--al);padding:4px 0">⛽ Fuel: ${ci.v.fuelOut||'Full'} out → ${ci.fuelIn} in</div>`:''}
       ${missing.length?`<div style="font-size:14px;color:var(--rl);padding:4px 0">❌ Replace: ${missing.join(', ')}</div>`:''}
       <div style="font-size:13px;color:var(--am);margin-top:8px">📷 ${(ci.dmgPhotos&&ci.dmgPhotos.length)||0} damage photos · Signed contract on file · Management alerted</div>
-      ${ci.depositPending?`<div style="font-size:15px;font-weight:900;color:var(--al);margin-top:10px">👔 Deposit: management decides by ${fmtDay(ci.depositDue)}</div>`:`<div style="font-size:14px;font-weight:800;color:var(--g6);margin-top:10px">Deposit: ${_bx(ci.deposit||'')} (${_bx(ci.mgmtName||'')})</div>`}
-    </div>`:'<div class="al ok" style="margin-bottom:12px">✅ Clean return — full deposit released</div>'}
+    </div>`:'<div class="al ok" style="margin-bottom:12px">✅ Clean return</div>'}
     <div class="al ${ci.v.st==='maintenance'?'warn':'ok'}">
       ${ci.v.st==='maintenance'?'⚠ Vehicle flagged for maintenance before next rental':'✓ Vehicle back in available fleet'}
     </div>
