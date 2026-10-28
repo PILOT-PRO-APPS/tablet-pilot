@@ -2370,8 +2370,8 @@ function _renderOV(){
       }).sort(function(a,b){return (a.return_date_new||a.rt)>(b.return_date_new||b.rt)?1:-1;});
       return list;
   })();
-  if(!ovFull()){ body.innerHTML=_ovSimpleHTML(); return; }
-  function _ovSimpleHTML(){
+  if(!ovFull()){ body.innerHTML=(view==='week'?ovBoardHTML(outList,inList,timeStr,dateStr,_ovInfoBar()):_ovSimpleHTML()); return; }
+  function _ovInfoBar(){
     var discN=0;try{discN=Object.keys(DISCS).filter(function(fn){var d=discDaysLeft(DISCS[fn]);return d!==null&&d<=DISC_WARN_DAYS;}).length;}catch(e){}
     var staffN=0;try{var _a=getActiveStaff(),_n={};_a.forEach(function(x){_n[x.staffName]=1;});staffN=Object.keys(_n).length;}catch(e){}
     var remN=_ovRemote.length;
@@ -2390,6 +2390,10 @@ function _renderOV(){
         +(_ovStaff?'<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'+_ovStaff+'</div>':'')
         +'</div>':'')
       +'</div>':'';
+    return info;
+  }
+  function _ovSimpleHTML(){
+    var info=_ovInfoBar();
     function ftime(f){if(!f)return '';var p=String(f).split('·');return (p[1]||'').trim()||String(f).trim();}
     function sCard(v,isOut){
       var fin=isOut?coIsDone(v):ciIsDone(v),ip=null;
@@ -8596,6 +8600,7 @@ function showDepositBanner(){
   try{var t=document.getElementById('tab-dep');if(t)t.innerHTML=depTabLabel();}catch(e){}
   var ov=document.getElementById('ov-body');if(!ov)return;
   var old=document.getElementById('dep-banner');if(old)old.remove();
+  if(document.getElementById('bd-root'))return;   // the Dashboard board shows this in Needs action
   if(!DEP_PENDING.length||typeof canViewReports!=='function'||!canViewReports())return;
   var today=localYMD();
   var due=DEP_PENDING.filter(function(d){return d.deposit_due&&d.deposit_due<=today;}).length;
@@ -8607,6 +8612,152 @@ function showDepositBanner(){
 }
 // Returns not checked in (23 Oct 2026, H-38 Blakeman back 17 Oct, nothing done on the tablet):
 // checked out on the tablet, return date passed (from the morning after), no check-in.
+// ── 🧭 DASHBOARD BOARD (owner 28 Oct 2026) ─────────────────────────────────────────────
+// The turnaround is the centre: vehicle back → checked in → next client's check-out ready.
+// One card per job: big H number + client, one line that links it to the vehicle's other
+// rental (still out with … / in the yard / next client …) and ONE button that starts the job.
+// Everything that is stuck goes in one "Needs action" box at the top, with who has to do it.
+function bdDate(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return d||'';}}
+function bdDay(d){
+  var t=localYMD();if(d===t)return 'today';if(d===_addDays(t,1))return 'tomorrow';if(d===_addDays(t,-1))return 'yesterday';
+  return bdDate(d);
+}
+function bdDraft(kind,v){
+  try{var r=DR_SRV[kind+':'+(v.bid||v.fn)];if(r)return {by:r.updated_by||r.staff||'',at:r.updated_at||'',step:r.step,signed:!!(r.summary&&r.summary.contractSigned)};}catch(e){}
+  try{var k=localStorage.getItem(ipKey(v.fn));if(k){var x=JSON.parse(k);if(x&&(x.type||'checkout')===kind&&(!x.cl||!v.cl||x.cl===v.cl))return {by:x.staff||'',at:x.started||'',step:null};}}catch(e){}
+  return null;
+}
+function bdMgrs(){try{return MANAGEMENT.filter(function(n){return n!=='Peter';}).concat(['Peter']).join(' / ');}catch(e){return 'a manager';}}
+function bdCanOut(){try{return !!APP_USER&&(canDoStep(0)||canDoStep(5));}catch(e){return true;}}
+// What needs doing that is stuck: unfinished check-outs, vehicles back but not checked in, late collections
+function bdNeeds(){
+  var t=localYMD(),cut=_addDays(t,-21),out=[];
+  FLEET.forEach(function(v){
+    if(!v.pu||v.pu>t||v.pu<cut||coIsDone(v)||ciIsDone(v))return;
+    if(v.rt&&v.rt<t)return;   // its return date has passed: nothing to check out any more
+    var d=bdDraft('checkout',v);
+    if(d)out.push({k:'unfinished',v:v,d:d,sort:'1'+v.pu});
+    else if(v.pu<t)out.push({k:'late',v:v,sort:'3'+v.pu});
+  });
+  try{overdueReturns().forEach(function(v){out.push({k:'back',v:v,sort:'2'+v.rt});});}catch(e){}
+  return out.sort(function(a,b){return a.sort>b.sort?1:-1;});
+}
+function bdBtn(lbl,cls,kind,v){
+  return '<button class="bd-btn '+cls+'" onclick="event.stopPropagation();bdGo(\''+kind+'\',\''+_bx(v.bid||'')+'\',\''+_bx(v.fn)+'\')">'+lbl+'</button>';
+}
+function bdNeedRow(n){
+  var v=n.v,txt,btn='';
+  if(n.k==='unfinished'){
+    txt=n.d.signed
+      ?'<b>Contract signed — never released.</b> Only Handover &amp; <b>Release</b> left ('+_bx(bdMgrs())+'). Last saved'+(n.d.by?' by '+_bx(n.d.by):'')+(n.d.at?' · '+bdDay(String(n.d.at).slice(0,10)):'')+'.'
+      :'<b>Check-out not finished</b> — last saved'+(n.d.by?' by '+_bx(n.d.by):'')+(n.d.at?' · '+bdDay(String(n.d.at).slice(0,10)):'')+'. Finish the steps, client signs, then <b>Release</b> ('+_bx(bdMgrs())+').';
+    if(bdCanOut())btn=bdBtn('▶ Finish it','bd-amber','out',v);
+  }else if(n.k==='back'){
+    txt='<b>Back? Not checked in</b> — was due '+bdDay(v.rt)+'. The next check-out of '+_bx(v.fn)+' waits for this.';
+    if(canCheckIn())btn=bdBtn('▶ Check in','bd-green','in',v);
+  }else{
+    txt='<b>Not checked out yet</b> — was due out '+bdDay(v.pu)+'.';
+    if(bdCanOut())btn=bdBtn('▶ Check out','bd-blue','out',v);
+  }
+  return '<div class="bd-need" onclick="ovExpandTo(\'x\',\''+_bx(v.bid||v.fn)+'\')">'
+    +'<div class="bd-fn">'+_bx(v.fn)+'</div>'
+    +'<div class="bd-mid"><div class="bd-cl">'+_bx(renterName(v)||v.cl||'')+'</div><div class="bd-sub">'+txt+'</div></div>'+btn+'</div>';
+}
+// Where is the vehicle for this check-out? From the vehicle's previous booking.
+function bdPrev(v){
+  var f=fnNorm(v.fn),t=localYMD(),p=FLEET.filter(function(x){return x!==v&&x.bid!==v.bid&&fnNorm(x.fn)===f&&x.pu&&x.pu<v.pu;})
+    .sort(function(a,b){return a.pu<b.pu?1:-1;})[0];
+  if(!p||ciIsDone(p))return {st:'yard'};
+  if(coIsDone(p))return {st:p.rt<t?'late':'out',p:p};
+  if(p.rt&&p.rt<_addDays(t,-45))return {st:'yard'};          // old, before the tablet
+  return {st:'unknown',p:p};                                    // previous rental never done on the tablet
+}
+function bdOutCard(v){
+  var t=localYMD(),fin=coIsDone(v),d=fin?null:bdDraft('checkout',v),w=fin?null:bdPrev(v),p=w&&w.p,line,cls='';
+  if(fin){line='✓ Checked out';cls='fin';}
+  else if(w.st==='late'){line='⛔ Not checked in yet from '+_bx(p.cl||'previous client')+' · was due '+bdDay(p.rt);cls='bad';}
+  else if(w.st==='out'){line='⏳ Still out with '+_bx(p.cl||'previous client')+' · back '+bdDay(p.rt);cls='wait';}
+  else if(w.st==='unknown'){line='⚠ '+_bx(p.cl||'Previous rental')+' ('+(p.rt<t?'was due back ':'due back ')+bdDay(p.rt)+') has no tablet check-in — check the vehicle';cls='wait';}
+  else{line='🅿 In the yard — ready';cls='ok';}
+  var extra=[];
+  var tm=String(v.flightIn||'').split('·');var ft=(tm[1]||tm[0]||'').trim();if(ft)extra.push('✈ '+_bx(ft));
+  extra.push(v.camping?'⛺ '+(v.pax||'')+' pax':'No camping');
+  if(v.special&&v.special.length)extra.push('<b class="bd-red">Remote</b>');
+  var btn=fin?'<span class="bd-tag">✓ Out</span>':bdCanOut()?bdBtn(d?'▶ Carry on':'▶ Check out',d?'bd-amber':'bd-blue','out',v):'';
+  return '<div class="bd-card'+(fin?' bd-faded':'')+'" onclick="ovExpandTo(\'out\',\''+_bx(v.bid||v.fn)+'\')">'
+    +'<div class="bd-fn">'+_bx(v.fn)+'</div>'
+    +'<div class="bd-mid"><div class="bd-cl">'+_bx(renterName(v)||v.cl||'')+'</div>'
+    +'<div class="bd-sub">'+extra.join(' · ')+'</div>'
+    +'<div class="bd-link '+cls+'">'+line+(d&&!fin?' · started'+(d.by?' by '+_bx(d.by):''):'')+'</div></div>'+btn+'</div>';
+}
+function bdInCard(v){
+  var t=localYMD(),fin=ciIsDone(v),went=coIsDone(v),d=fin?null:bdDraft('checkin',v),nx=null;
+  try{nx=ciNextBooking(v);}catch(e){}
+  var tm=String(v.flightOut||'').split('·');var ft=(tm[1]||tm[0]||'').trim();
+  var extra=[];if(ft)extra.push('✈ flies '+_bx(ft));extra.push(v.camping?'⛺ camping':'No camping');
+  var line=nx?'Next: <b>'+_bx(nx.cl||'')+'</b> · '+bdDay(nx.pu):'No next booking yet';
+  if(!went&&!fin)line+=' · <span class="bd-red">no tablet check-out on file</span>';
+  var btn=fin?'<span class="bd-tag">✓ Back</span>'
+    :(canCheckIn()&&(v.rt<=t||d))?bdBtn(d?'▶ Carry on':'▶ Check in',d?'bd-amber':'bd-green','in',v)
+    :'<span class="bd-tag">Due '+bdDay(v.rt)+'</span>';
+  return '<div class="bd-card'+(fin?' bd-faded':'')+'" onclick="ovExpandTo(\'in\',\''+_bx(v.bid||v.fn)+'\')">'
+    +'<div class="bd-fn">'+_bx(v.fn)+'</div>'
+    +'<div class="bd-mid"><div class="bd-cl">'+_bx(renterName(v)||v.cl||'')+'</div>'
+    +'<div class="bd-sub">'+extra.join(' · ')+'</div>'
+    +'<div class="bd-link'+(nx&&nx.pu<=_addDays(t,2)?' wait':'')+'">'+line+'</div></div>'+btn+'</div>';
+}
+function bdCol(title,cls,list,key,card,none){
+  var t=localYMD(),g={},days=[];
+  list.forEach(function(v){var d=v[key];if(!d)return;if(!g[d]){g[d]=[];days.push(d);}g[d].push(v);});
+  days.sort();
+  var todayLeft=(g[t]||[]).filter(function(v){return key==='pu'?!coIsDone(v):!ciIsDone(v);}).length;
+  var html='<div class="bd-col"><div class="bd-colhead '+cls+'"><span>'+title+'</span><span class="bd-count">'+(g[t]?todayLeft+' of '+g[t].length+' to do today':'none today')+'</span></div><div class="bd-scroll">';
+  if(!g[t])html+='<div class="bd-day">TODAY</div><div class="bd-none">'+none+' today</div>';
+  days.forEach(function(d){
+    html+='<div class="bd-day'+(d===t?' today':'')+'">'+(d===t?'TODAY':bdDate(d).toUpperCase())+' <span>· '+g[d].length+'</span></div>';
+    g[d].forEach(function(v){html+=card(v);});
+  });
+  return html+'</div></div>';
+}
+function ovBoardHTML(outList,inList,timeStr,dateStr,info){
+  var needs=bdNeeds();
+  // deposits waiting (managers): one row in the same box instead of a separate banner
+  var depRow='';
+  try{if(DEP_PENDING.length&&canViewReports())depRow='<div class="bd-need" onclick="openDeposits()"><div class="bd-fn">💰</div><div class="bd-mid"><div class="bd-cl">'+DEP_PENDING.length+' deposit decision'+(DEP_PENDING.length===1?'':'s')+' waiting</div><div class="bd-sub">Office → Reports → Deposits</div></div><button class="bd-btn bd-blue" onclick="event.stopPropagation();openDeposits()">Open</button></div>';}catch(e){}
+  var nN=needs.length+(depRow?1:0);
+  var t=localYMD();
+  var outT=outList.filter(function(v){return v.pu===t;}),inT=inList.filter(function(v){return v.rt===t;});
+  var outLeft=outT.filter(function(v){return !coIsDone(v);}).length,inLeft=inT.filter(function(v){return !ciIsDone(v);}).length;
+  function stat(n,lbl,cls,go){return '<button class="bd-stat '+cls+'" onclick="'+go+'"><b>'+n+'</b><span>'+lbl+'</span></button>';}
+  return '<div id="bd-root" class="bd-root">'
+    +'<div class="bd-top">'
+      +'<div class="bd-when"><div id="ov-clock" class="bd-clock">'+timeStr+'</div><div class="bd-date">'+_bx(dateStr)+'</div></div>'
+      +stat(outLeft,'going out today','s-out',"goPage('co')")
+      +stat(inLeft,'coming back today','s-in',canCheckIn()?"goPage('ci')":"")
+      +(nN?stat(nN,'need action','s-bad',"var e=document.getElementById('bd-needs');if(e)e.scrollIntoView({behavior:'smooth'})"):'')
+      +'<div class="bd-tools"><button onclick="ovSetView(\'past\')">Past 14 days</button><button onclick="ovSetFull(true)">Full view</button></div>'
+    +'</div>'
+    +info
+    +(nN?'<div id="bd-needs" class="bd-needs"><div class="bd-needhead">⚠ NEEDS ACTION · '+nN+'</div>'+needs.map(bdNeedRow).join('')+depRow+'</div>':'')
+    +'<div class="bd-cols">'
+      +bdCol('↗ Going out','c-out',outList,'pu',bdOutCard,'Nothing going out')
+      +bdCol('↙ Coming back','c-in',inList,'rt',bdInCard,'Nothing coming back')
+    +'</div></div>';
+}
+// One tap from the Dashboard straight into the job (the card itself still opens the booking details)
+function bdGo(kind,bid,fn){
+  try{drTick();}catch(e){}
+  if(kind==='out'){
+    if(!(co&&co.v&&!co._done&&(co.v.bid||co.fn)===(bid||fn))){
+      if(co&&co.v&&!co._done){co._step=coStep;CO_DRAFTS[co.v.bid||co.fn]=co;}
+      co={};coStep=0;goPage('co');window._forceBid=bid||null;startCO(fn);
+    }else goPage('co');
+  }else{
+    if(!canCheckIn()){toast('Check-ins are done by '+bdMgrs(),'err');return;}
+    if(!(ci&&ci.v&&!ci._done&&(ci.v.bid||ci.fn)===(bid||fn))){ci={};ciStep=0;goPage('ci');window._forceBid=bid||null;startCI(fn);}
+    else goPage('ci');
+  }
+}
 function overdueReturns(){
   var today=localYMD(),cut=_addDays(today,-45);
   return (FLEET||[]).filter(function(v){return v.rt&&v.rt<today&&v.rt>=cut&&coIsDone(v)&&!ciIsDone(v);})
@@ -8615,6 +8766,10 @@ function overdueReturns(){
 function showOverdueBanner(){
   var ov=document.getElementById('ov-body');if(!ov)return;
   var old=document.getElementById('od-banner');if(old)old.remove();
+  if(document.getElementById('bd-root')){   // the Dashboard board shows this in Needs action; the office alert still goes
+    try{if(APP_USER&&MANAGEMENT.indexOf(APP_USER.name)>=0){var _l=overdueReturns();if(_l.length)overdueAlerts(_l);}}catch(e){}
+    return;
+  }
   if(!APP_USER||MANAGEMENT.indexOf(APP_USER.name)<0)return;
   var l=overdueReturns();if(!l.length)return;
   var b=document.createElement('div');b.id='od-banner';
