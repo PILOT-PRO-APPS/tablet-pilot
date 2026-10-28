@@ -6715,7 +6715,7 @@ function coStep5_client(){
      ]},
     {key:'tyres', ico:'🛞', title:'Tyres & Recovery',
      items:[
-       {k:'sparewheel',  lbl:'Spare wheel locations shown',det:'Both spares located, how to access explained'},
+       {k:'sparewheel',  lbl:'Spare wheels shown & locked',det:'Both spares present and locked, access explained; client checks them daily — lost or stolen spares are the client\'s cost'},
        {k:'tyrechange',  lbl:'Tyre change demonstrated', det:'Jack, spanner, process explained step by step'},
        {k:'compressor',  lbl:'Compressor explained',     det:'Location, how to inflate, correct PSI discussed'},
        {k:'recoverykit', lbl:'Recovery kit shown',       det:'Tow strap, shovel, hi-lift, sand tracks if applicable'},
@@ -11443,7 +11443,7 @@ function buildContractHTML(c,sigUrl){
       • Excessive scratches — trees, branches, bush, or vegetation<br>
       • <strong style="color:#c0392b;">Rims — excluded from all cover.</strong> Renter pays full replacement value at OEM product cost for any rim damage<br>
       • Steering damage — potholes, rocks, kerbs, or off-road driving<br>
-      • <strong style="color:#c0392b;">Missing rims</strong> or missing tyres — full OEM replacement value<br>
+      • <strong style="color:#c0392b;">Missing rims</strong>, missing tyres, or lost / stolen spare wheels — full OEM replacement value<br>
       • Tyres — beyond the add-on limit (1 tyre for rentals up to 21 days; 2 tyres for rentals longer than 21 days)</div>
       <div>• Sandblast / sandstorm damage to paint or glass<br>
       • Single-vehicle accidents (rollovers, collisions with animals or objects)<br>
@@ -11502,7 +11502,7 @@ function buildContractHTML(c,sigUrl){
       • Rollovers — overturning the vehicle under any circumstances<br>
       • Side windows, rear windows, canopy windows, side mirrors — never covered under any insurance option<br>
       • <strong style="color:#c0392b;">Rim damage — rims are excluded from cover;</strong> bent, cracked, or kerbed rims are the Renter's full cost at OEM product replacement value<br>
-      • <strong style="color:#c0392b;">Missing rims</strong> or missing tyres — full OEM replacement value per item</div>
+      • <strong style="color:#c0392b;">Missing rims</strong>, missing tyres, or lost / stolen spare wheels — full OEM replacement value per item</div>
       <div>• Tyre damage beyond add-on limits — see Section 2 (1 tyre for rentals up to 21 days, 2 tyres for rentals longer than 21 days); any tyre beyond that limit is the Renter's full cost<br>
       • Water crossing — any crossing deeper than axle depth, and in any case never deeper than 700mm (the Toyota Hilux manufacturer-specified maximum wading depth). Depth must be checked on foot before entering; damage from crossings beyond this depth is never covered<br>
       • Sandstorm / sandblast damage to paint or glass<br>
@@ -11552,13 +11552,14 @@ function buildContractHTML(c,sigUrl){
     <strong>5.4 TYRE &amp; RIM — DAMAGE, LOSS &amp; PROCEDURE</strong>
   </div>
   <div style="background:#fff8e6;border:1px solid #e8a000;border-radius:4px;padding:8px 12px;margin-bottom:6px;font-size:13px;line-height:1.5;">
-    <strong style="color:#c0392b;">RIMS &amp; MISSING ITEMS — ALWAYS THE CLIENT'S COST: Rims are excluded from all cover.</strong> Rim damage, missing rims, and missing tyres are NEVER covered by any insurance option, including the Tyre &amp; Windscreen add-on. The Renter pays the full replacement value at OEM product cost per item, plus fitting and balancing costs.
+    <strong style="color:#c0392b;">RIMS &amp; MISSING ITEMS — ALWAYS THE CLIENT'S COST: Rims are excluded from all cover.</strong> Rim damage, missing rims, missing tyres, and lost or stolen spare wheels are NEVER covered by any insurance option, including the Tyre &amp; Windscreen add-on. The Renter pays the full replacement value at OEM product cost per item, plus fitting and balancing costs.
   </div>
   <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
     • If tyre damaged: stop safely, fix puncture or replace with spare immediately.<br>
     • Purchase a matching branded replacement tyre if the spare is used. Notify GR immediately.<br>
     • <strong style="color:#c0392b;">Bent, cracked, scuffed, or kerbed rims — rims excluded from cover;</strong> full replacement value at OEM product cost per rim.<br>
     • Any rim or tyre missing at vehicle return — full OEM replacement value per item.<br>
+    • <strong style="color:#c0392b;">Spare wheels — the Renter's responsibility.</strong> Both spare wheels are handed over present and locked. The Renter must check daily that both spares are still on the vehicle and keep them locked. A spare wheel (rim and tyre) lost or stolen during the rental is NOT covered by any insurance option and is charged at full OEM replacement value per wheel.<br>
     • Fitting, balancing, and transport costs for rim/tyre replacement are the Renter's responsibility.<br>
     <strong>5.5 SANDSTORM PROCEDURE</strong><br>
     Slow down or pull over safely. Sandblasting damage to paint or glass is always excluded from insurance.<br>
