@@ -678,7 +678,7 @@ async function rtApply(){
       if(co&&co.v&&co.v.bid&&!co._done){await payLoad(co.v.bid,true);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(co.v);var c=document.getElementById('pay-chip');if(c)c.outerHTML=payChip(co.v);}
     }
     if(t.bookings||t.vehicles||t.vehicle_discs||t.booking_overrides||t.checkouts||t.checkins||t.rental_contracts||t.service_history||t.tyre_history)await autoRefresh(false);
-    if(t.app_settings){try{loadDriverPrices();}catch(e){}}
+    if(t.app_settings){try{loadDriverPrices();}catch(e){}try{loadRetPapers();}catch(e){}}
   }catch(e){}
 }
 // ── App update: when a new version is published, load it (never in the middle of a job) ──
@@ -5528,6 +5528,56 @@ function loadDriverPrices(){
   },function(){}); }catch(e){}
 }
 setTimeout(loadDriverPrices,3000); setInterval(loadDriverPrices,30*60*1000);
+// ── Papers still owed by a client who is already on the road (owner 28 Oct 2026) ──
+// app_settings.return_papers = { <booking id>: {need:['passport','licence','contract'], why, hideNeed} }.
+// At the check-in of that rental the passport, licence (and a photo of the signed paper contract) must be
+// photographed before the return can be finished; only Peter can close it without them (with a reason).
+var RET_PAPERS={};
+function loadRetPapers(){
+  try{ SB.from('app_settings').select('value').eq('key','return_papers').maybeSingle().then(function(r){
+    var v=r&&r.data&&r.data.value; RET_PAPERS=(v&&typeof v==='object')?v:{};
+  },function(){}); }catch(e){}
+}
+setTimeout(loadRetPapers,2500); setInterval(loadRetPapers,30*60*1000);
+var RP_LBL={passport:'🛂 Passport (main driver)',licence:'🪪 Driving licence (main driver)',contract:'📝 Signed paper contract (every page)'};
+function rpF(k){return 'rp'+k.charAt(0).toUpperCase()+k.slice(1)+'Photos';}   // ci.rpPassportPhotos … (a *Photos list, so drafts keep it like the others)
+function ciPapersFor(v){var e=v&&v.bid!=null&&RET_PAPERS[String(v.bid)];return e&&Array.isArray(e.need)?e:null;}
+function ciPapersMissing(){
+  var e=ciPapersFor(ci&&ci.v);if(!e)return [];
+  return e.need.filter(function(k){return RP_LBL[k]&&!(ci[rpF(k)]&&ci[rpF(k)].length);});
+}
+function ciPapersBox(){
+  var e=ciPapersFor(ci&&ci.v);if(!e)return '';
+  return '<div style="background:#fff4f4;border:3px solid var(--re);border-radius:var(--r);padding:12px;margin-bottom:10px;">'
+    +'<div style="font-size:17px;font-weight:900;color:var(--rl);margin-bottom:4px;">⛔ Papers missing from the check-out</div>'
+    +'<div style="font-size:14px;color:#333;margin-bottom:10px;">'+_bx(e.why||'')+' Photograph them now, before the client leaves.</div>'
+    +e.need.filter(function(k){return RP_LBL[k];}).map(function(k){
+      return photoHTML('ci.'+rpF(k),RP_LBL[k]+' — required',k==='contract'?'Print the contract, the client signs it, then photograph every page.':'Clear photo, all corners visible.',k==='contract'?8:2);
+    }).join('')
+    +'</div>';
+}
+async function ciPapersUpload(){
+  var e=ciPapersFor(ci&&ci.v);if(!e)return true;
+  var bk=bkKey(ci.v),out={},bad=[];
+  for(var k of e.need){
+    var arr=ci[rpF(k)]||[];out[k]=[];
+    for(var i=0;i<arr.length;i++){
+      var src=arr[i];
+      if(/^bookings\//.test(src)){out[k].push(src);continue;}
+      try{
+        var path='bookings/'+bk+'/id-docs/return_'+k+'_'+Date.now()+'_'+i+'.jpg';
+        var blob=await (await fetch(src)).blob();
+        var r=await withTimeout(SB.storage.from('client-docs').upload(path,blob,{contentType:'image/jpeg',upsert:true}),30000);
+        if(r&&!r.error){arr[i]=path;out[k].push(path);}else bad.push(RP_LBL[k]);
+      }catch(err){bad.push(RP_LBL[k]);}
+    }
+  }
+  if(bad.length){toast('Could not save: '+bad.join(', ')+' — check the internet and try again','err');return false;}
+  ci._sigUrls=Object.assign(ci._sigUrls||{},{return_papers:out});
+  var got=Object.keys(out).filter(function(k){return out[k].length;});
+  if(got.length)ci.mgmtNotes=((ci.mgmtNotes||'')+(ci.mgmtNotes?'\n':'')+'Papers taken at the return: '+got.map(function(k){return k+' ('+out[k].length+')';}).join(', ')).trim();
+  return true;
+}
 function extraDriverCharged(n){ if(n===undefined)n=extraDriverCount(); return Math.max(0,n-EXTRA_DRIVER_FREE); }
 function extraDriverFee(){ return extraDriverCharged()*EXTRA_DRIVER_FEE; }
 function extraDriverTxt(){ var n=extraDriverCount(),k=extraDriverCharged(n); return n+' extra driver'+(n===1?'':'s')+(EXTRA_DRIVER_FREE?' · first '+(EXTRA_DRIVER_FREE===1?'':EXTRA_DRIVER_FREE+' ')+'free':'')+' · '+k+' × N$'+EXTRA_DRIVER_FEE; }
@@ -8773,6 +8823,7 @@ async function peterOverrideCI(){
   ci.depositPending=true;ci.depositDue=nextWorkingDay();ci.deposit='Pending — management decision';
   ci.mgmtNotes=((ci.mgmtNotes||'')+(ci.mgmtNotes?'\n':'')+'OVERRIDE by '+ci.forceClosedBy+': '+ci.forceClosedReason).trim();
   try{await uploadPhotos(ci.fuelPhotos,ci.fn,ci.v.cl,'fuel-receipt');await uploadPhotos(ci.dmgPhotos,ci.fn,ci.v.cl,'damage-in');}catch(e){}
+  try{await ciPapersUpload();}catch(e){}
   await completeCI();
   if(!ci._done){ci.forceClosedBy=null;ci.forceClosedAt=null;ci.forceClosedReason=null;}
   ciOverrideBtnSync();
@@ -8784,7 +8835,7 @@ function ciCompletion(){
     {lbl:'Staff signature — vehicle received (Step 3, after the client)',ok:!!ci.retSig},
     {lbl:'Equipment all marked returned / not returned (Step 2)'+(unmarked?' — '+unmarked+' left':''),ok:!unmarked},
     {lbl:'Customer signed (Step 3)',ok:!!ci.custSig}
-  ];
+  ].concat(ciPapersMissing().map(function(k){return {lbl:RP_LBL[k]+' — missing from the check-out',ok:false};}));
 }
 
 // ── CHECK-IN REPORT + DEPOSIT DECISION BY MANAGEMENT ─────────────────
@@ -8846,6 +8897,7 @@ function ciCloseSection(){
   var r=ci,v=r.v,x=ciIssues();
   var open=ciCompletion().filter(function(c){return !c.ok;});
   return '<div style="margin-top:14px;">'
+    +ciPapersBox()
     +(open.length?ciCompletionBox():'')
     +(x.fuelShort?'<div style="background:var(--rg);border:2px solid var(--re);border-radius:var(--r);padding:12px;margin-bottom:10px">'+photoHTML('ci.fuelPhotos','🧾 Fuel receipt — required','Photograph the filling-station receipt for the refill. Needed before the return can be finished.',3)+'</div>':'')
     +ciFinishBox(x.any)
@@ -8876,6 +8928,7 @@ async function ciFinishRun(){
   var n=document.getElementById('ci-hnotes');if(n)ci.mgmtNotes=n.value;
   var x=ciIssues();
   if(!x.any&&!dec)dec='Full deposit returned';
+  if(!(await ciPapersUpload()))return;
   ci.mgmtName=(APP_USER&&APP_USER.name)||ci.mgmtName||'';ci.mgmtAt=now();
   if(dec){ci.deposit=dec;ci.depositPending=false;ci.mgmtDecided=true;}
   else{ci.depositPending=true;ci.depositDue=nextWorkingDay();ci.deposit='Pending — management decision';ci.mgmtDecided=false;}
@@ -8944,6 +8997,7 @@ function bdNeeds(){
     if(!v.pu||v.pu<cut||coIsDone(v)||ciIsDone(v))return;
     if(v.rt&&v.rt<t)return;   // its return date has passed: nothing to check out any more
     var d=bdDraft('checkout',v);
+    var _rp=v.bid!=null&&RET_PAPERS[String(v.bid)];if(_rp&&_rp.hideNeed)return;   // Peter: client already gone — papers are taken at the check-in
     if(v.pu>t&&!(d&&d.blocked))return;   // future pickups only when a Release was refused
     if(d)out.push({k:'unfinished',v:v,d:d,sort:'1'+v.pu});
     else if(v.pu<t)out.push({k:'late',v:v,sort:'3'+v.pu});
@@ -11137,6 +11191,7 @@ function getPA(key){
   if(key==='co.dmgPhotos')return(co.dmgPhotos=co.dmgPhotos||[]);
   if(key==='ci.dmgPhotos')return(ci.dmgPhotos=ci.dmgPhotos||[]);
   if(key==='ci.fuelPhotos')return(ci.fuelPhotos=ci.fuelPhotos||[]);
+  if(/^ci\.rp[A-Z][a-z]+Photos$/.test(key)){var _k=key.slice(3);return(ci[_k]=ci[_k]||[]);}
   return[];
 }
 // ── Small thumbnails ──
@@ -12624,6 +12679,7 @@ function guideCI(){
   if(!ci.retSig&&_oo3&&+ci.odoIn<_oo3&&!ci.odoLowOk)return {done:true,text:'The km ('+ci.odoIn+') are lower than at check-out ('+_oo3+') — fix it in Step 1',next:'← Step 1 · km',go:function(){ciStep=0;drawCI();setTimeout(function(){var e=document.getElementById('ci-odo');if(e){e.scrollIntoView({block:'center'});e.focus();}},150);}};
   if(!ci.retSig)return t('Check the report, then YOU sign to confirm you received the vehicle.',document.getElementById('ci-staff-sign'));
   var x2=ciIssues();
+  try{var _rpm=ciPapersMissing();if(_rpm.length)return t('Papers missing from the check-out: photograph the '+_rpm.join(', ')+'.',gFind(R,'div',function(e){return /Papers missing from the check-out/.test(e.textContent)&&e.querySelector('input[type=file]')&&e.textContent.length<1500;}));}catch(e){}
   if(x2.fuelShort&&!(ci.fuelPhotos&&ci.fuelPhotos.length))return t('Fuel is short: take a photo of the fuel receipt.',gFind(R,'div',function(e){return /Fuel receipt/.test(e.textContent)&&e.querySelector('input[type=file]')&&e.textContent.length<400;}));
   b=gFind(R,'button',function(e){return (e.getAttribute('onclick')||'')==='ciFinish()';});
   return t('All done — tap ✅ Finish return.',b);
