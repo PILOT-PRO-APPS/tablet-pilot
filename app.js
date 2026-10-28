@@ -651,6 +651,35 @@ function startAutoRefresh(){
   if(!window._autoVisHooked){window._autoVisHooked=true;
     document.addEventListener('visibilitychange',function(){if(!document.hidden&&APP_USER){autoRefresh(false);checkAppUpdate(true);}});}
   setTimeout(function(){checkAppUpdate(false);},15000);
+  rtStart();
+}
+// ── LIVE LINK with the Desktop APP (owner 28 Oct 2026: "anything changed on the desktop app must be pushed to the
+// tablet app asap"). The database bumps one row per table in app_changes on every change (bookings, vehicles,
+// payments, quotes, discs, settings, and the tablets' own check-outs / check-ins / contracts). This tablet listens
+// and reloads what changed within ~2 s. The 3-minute refresh stays as the safety net if the live link drops.
+var _rtT=null,_rtTabs={};
+function rtStart(){
+  try{
+    if(window._rtCh||!SB||typeof SB.channel!=='function')return;
+    window._rtCh=SB.channel('app-changes')
+      .on('postgres_changes',{event:'*',schema:'public',table:'app_changes'},function(p){
+        var r=(p&&(p.new||p.record))||{};if(!r.tbl)return;
+        _rtTabs[r.tbl]=r.ref||true;
+        if(_rtT)clearTimeout(_rtT);_rtT=setTimeout(rtApply,1500);
+      })
+      .subscribe(function(status){window._rtStatus=status;});
+  }catch(e){}
+}
+async function rtApply(){
+  var t=_rtTabs;_rtTabs={};
+  try{
+    if(t.payments||t.quotes){   // payment box of the open job follows the Desktop APP at once
+      PAY_ST={};
+      if(co&&co.v&&co.v.bid&&!co._done){await payLoad(co.v.bid,true);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(co.v);var c=document.getElementById('pay-chip');if(c)c.outerHTML=payChip(co.v);}
+    }
+    if(t.bookings||t.vehicles||t.vehicle_discs||t.booking_overrides||t.checkouts||t.checkins||t.rental_contracts||t.service_history||t.tyre_history)await autoRefresh(false);
+    if(t.app_settings){try{loadDriverPrices();}catch(e){}}
+  }catch(e){}
 }
 // ── App update: when a new version is published, load it (never in the middle of a job) ──
 var APP_LOADED_AT=new Date(document.lastModified).getTime()||Date.now(),_appNew=false;
@@ -1296,7 +1325,8 @@ function renderCOPicker(){
     // (H-35 Joao Aguiam, back 23 Oct, still showed NOT COLLECTED — his check-out was never finished).
     // Owner 28 Oct 2026: the check-out screen only lists what is READY TO CHECK OUT — H number, client,
     // one button. Finished check-outs and rentals that already came back are never listed.
-    return diff>=-7&&diff<=7&&!coIsDone(v)&&!ciIsDone(v)&&!(diff<0&&v.rt&&v.rt<today);
+    return diff>=-7&&diff<=7&&!coIsDone(v)&&!ciIsDone(v)&&!(diff<0&&v.rt&&v.rt<today)
+      &&coVehicleFree(v).ok;   // owner 28 Oct 2026: a vehicle still out on a booking is not listed
   }).sort(function(a,b){
     // TODAY's departures first, then the EARLIER days chosen with the buttons (not collected
     // first), then the coming days. Earlier days used to sit under the whole coming-up list,
@@ -3422,6 +3452,19 @@ async function startCO(fn){
     }
     try{openRentalFile(bkKey(v),v.fn,v.cl||'');}catch(e){toast('Could not open the rental file','err');}
     return;
+  }
+  // Owner 28 Oct 2026: "if a vehicle is still out on a booking it cannot be checked out again — only vehicles
+  // that are back in the yard". Peter alone can start anyway (records wrong), with a reason that is kept.
+  var _free=coVehicleFree(v);
+  if(!_free.ok&&!(co&&co.v&&co.v.bid===v.bid)&&!(window._coFreeOk&&window._coFreeOk[v.bid])){
+    if(!isPeter()){
+      await askBox({title:'🔒 '+fn+' is not back yet',danger:true,cancel:false,ok:'OK',text:_free.why+'\n\nCheck it in first. Only vehicles that are back in the yard can be checked out.'});
+      return;
+    }
+    var _pa=await askBox({title:'🔒 '+fn+' is not back yet',danger:true,ok:'Start anyway (Peter)',cancel:'Cancel',text:_free.why+'\n\nOnly start this check-out if the records are wrong and the vehicle really is in the yard.',reason:'Why is it started anyway?',minReason:5});
+    if(!_pa.ok)return;
+    window._coFreeOk=window._coFreeOk||{};window._coFreeOk[v.bid]={by:'Peter',at:new Date().toISOString(),reason:_pa.reason};
+    try{SB.from('management_alerts').insert(Object.assign(ridOf(v),{booking_id:bkKey(v),fleet_no:fn,client:v.cl||'',received_by:'Peter',message:'CHECK-OUT STARTED WHILE NOT BACK — '+fn+' / '+(v.cl||'')+': '+_free.why+' Peter: '+_pa.reason,created_at:new Date().toISOString()})).then(function(){},function(){});}catch(e){}
   }
   // Previous client still not checked in: say so when the check-out STARTS, not only at Release after
   // the client has signed (owner 23 Oct 2026: H-38, H-42, H-16). The workshop can still prepare the vehicle.
@@ -7578,6 +7621,7 @@ function payPanelInner(v){
   if(!st.ok)return h+'<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;font-size:16px;font-weight:900;color:#92400e;">💳 Payment could not be checked — ask the office</div>'
     +'<button onclick="payRefresh(\''+_bx(v.bid)+'\')" style="padding:10px 14px;border-radius:10px;border:2px solid var(--g3);background:var(--g0);font-size:14px;font-weight:800;">↻ Try again</button></div></div>';
   var owing=st.owing>0.5;
+  h+=payUndoLines(v,st);
   h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
     +'<div style="flex:1;min-width:220px;font-size:20px;font-weight:900;color:'+col+';">'
     +(owing?'💳 Still to pay: '+payFmt(st.owing):(st.total>0?'✅ Rental fully paid':'💳 Rental total unknown — ask the office'))+'</div>'
@@ -7596,6 +7640,45 @@ function payPanelInner(v){
     if(APP_USER&&APP_USER.name===(st.override_by||'Peter'))h+='<button onclick="payOverride(\''+_bx(v.bid)+'\')" style="margin-top:8px;padding:10px 14px;border-radius:10px;border:2px solid #b45309;background:#fffbeb;color:#92400e;font-size:14px;font-weight:900;cursor:pointer;">Peter only: record a payment anyway (override)</button>';
   }
   return h+'</div>';
+}
+// ── Undo a wrong button (owner 28 Oct 2026) ──
+// Only lines the TABLET added, by the same person within 30 minutes (Peter: any tablet line). The line is voided —
+// kept on record exactly like a void in the Desktop APP — and the office is alerted. Desktop APP records are never
+// touched from the tablet (the server refuses them too).
+function payUndoable(st){
+  var me=APP_USER&&APP_USER.name,lim=(st&&st.undo_minutes||30)*60000;
+  return ((st&&st.rows)||[]).filter(function(r){
+    if(!r.id||r.dir!=='in'||!/^tablet:/.test(String(r.by||'')))return false;
+    if(me==='Peter')return true;
+    return String(r.by)==='tablet: '+me&&r.created&&(Date.now()-new Date(r.created).getTime())<lim;
+  });
+}
+function payUndoLines(v,st){
+  var l=payUndoable(st);if(!l.length)return '';
+  var M={adumo:'Adumo',card_swipe:'card machine',cash:'cash'};
+  return l.map(function(r){
+    var t=r.created?new Date(r.created).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+    return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:8px 10px;margin-bottom:8px;">'
+      +'<div style="flex:1;min-width:200px;font-size:14px;font-weight:800;color:#9a3412;">Recorded on the tablet'+(t?' at '+t:'')+': '+payFmt(r.amount)+' by '+_bx(M[r.method]||r.method||'')+' ('+_bx(String(r.by).replace('tablet: ',''))+')</div>'
+      +'<button onclick="payUndo(\''+_bx(v.bid)+'\',\''+_bx(r.id)+'\')" style="padding:10px 14px;border-radius:10px;border:2px solid #c2410c;background:#fff;color:#9a3412;font-size:14px;font-weight:900;cursor:pointer;">↩ Undo — wrong button</button></div>';
+  }).join('');
+}
+async function payUndo(bid,pid){
+  var st=PAY_ST[bid],r=((st&&st.rows)||[]).filter(function(x){return x.id===pid;})[0];
+  var a=await askBox({title:'↩ Undo this payment?',danger:true,ok:'Yes, undo it',cancel:'Back',
+    text:(r?payFmt(r.amount)+' by '+(r.method||'')+' — ':'')+'it is cancelled and kept on record (like a void in the Desktop APP). The office is told. Payments the office recorded are never changed.',
+    reason:'What was wrong?',reasonDefault:'Wrong button on the tablet',minReason:3});
+  if(!a.ok)return;
+  var cached=(_payPin&&_payPin.name===APP_USER.name&&Date.now()-_payPin.at<600000)?_payPin.pin:'';
+  var call=function(pin){return payCall({action:'void',booking_id:bid,payment_id:pid,name:APP_USER.name,pin:pin,reason:a.reason});};
+  var res=null;
+  if(cached){banner('Undoing…');res=await call(cached);hideBanner();if(!res||!res.ok){if(/PIN/i.test((res&&res.error)||'')){_payPin=null;res=null;}else{toast((res&&res.error)||'Not undone','err');return;}}}
+  if(!res){var x=await payForm({title:'↩ Undo payment',text:'Type your PIN to undo it.',amount:r?r.amount:'',fixedAmount:true,ok:'Undo',submit:function(f){return call(f.pin);}});
+    if(!x)return;res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};}
+  res._at=Date.now();PAY_ST[bid]=res;
+  toast('↩ Undone — nothing changed in the office\'s records','ok');
+  try{var _pp=document.getElementById('pay-pop');if(_pp)_pp.remove();}catch(e){}
+  if(co&&co.v&&co.v.bid===bid)drawCO();
 }
 async function payRefresh(bid){
   var p=document.getElementById('co-pay'); if(p)p.innerHTML='<div style="padding:14px;color:#475569;font-size:15px;">Checking payments…</div>';
@@ -7670,7 +7753,7 @@ async function payQuick(bid,method){
              (typeof _docPin!=='undefined'&&_docPin&&_docPin.name===APP_USER.name&&Date.now()-_docPin.at<600000)?_docPin.pin:'';
   var save=function(pin){return payCall({action:'record',booking_id:bid,name:APP_USER.name,pin:pin,amount:amt,method:method,reference:''});};
   var res=null;
-  if(cached){var a=await askBox({title:'💳 '+payFmt(amt)+' paid by '+lbl+'?',text:'Saved as paid at collection by '+APP_USER.name+'.',ok:'✓ Yes, paid',cancel:'Back'});if(!a.ok)return;
+  if(cached){var a=await askBox({title:'💳 '+payFmt(amt)+' — paid by '+lbl.toUpperCase()+'?',text:'Check: did the client really pay '+payFmt(amt)+' by '+lbl+' just now?\n\nSaved as paid at collection by '+APP_USER.name+'. Wrong? You can undo it for 30 minutes.',ok:'✓ Yes — '+lbl,cancel:'✗ Wrong — go back'});if(!a.ok)return;
     banner('Saving payment…');res=await save(cached);hideBanner();if(!res||!res.ok){_payPin=null;toast((res&&res.error)||'Not saved','err');if(!/PIN/i.test((res&&res.error)||''))return;res=null;}}
   if(!res){var x=await payForm({title:'💳 '+payFmt(amt)+' paid by '+lbl,text:'Type your PIN to save it.',amount:amt,fixedAmount:true,ok:'✓ Save — paid',submit:function(f){return save(f.pin);}});
     if(!x)return;res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};}
@@ -8857,6 +8940,16 @@ function bdPrev(v){
   if(p.rt&&p.rt<_addDays(t,-45))return {st:'yard'};          // old, before the tablet
   return {st:'unknown',p:p};                                    // previous rental never done on the tablet
 }
+// Is the vehicle for this booking back in the yard? (used by the Dashboard, the Check-Out list and startCO)
+function coVehicleFree(v){
+  try{
+    var w=bdPrev(v),p=w.p;
+    if(w.st==='yard')return {ok:true};
+    if(w.st==='out')return {ok:false,why:v.fn+' is still out with '+(p.cl||'the previous client')+' — due back '+bdDay(p.rt)+'.'};
+    if(w.st==='late')return {ok:false,why:v.fn+' is still out with '+(p.cl||'the previous client')+' — was due back '+bdDay(p.rt)+', not checked in yet.'};
+    return {ok:false,why:(p.cl||'The previous rental')+' (due back '+bdDay(p.rt)+') has no check-in on the tablet, so '+v.fn+' is not shown as back.'};
+  }catch(e){return {ok:true};}
+}
 function bdOutCard(v){
   var t=localYMD(),fin=coIsDone(v),d=fin?null:bdDraft('checkout',v),w=fin?null:bdPrev(v),p=w&&w.p,line,cls='';
   if(fin){line='✓ Checked out';cls='fin';}
@@ -8868,7 +8961,10 @@ function bdOutCard(v){
   var tm=String(v.flightIn||'').split('·');var ft=(tm[1]||tm[0]||'').trim();if(ft)extra.push('✈ '+_bx(ft));
   extra.push(v.camping?'⛺ '+(v.pax||'')+' pax':'No camping');
   if(v.special&&v.special.length)extra.push('<b class="bd-red">Remote</b>');
-  var btn=fin?'<span class="bd-tag">✓ Out</span>':bdCanOut()?bdBtn(d?'▶ Carry on':'▶ Check out',d?'bd-amber':'bd-blue','out',v):'';
+  // owner 28 Oct 2026: only a vehicle that is back in the yard can be checked out
+  var btn=fin?'<span class="bd-tag">✓ Out</span>'
+    :(w.st!=='yard')?'<span class="bd-tag bd-lock">🔒 Not back yet</span>'
+    :bdCanOut()?bdBtn(d?'▶ Carry on':'▶ Check out',d?'bd-amber':'bd-blue','out',v):'';
   return '<div class="bd-card'+(fin?' bd-faded':'')+'" onclick="ovExpandTo(\'out\',\''+_bx(v.bid||v.fn)+'\')">'
     +'<div class="bd-fn">'+_bx(v.fn)+'</div>'
     +'<div class="bd-mid"><div class="bd-cl">'+_bx(renterName(v)||v.cl||'')+'</div>'

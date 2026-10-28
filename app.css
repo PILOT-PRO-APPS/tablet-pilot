@@ -490,3 +490,4 @@ body.guide-next .co-next{display:none!important;}
 .disc-flash,.disc-flash-lt,.insp-flash,.need-flash,.wtri{animation:none!important;}
 .need-flash{box-shadow:0 0 0 2px rgba(209,54,54,.25);}
 #ob-chip{display:inline-block;margin-left:6px;padding:3px 9px;border-radius:12px;background:#c2410c;color:#fff;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap;}
+.bd-lock{background:#fde8d8;color:#9a3412;}
