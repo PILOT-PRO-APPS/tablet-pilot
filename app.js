@@ -3312,6 +3312,20 @@ async function _pinHash(name,pin){try{var b=await crypto.subtle.digest('SHA-256'
 
 var CO_DRAFTS={};
 // Check-in: go back to the list; the work is kept (this device + server) and opens again when the vehicle is tapped
+// Owner 28 Oct 2026: after a check-in, the vehicle's next check-out starts with one tap.
+function ciNextBooking(v){
+  try{
+    if(!v)return null;var f=fnNorm(v.fn);
+    return FLEET.filter(function(x){return x.bid!==v.bid&&fnNorm(x.fn)===f&&x.pu&&x.pu>=(v.pu||'')&&!coIsDone(x)&&!ciIsDone(x);})
+      .sort(function(a,b){return a.pu>b.pu?1:-1;})[0]||null;
+  }catch(e){return null;}
+}
+function ciStartNextCO(bid,fn){
+  if(typeof canDoStep==='function'&&!(APP_USER&&(canDoStep(0)||canDoStep(5)))){toast('Check-outs are done by the workshop or the office','err');return;}
+  ci={};ciStep=0;co={};coStep=0;
+  goPage('co');
+  window._forceBid=bid;startCO(fn);
+}
 function ciChangeVehicle(){
   try{drTick();}catch(e){}
   ci={};ciStep=0;
@@ -9732,6 +9746,10 @@ async function completeCIRun(){
   }
   // Read-only tablet: Fleet Manager data (vehicles/bookings) is never changed from here
   const hasIssues=newDmg.length||((!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut))||missing.length||damaged.length;
+  // The vehicle is back: count it as returned at once, so the Check-Out list shows it in the yard
+  // with its next client straight away (not only after the next refresh).
+  try{DONE_CI[bkNorm(bkKey(ci.v))]=true;setTimeout(function(){try{loadDoneSets();}catch(e){}},3000);}catch(e){}
+  const _nextCO=ciNextBooking(ci.v);
   document.getElementById('ci-body').innerHTML=`
     <div class="chg-veh-bar"><button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}</div>
     <div class="done"><div class="done-ico">${hasIssues?'⚠️':'✅'}</div>
@@ -9748,6 +9766,7 @@ async function completeCIRun(){
     <div class="al ${ci.v.st==='maintenance'?'warn':'ok'}">
       ${ci.v.st==='maintenance'?'⚠ Vehicle flagged for maintenance before next rental':'✓ Vehicle back in available fleet'}
     </div>
+    ${_nextCO?`<button class="btn g" style="margin-top:12px;font-size:18px;padding:18px;" onclick="ciStartNextCO('${_bx(_nextCO.bid)}','${_bx(_nextCO.fn)}')">▶ Start next check-out: ${_bx(_nextCO.fn)} · ${_bx(_nextCO.cl||'')} <span style="font-weight:700;font-size:14px;">(${new Date(_nextCO.pu+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})})</span></button>`:''}
     ${ciWaBox(ci.v.phone,ci._reportLink)}
     <button class="btn g" style="margin-top:10px" onclick="goPage('ov')">← Back to Overview</button>`;
   renderOV();
