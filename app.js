@@ -1292,7 +1292,9 @@ function renderCOPicker(){
     var diff=puDiff(v);
     // Owner 28 Oct 2026: no list of past check-outs here. Earlier days show only vehicles NOT collected yet;
     // finished ones are in Office → Documentation.
-    return diff>=-CO_LOOKBACK&&diff<=7&&!(diff<0&&coIsDone(v));
+    // Also gone: an earlier booking that has a check-in (it came back) or whose return date has passed
+    // (H-35 Joao Aguiam, back 23 Oct, still showed NOT COLLECTED — his check-out was never finished).
+    return diff>=-CO_LOOKBACK&&diff<=7&&!(diff<0&&(coIsDone(v)||ciIsDone(v)||(v.rt&&v.rt<today)));
   }).sort(function(a,b){
     // TODAY's departures first, then the EARLIER days chosen with the buttons (not collected
     // first), then the coming days. Earlier days used to sit under the whole coming-up list,
@@ -1346,7 +1348,7 @@ function renderCOPicker(){
     var badge=isToday?'<span style="background:#4a6fa5;color:#fff;font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;">TODAY</span>':'<span style="background:var(--g2);color:var(--g5);font-size:11px;font-weight:800;padding:3px 10px;border-radius:8px;">'+(dDiff===1?'TOMORROW':dDiff>1?'IN '+dDiff+' DAYS':'UPCOMING')+'</span>';
     var dt=new Date(v.pu+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
     if(ip)badge='<span style="background:var(--ag);color:var(--al);border:1px solid var(--am);font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">IN PROGRESS</span>';
-    if(late&&!fin)badge='<span style="background:var(--re);color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">NOT COLLECTED</span>'+(ip?'<div style="margin-top:4px;">'+badge+'</div>':'');
+    if(late&&!fin)badge='<span style="background:var(--re);color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">'+(ip?'CHECK-OUT NOT FINISHED':'NOT COLLECTED')+'</span>';
     if(fin)badge=coWasForced(v)
       ?'<span style="background:var(--am);color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">\u26A0 CLOSED OFF</span>'
       :'<span style="background:var(--se);color:#fff;font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">\u2705 COMPLETED</span>';
