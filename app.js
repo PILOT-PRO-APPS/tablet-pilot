@@ -1290,7 +1290,9 @@ function renderCOPicker(){
   function grpOrd(g){return CO_AHEAD?[0,2,1][g]:g;}   // Next 7 days: today, coming up, then earlier
   var upcoming=FLEET.filter(function(v){
     var diff=puDiff(v);
-    return diff>=-CO_LOOKBACK&&diff<=7;
+    // Owner 28 Oct 2026: no list of past check-outs here. Earlier days show only vehicles NOT collected yet;
+    // finished ones are in Office → Documentation.
+    return diff>=-CO_LOOKBACK&&diff<=7&&!(diff<0&&coIsDone(v));
   }).sort(function(a,b){
     // TODAY's departures first, then the EARLIER days chosen with the buttons (not collected
     // first), then the coming days. Earlier days used to sit under the whole coming-up list,
@@ -3173,6 +3175,15 @@ async function loadDoneSets(){
   }catch(e){}
 }
 function coIsDone(v){try{return !!(v&&DONE_CO[bkNorm(bkKey(v))]);}catch(e){return false;}}
+// The next booking of the same vehicle that is not checked out yet (later pickup, up to 14 days ahead).
+function coNextBooking(v){
+  try{
+    if(!v||!v.pu)return null;
+    var lim=_addDays(localYMD(),14),f=fnNorm(v.fn);
+    return FLEET.filter(function(x){return x!==v&&x.bid!==v.bid&&fnNorm(x.fn)===f&&x.pu&&x.pu>v.pu&&x.pu<=lim&&!coIsDone(x);})
+      .sort(function(a,b){return a.pu>b.pu?1:-1;})[0]||null;
+  }catch(e){return null;}
+}
 function coWasForced(v){try{return !!(v&&FORCED_CO[bkNorm(bkKey(v))]);}catch(e){return false;}}
 // Away from an open check-out, the renter's real name comes from the saved check-out.
 function renterName(v){
@@ -3362,7 +3373,19 @@ async function startCO(fn){
   // Opening a finished check-out used to build a blank one and push that empty draft over the
   // saved work — the screen came up with nothing on it. The saved record is the real thing.
   // No question first (it was irritating): tapping a finished check-out opens its rental file.
+  // Owner 28 Oct 2026: tapping H-25 opened the PREVIOUS client's documents (Stijn Smets, finished)
+  // instead of starting the next client's check-out (Chelsea Rogers, tomorrow). When the same vehicle
+  // has a newer booking not checked out yet, ask first, with the new client's check-out as the main button.
   if(coIsDone(v)){
+    var _nx=coNextBooking(v);
+    if(_nx){
+      var _d=function(x){try{return new Date(x+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return x;}};
+      var _old=String(renterName(v)||v.cl||'the previous client').replace(/\s*\(.*\)$/,'');
+      var _a=await askBox({title:fn+' — next client: '+(_nx.cl||'new booking'),
+        text:_old+"'s check-out is already finished (went out "+_d(v.pu)+').\n\nNext on '+fn+': '+(_nx.cl||'new booking')+' — going out '+_d(_nx.pu)+'.',
+        ok:'↗ Start check-out: '+(_nx.cl||fn),cancel:'📁 '+_old+"'s rental file"});
+      if(_a.ok){window._forceBid=_nx.bid;return startCO(_nx.fn||fn);}
+    }
     try{openRentalFile(bkKey(v),v.fn,v.cl||'');}catch(e){toast('Could not open the rental file','err');}
     return;
   }
