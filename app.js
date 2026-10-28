@@ -1120,11 +1120,11 @@ async function forceCompleteCO(fn,ev){
   var why=_a.reason;
   var now=new Date().toISOString();
   try{
-    var res=await SB.from('checkouts').insert({
+    var res=await SB.from('checkouts').insert(Object.assign(ridOf(v),{
       booking_id:bkKey(v),fleet_no:v.fn,client:v.cl||'',
       force_closed_by:(APP_USER&&APP_USER.name)||'Peter',force_closed_at:now,force_closed_reason:why,
       created_at:now
-    });
+    }));
     if(res&&res.error){if(!wrongRentalBox(res.error.message))toast('Could not close it off: '+res.error.message,'err');return;}
   }catch(e){toast('Could not close it off — check the connection','err');return;}
   try{await drFinish(drId('checkout',{v:v,fn:v.fn}));}catch(e){}
@@ -1153,8 +1153,8 @@ async function forceCompleteCI(fn,bid,ev){
   var why=_a.reason;
   var who=(APP_USER&&APP_USER.name)||'Peter',now=new Date().toISOString();
   try{
-    var res=await SB.from('checkins').insert({booking_id:bkKey(v),fleet_no:v.fn,client:v.cl||'',manager_name:who,
-      force_closed_by:who,force_closed_at:now,force_closed_reason:why,created_at:now});
+    var res=await SB.from('checkins').insert(Object.assign(ridOf(v),{booking_id:bkKey(v),fleet_no:v.fn,client:v.cl||'',manager_name:who,
+      force_closed_by:who,force_closed_at:now,force_closed_reason:why,created_at:now}));
     if(res&&res.error){if(!wrongRentalBox(res.error.message))toast('Could not close it off: '+res.error.message,'err');return;}
   }catch(e){toast('Could not close it off — check the connection','err');return;}
   try{await drFinish(drId('checkin',{v:v,fn:v.fn}));}catch(e){}
@@ -3162,19 +3162,36 @@ function bkNorm(k){k=String(k||'');var i=k.lastIndexOf('_');return i<0?fnNorm(k)
 // the other spelling of the same booking key (H-08_… ⇄ H-008_…), for records filed the old way
 function bkAltKey(k){k=bkNorm(k);var i=k.lastIndexOf('_');if(i<0)return '';var f=k.slice(0,i),m=f.match(/^([A-Za-z]+-)(\d{2})$/);return m?(m[1]+'0'+m[2]+k.slice(i)):'';}
 var DONE_CO={},DONE_CI={},FORCED_CO={},RENTER_CO={};
+// 28 Oct 2026 (audit M1): records are linked to the booking itself (rental_id = bookings.id). A record with
+// rental_id counts ONLY for that booking ('b:<id>'), so a moved pickup date or a vehicle swap can no longer make
+// a finished rental look "not collected" or file it under the next client. Records without it (before the
+// database change, or no booking left) still count by "fleet_pickupdate" ('k:<key>').
+var RID_OK=null;   // does the database have rental_id yet? (null = not checked)
+function doneSlot(x){return x&&x.rental_id?'b:'+String(x.rental_id):'k:'+bkNorm(x&&x.booking_id);}
+function doneGet(map,v){if(!v)return undefined;var a=v.bid!=null?map['b:'+String(v.bid)]:undefined;return a!==undefined?a:map['k:'+bkNorm(bkKey(v))];}
+function doneMark(map,v,val){try{if(v&&v.bid!=null)map['b:'+String(v.bid)]=val;map['k:'+bkNorm(bkKey(v))]=val;}catch(e){}}
+async function doneRows(t,cols){
+  var withRid=RID_OK!==false;
+  var q=await SB.from(t).select(cols+(withRid?',rental_id':'')).order('created_at',{ascending:false}).limit(5000);
+  if(q&&q.error&&withRid){RID_OK=false;q=await SB.from(t).select(cols).order('created_at',{ascending:false}).limit(5000);}
+  else if(q&&!q.error&&withRid)RID_OK=true;
+  return q;
+}
 async function loadDoneSets(){
   try{
-    var a=await SB.from('checkouts').select('booking_id,force_closed_by,client,booked_by').order('created_at',{ascending:false}).limit(500);
-    var m={},f={},rn={};((a&&a.data)||[]).forEach(function(x){if(!x||!x.booking_id)return;var k=bkNorm(x.booking_id);m[k]=true;if(x.force_closed_by&&f[k]===undefined)f[k]=true;if(!x.force_closed_by)f[k]=false;if(x.client&&rn[k]===undefined)rn[k]={name:x.client,booked:x.booked_by||''};});
+    var a=await doneRows('checkouts','booking_id,force_closed_by,client,booked_by');
+    var m={},f={},rn={};((a&&a.data)||[]).forEach(function(x){if(!x||!x.booking_id)return;var k=doneSlot(x);m[k]=true;if(x.force_closed_by&&f[k]===undefined)f[k]=true;if(!x.force_closed_by)f[k]=false;if(x.client&&rn[k]===undefined)rn[k]={name:x.client,booked:x.booked_by||''};});
     if(a&&!a.error){DONE_CO=m;FORCED_CO=f;RENTER_CO=rn;}
   }catch(e){}
   try{
-    var b=await SB.from('checkins').select('booking_id').order('created_at',{ascending:false}).limit(500);
-    var m2={};((b&&b.data)||[]).forEach(function(x){if(x&&x.booking_id)m2[bkNorm(x.booking_id)]=true;});
+    var b=await doneRows('checkins','booking_id');
+    var m2={};((b&&b.data)||[]).forEach(function(x){if(x&&x.booking_id)m2[doneSlot(x)]=true;});
     if(b&&!b.error)DONE_CI=m2;
   }catch(e){}
 }
-function coIsDone(v){try{return !!(v&&DONE_CO[bkNorm(bkKey(v))]);}catch(e){return false;}}
+// what a new record carries to link it to its booking (only once the database has the column)
+function ridOf(v){return (RID_OK&&v&&v.bid!=null)?{rental_id:String(v.bid)}:{};}
+function coIsDone(v){try{return !!doneGet(DONE_CO,v);}catch(e){return false;}}
 // The next booking of the same vehicle that is not checked out yet (later pickup, up to 14 days ahead).
 function coNextBooking(v){
   try{
@@ -3184,17 +3201,17 @@ function coNextBooking(v){
       .sort(function(a,b){return a.pu>b.pu?1:-1;})[0]||null;
   }catch(e){return null;}
 }
-function coWasForced(v){try{return !!(v&&FORCED_CO[bkNorm(bkKey(v))]);}catch(e){return false;}}
+function coWasForced(v){try{return !!doneGet(FORCED_CO,v);}catch(e){return false;}}
 // Away from an open check-out, the renter's real name comes from the saved check-out.
 function renterName(v){
   try{
-    var r=v&&RENTER_CO[bkNorm(bkKey(v))];
+    var r=doneGet(RENTER_CO,v);
     if(!r||!r.name)return String((v&&v.cl)||'');
     var booked=r.booked||((v&&v.cl&&_nmKey(v.cl)!==_nmKey(r.name))?v.cl:'');
     return r.name+(booked?' ('+booked+')':'');
   }catch(e){return String((v&&v.cl)||'');}
 }
-function ciIsDone(v){try{return !!(v&&DONE_CI[bkNorm(bkKey(v))]);}catch(e){return false;}}
+function ciIsDone(v){try{return !!doneGet(DONE_CI,v);}catch(e){return false;}}
 async function drFinishFleet(fn){
   var ids=Object.keys(DR_SRV).filter(function(k){return DR_SRV[k].fleet_no===fn;});
   (await drAll()).forEach(function(r){if(r.fn===fn&&ids.indexOf(r.id)<0)ids.push(r.id);});
@@ -6368,6 +6385,7 @@ async function signContractRun(sigData){
 async function saveContractRow(row,html){
   var payload={},k;
   for(k in row){if(Object.prototype.hasOwnProperty.call(row,k))payload[k]=row[k];}
+  try{if(payload.rental_id==null&&co&&co.v&&co.v.bid!=null)payload.rental_id=String(co.v.bid);}catch(e){}   // link to the booking (dropped below if the column is missing)
   var dropped=[],tries=0;
   while(tries<12){
     var res=await withTimeout(SB.from('rental_contracts').insert(payload),45000);
@@ -6738,18 +6756,36 @@ async function overrideClientSig(){
 }
 // the handover counts as done when the client signed OR Peter overrode it
 function handoverClosed(){ return !!(co&&(co.custSig||co.sigOverride)); }
-function signHandover(){
+// ── 🔑 HAND OVER KEYS (28 Oct 2026, audit M3) ──────────────────────────────────────────────
+// One action: every release check runs BEFORE the client's signature is taken (passport/licence, signed
+// contract, payment, previous rental checked in). With a manager signed in, the signature then saves AND
+// releases the vehicle in one go — no separate Release tap that gets forgotten. Workshop staff can take the
+// signature; the job then waits on the Dashboard for a manager's one-tap Release.
+var _hoBusy=false;
+async function signHandover(){
+  if(_hoBusy)return;
   if(coLeftCount(CO_BEFORE_HANDOVER)){coLeftBox(CO_BEFORE_HANDOVER,{block:true,title:'Handover cannot be signed yet',sub:'Staff must finish these first.'});return;}
   if(!(co.docItems&&co.docItems.wifi)){toast('WiFi device not done — it is on the Contract step, under Collection & Return','err');return;}
   if(co.v.xb&&!(co.docItems&&co.docItems.xb)){toast('Check the cross-border documents first','err');return;}
   if(!co.returnTime){toast('Return time not set — it is on the Contract step, under Collection & Return','err');return;}
   if(!hasSig('co-c-sig')){toast('Customer must sign','err');return;}
+  _hoBusy=true;
+  try{
+    if(!drOnline()){coBlocked('No internet at the handover','Hand over again when online');await askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'The handover needs the internet for the release checks (payment, documents). Nothing is lost — try again when connected.'});return;}
+    if(!(await idDocsGate('handover'))){coBlocked('Passport / licence photos missing or not uploaded','Take or re-send the photos (client Step 1)');return;}
+    if(!co.contractSigned){coBlocked('Rental contract not signed','The client signs the contract (client Step 3)');await askBox({title:'✍️ Contract not signed',danger:true,cancel:false,ok:'OK',text:'The keys cannot be handed over without the signed rental contract.'});return;}
+    if(!(await payGate())){coBlocked('Not fully paid (or payment could not be checked)','Record the payment, or Peter releases');return;}
+    if(!(await dupCheckoutGate())){coBlocked('Previous rental of '+co.fn+' has no check-in','Do that check-in, or Peter releases');return;}
+    co._gatesAt=Date.now();
+  }finally{_hoBusy=false;}
   co.custSig=getSig('co-c-sig');co.custAt=now();
   co.dmgd=getDmgData();
   co.mechBy=(function(){var _e=document.getElementById('co-h-nm');return _e?_e.value:undefined;})()||co.mechBy;
   uploadPhotos(co.dmgPhotos,co.fn,co.clientName||co.v.cl,'damage-out');
-  // Handover signed: go on to Management sign-off
-  toast('Handover signed ✅ — now Release vehicle','ok');
+  // Handover signed: a manager releases in the same go; staff leave it for a manager (Dashboard → Needs action)
+  if(canViewReports()){toast('Handover signed ✅ — releasing the vehicle…','ok');drawCO();setTimeout(function(){try{coRelease();}catch(e){}},150);return;}
+  toast('Handover signed ✅ — '+bdMgrs()+' releases the vehicle','ok');
+  try{saveCOProgress();}catch(e){}
   drawCO();
   setTimeout(function(){var r=document.querySelector('#cos .btn.g[onclick="coRelease()"]');if(r&&r.scrollIntoView)r.scrollIntoView({behavior:'smooth',block:'center'});},200);
 }
@@ -6940,7 +6976,7 @@ function coStep5_client(){
           <canvas class="sig-cv" id="co-c-sig" style="height:248px"></canvas>
         </div>
         <button class="btn g" style="margin-top:10px;font-size:15px;padding:16px" onclick="signHandover()">
-          ✍️ Client Signs — Handover Complete
+          ${canViewReports()?'🔑 Client signs — hand over keys':'✍️ Client signs — handover (a manager then releases)'}
         </button>
         ${overrideSigBtn()}`}
     </div>
@@ -7745,6 +7781,49 @@ async function dupCheckoutGate(){
 // save failed) used to leave no trace — the client drove off and the check-out stayed unfinished for ever
 // (H-15 Lecomte 10 Oct, H-33 Haagmans 23 Oct). Now the reason is kept on the job and the Dashboard shows it
 // under Needs action with who has to sort it out.
+// ── 📤 OUTBOX (28 Oct 2026, audit M2) ──────────────────────────────────────────────────────
+// The final check-out / check-in record carries a fixed id. If saving it drops (weak Wi-Fi, timeout), the record
+// is kept on this tablet and sent again every 30 s and on reconnect until the office has it. Same id every time,
+// so a retry can never create a second record. The job's draft is only cleared once the record has landed.
+function obUuid(){try{if(crypto&&crypto.randomUUID)return crypto.randomUUID();}catch(e){}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);});}
+function obGet(){try{return JSON.parse(localStorage.getItem('gorent_outbox')||'[]')||[];}catch(e){return [];}}
+function obSet(l){try{localStorage.setItem('gorent_outbox',JSON.stringify(l));}catch(e){}}
+function obNetErr(err){var m=String((err&&err.message)||err||'');return !err||/fetch|network|timeout|no answer|load failed|connection|offline|abort/i.test(m);}
+function obAdd(item){var l=obGet().filter(function(x){return x.row.id!==item.row.id;});l.push(item);obSet(l);obPaint();}
+async function obSend(item){
+  var r=await withTimeout(SB.from(item.table).upsert(item.row,{onConflict:'id'}).select('id'),30000);
+  if(r===null)return {error:{message:'timeout'}};
+  return r||{error:{message:'no answer'}};
+}
+var _obBusy=false;
+async function obFlush(){
+  if(_obBusy)return;var l=obGet();if(!l.length){obPaint();return;}
+  if(navigator.onLine===false)return;
+  _obBusy=true;
+  try{
+    for(var i=0;i<l.length;i++){
+      var it=l[i],r;
+      try{r=await obSend(it);}catch(e){r={error:{message:String(e)}};}
+      if(r&&!r.error){
+        obSet(obGet().filter(function(x){return x.row.id!==it.row.id;}));
+        try{if(it.draft)drFinish(it.draft);}catch(e){}
+        try{toast('📤 '+(it.table==='checkouts'?'Check-out':'Return')+' '+(it.row.fleet_no||'')+' reached the office ✓','ok');}catch(e){}
+      }else if(r&&r.error&&!obNetErr(r.error)){it.tries=(it.tries||0)+1;it.lastError=r.error.message;var l2=obGet();l2.forEach(function(x){if(x.row.id===it.row.id){x.tries=it.tries;x.lastError=it.lastError;}});obSet(l2);}
+    }
+  }finally{_obBusy=false;obPaint();try{loadDoneSets();}catch(e){}}
+}
+function obPaint(){
+  try{var n=obGet().length,b=document.getElementById('ob-chip');
+    if(!n){if(b)b.remove();return;}
+    if(!b){b=document.createElement('span');b.id='ob-chip';b.onclick=function(){obFlush();toast('Sending again…','');};
+      var d=document.getElementById('net-dot');if(d&&d.parentNode)d.parentNode.insertBefore(b,d.nextSibling);else document.body.appendChild(b);}
+    b.textContent='📤 '+n+' waiting to upload';
+  }catch(e){}
+}
+setInterval(obFlush,30000);
+window.addEventListener('online',function(){setTimeout(obFlush,1500);});
+setTimeout(obFlush,6000);
 function coBlocked(why,who){
   try{co.releaseBlocked={why:why,who:who||'',by:(APP_USER&&APP_USER.name)||'',at:new Date().toISOString()};saveCOProgress();}catch(e){}
 }
@@ -7758,8 +7837,9 @@ async function completeCORun(){
   if(!drOnline()){coBlocked('No internet when Release was tapped','Release again when online');askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the check-out when the internet is back.'});return;}
   if(!(await idDocsGate('release'))){coBlocked('Passport / licence photos missing or not uploaded','Take or re-send the photos (client Step 1)');return;}
   if(!co.contractSigned){coBlocked('Rental contract not signed','The client signs the contract (client Step 3)');await askBox({title:'✍️ Contract not signed',danger:true,cancel:false,ok:'OK',text:'The vehicle cannot leave without the signed rental contract. This cannot be skipped.'});return;}
-  if(!(await payGate())){coBlocked('Not fully paid (or payment could not be checked)','Record the payment, or Peter releases');return;}   // Peter can override
-  if(!(await dupCheckoutGate())){coBlocked('Previous rental of '+co.fn+' has no check-in','Do that check-in, or Peter releases');return;}   // Peter can override
+  var _fresh=co._gatesAt&&Date.now()-co._gatesAt<15*60000;   // just passed at Hand over keys: don't ask twice
+  if(!_fresh&&!(await payGate())){coBlocked('Not fully paid (or payment could not be checked)','Record the payment, or Peter releases');return;}   // Peter can override
+  if(!_fresh&&!(await dupCheckoutGate())){coBlocked('Previous rental of '+co.fn+' has no check-in','Do that check-in, or Peter releases');return;}   // Peter can override
   // Km not ticked as checked: the reading on screen goes out, marked as not checked (never a block, 26 Oct 2026)
   if(!co.odoDone){var _ka=kmInt(co.odometerOut)||kmInt(co.v.odo);if(_ka){co.odometerOut=_ka;co.odoAuto=true;}}
   var _stBefore=co.v.st;
@@ -7787,7 +7867,7 @@ async function completeCORun(){
   }
 
   // Save the check-out record (first time), or update it if something was corrected afterwards
-  const _coRec={
+  const _coRec=Object.assign(ridOf(co.v),{
     booking_id:co.fn+'_'+co.v.pu, fleet_no:co.fn, client:mainRenter(), booked_by:bookedByName()||null,
     prep_by:co.prepBy, prep_by_all:co.prepByAll||[co.prepBy], prep_log:co.prepLog||[],
     prep_signed_at:coCleanDone()?new Date().toISOString():null, fuel_out:co.fuelOut,
@@ -7800,16 +7880,26 @@ async function completeCORun(){
     damage_panels:co.dmgd, prep_checklist:co.prepItems||{}, mech_checklist:co.mechItems||{}, mech_by:co.mechCheckBy||null, mech_who:co.mechWho||{}, return_time:co.returnTime||null,
     return_date_new:(co.contract&&co.contract.return_place_date&&co.contract.return_place_date!==co.v.rt&&co.contract.return_location&&co.contract.return_location!==GR_HQ)?co.contract.return_place_date:undefined, return_place:(co.contract&&co.contract.return_location)||null, return_address:(co.contract&&co.contract.return_address)||null, return_place_time:(co.contract&&co.contract.return_place_time)||null, doc_checks:co.docItems||{},
     created_at:new Date().toISOString(),
-  };
+  });
   try{
+    if(!co._coRowId){co._coId=co._coId||obUuid();_coRec.id=co._coId;}   // fixed id: a retry can never make a second record
     var _res=co._coRowId
       ? await SB.from('checkouts').update(_coRec).eq('id',co._coRowId).select('id')
-      : await SB.from('checkouts').insert(_coRec).select('id');
+      : await withTimeout(SB.from('checkouts').insert(_coRec).select('id'),30000);
+    if(_res===null)_res={error:{message:'timeout'}};
+    if(_res&&_res.error&&!co._coRowId&&obNetErr(_res.error)){
+      // weak internet: keep it on the tablet, it uploads by itself — the job is finished for the staff
+      obAdd({table:'checkouts',row:_coRec,draft:drId('checkout',co),at:new Date().toISOString()});
+      co._coRowId=_coRec.id;co._queued=true;delete co.releaseBlocked;doneMark(DONE_CO,co.v,true);
+      toast('📤 Released — saved on this tablet, it uploads by itself when the internet is back','ok');
+      _res={data:[{id:_coRec.id}]};
+    }
     if(_res&&_res.error){toast('Check-out not saved: '+_res.error.message+' — nothing lost, try again','err');co._done=false;coBlocked('Saving failed: '+_res.error.message,'Tap Release again');co.v.st=_stBefore;drMarkLocal('checkout',co.fn,co.v.cl,co.prepBy||'',false);return;}
     else if(_res&&_res.data&&_res.data[0]&&_res.data[0].id)co._coRowId=_res.data[0].id;
     delete co.releaseBlocked;
+    doneMark(DONE_CO,co.v,true);   // the Dashboard and lists know at once
   }catch(e){toast('Check-out not saved — check the connection. Nothing lost, try again','err');co._done=false;coBlocked('Saving failed (connection)','Tap Release again');co.v.st=_stBefore;drMarkLocal('checkout',co.fn,co.v.cl,co.prepBy||'',false);return;}
-  try{drFinish(drId('checkout',co));}catch(e){}
+  if(!co._queued){try{drFinish(drId('checkout',co));}catch(e){}}   // a queued record keeps its draft until it has landed
   // Read-only tablet: Fleet Manager data (vehicles/bookings) is never changed from here
 
   // Build handover HTML document for client
@@ -8112,7 +8202,7 @@ async function startCI(fn){
   // (a finished check-in used to reopen empty, which looked as if nothing had been saved).
   if(window._ciRedo!==bkKey(v)&&!(ci&&ci.v&&drKeyOf(ci)===(v.bid||fn)&&!ci._done)){
     var _doneRow=null;
-    try{var _q=await SB.from('checkins').select('booking_id,received_by,odo_in,fuel_in,created_at,manager_name,force_closed_by,force_closed_reason,missing_items,new_damage').eq('booking_id',bkKey(v)).order('created_at',{ascending:false}).limit(1);_doneRow=_q&&_q.data&&_q.data[0];}catch(e){}
+    try{var _q=await SB.from('checkins').select('booking_id,received_by,odo_in,fuel_in,created_at,manager_name,force_closed_by,force_closed_reason,missing_items,new_damage'+(RID_OK?',rental_id':'')).eq('booking_id',bkKey(v)).order('created_at',{ascending:false}).limit(5);_doneRow=_q&&_q.data&&_q.data.filter(function(x){return !x.rental_id||v.bid==null||String(x.rental_id)===String(v.bid);})[0];}catch(e){}
     if(!_doneRow&&ciIsDone(v))_doneRow={};
     if(_doneRow){ciShowDone(v,_doneRow);return;}
   }
@@ -9955,7 +10045,7 @@ async function completeCIRun(){
   const allItems=RET_GROUPS.flatMap(g=>g.items);
   const missing=allItems.filter(i=>retSt[i]==='missing').map(ciQtyLabel);
   const damaged=allItems.filter(i=>retSt[i]==='dmg');
-  var _ciRow={
+  var _ciRow=Object.assign(ridOf(ci.v),{
     booking_id:ci.fn+'_'+ci.v.pu,fleet_no:ci.fn,client:ci.v.cl,
     received_by:ci.receivedBy,odo_in:kmInt(ci.odoIn),odo_out:kmInt(ciOdoOut()),
     km_driven:ciKmDriven(),
@@ -9972,17 +10062,26 @@ async function completeCIRun(){
     item_checks:ciItemChecks(),equipment_checked_by:ciEqChecks(),receiver_log:ci.rcvLog||[],
     signature_urls:ci._sigUrls||{},report_link:ci._reportLink||null,
     created_at:new Date().toISOString(),
-  };
+  });
   var _ciRes;try{
     // One row per return: if this return was already saved (double tap, second tablet, redo), update that row
     var _k=_ciRow.booking_id,_ks=[_k,bkNorm(_k),bkAltKey(_k)].filter(function(x,i,a){return x&&a.indexOf(x)===i;});
-    var _ex=await withTimeout(SB.from('checkins').select('id').in('booking_id',_ks).order('created_at',{ascending:false}).limit(1),15000).catch(function(){return null;});
-    var _exId=_ex&&!_ex.error&&_ex.data&&_ex.data[0]&&_ex.data[0].id;
+    var _ex=await withTimeout(SB.from('checkins').select('id'+(RID_OK?',rental_id':'')).in('booking_id',_ks).order('created_at',{ascending:false}).limit(5),15000).catch(function(){return null;});
+    var _bid=ci.v&&ci.v.bid!=null?String(ci.v.bid):'';
+    // a row filed under the same fleet+date but linked to ANOTHER booking is not this return (28 Oct 2026)
+    var _exRow=_ex&&!_ex.error&&(_ex.data||[]).filter(function(x){return !x.rental_id||!_bid||String(x.rental_id)===_bid;})[0];
+    var _exId=_exRow&&_exRow.id;
+    if(!_exId&&RID_OK&&_bid){try{var _ex2=await withTimeout(SB.from('checkins').select('id').eq('rental_id',_bid).order('created_at',{ascending:false}).limit(1),15000);_exId=_ex2&&!_ex2.error&&_ex2.data&&_ex2.data[0]&&_ex2.data[0].id;}catch(e){}}
     if(_exId){_ciRes=await SB.from('checkins').update(_ciRow).eq('id',_exId).select('id');if(!_ciRes.error&&!(_ciRes.data&&_ciRes.data.length))_ciRes={error:{message:'no access to update the earlier save'}};}
-    else _ciRes=await SB.from('checkins').insert(_ciRow);
+    else{ci._ciId=ci._ciId||obUuid();_ciRow.id=ci._ciId;_ciRes=await withTimeout(SB.from('checkins').insert(_ciRow),30000);if(_ciRes===null)_ciRes={error:{message:'timeout'}};}
   }catch(e){_ciRes={error:{message:'no connection'}};}
+  if(_ciRes&&_ciRes.error&&_ciRow.id&&obNetErr(_ciRes.error)){
+    obAdd({table:'checkins',row:_ciRow,draft:drId('checkin',ci),at:new Date().toISOString()});
+    ci._queued=true;_ciRes={data:[]};
+    toast('📤 Return finished — saved on this tablet, it uploads by itself when the internet is back','ok');
+  }
   if(_ciRes&&_ciRes.error){if(!wrongRentalBox(_ciRes.error.message))toast('Return not saved: '+_ciRes.error.message+' — nothing lost, try again','err');ci._done=false;ci.depositPending=false;drMarkLocal('checkin',ci.fn,ci.v.cl,ci.receivedBy||'',false);return;}
-  try{drFinish(drId('checkin',ci));}catch(e){}
+  if(!ci._queued){try{drFinish(drId('checkin',ci));}catch(e){}}
   try{overdueAlertResolve(ci.v);}catch(e){}
   // Alert management about any return issue (damage, fuel, missing or damaged equipment)
   var _fs=(!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut);
@@ -9998,7 +10097,7 @@ async function completeCIRun(){
   const hasIssues=newDmg.length||((!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut))||missing.length||damaged.length;
   // The vehicle is back: count it as returned at once, so the Check-Out list shows it in the yard
   // with its next client straight away (not only after the next refresh).
-  try{DONE_CI[bkNorm(bkKey(ci.v))]=true;setTimeout(function(){try{loadDoneSets();}catch(e){}},3000);}catch(e){}
+  try{doneMark(DONE_CI,ci.v,true);setTimeout(function(){try{loadDoneSets();}catch(e){}},3000);}catch(e){}
   const _nextCO=ciNextBooking(ci.v);
   document.getElementById('ci-body').innerHTML=`
     <div class="chg-veh-bar"><button onclick="ciChangeVehicle()" style="padding:10px 18px;border-radius:22px;border:2px solid var(--gb);background:var(--g1);color:var(--tx);font-size:15px;font-weight:900;cursor:pointer;">← Choose another vehicle</button>${tdBtn(ci.v&&ci.v.bid,ci.v&&ci.v.cl)}</div>
