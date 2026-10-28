@@ -491,3 +491,20 @@ body.guide-next .co-next{display:none!important;}
 .need-flash{box-shadow:0 0 0 2px rgba(209,54,54,.25);}
 #ob-chip{display:inline-block;margin-left:6px;padding:3px 9px;border-radius:12px;background:#c2410c;color:#fff;font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap;}
 .bd-lock{background:#fde8d8;color:#9a3412;}
+
+/* ── Compact job header (28 Oct 2026, audit UX-3): the work starts high on the screen ── */
+.chg-veh-bar{padding-top:6px!important;padding-bottom:4px!important;gap:6px!important;margin-bottom:4px!important;}
+.chg-veh-bar button,.chg-veh-bar a{padding:6px 12px!important;font-size:13px!important;min-height:0!important;border-radius:16px!important;}
+.fhdr{padding:8px 12px!important;margin-bottom:8px!important;}
+.fhdr .fh-top{margin-bottom:4px!important;}
+.fhdr .fh-grid{gap:6px!important;margin-bottom:4px!important;}
+.fhdr .fh-grid>*{min-height:0!important;padding-top:4px!important;padding-bottom:4px!important;}
+.fhdr .fh-row{padding-top:4px!important;margin-top:2px!important;}
+.stg-bar{margin-bottom:8px!important;}
+.stg-bar .stg{padding-top:6px!important;padding-bottom:6px!important;min-height:0!important;}
+#cos>.step-intro,#cis>.step-intro,.step-intro{padding:6px 12px!important;margin-bottom:6px!important;min-height:0!important;align-items:center!important;}
+.step-intro .step-ico{display:none!important;}
+.step-intro>div:not(.step-ico)>div:not(:first-child){display:none!important;}   /* one line: the guide bar gives the instruction */
+.prog-wrap{margin:2px 0 6px!important;padding:0!important;}
+/* short notes appear under the menu, never over the instruction bar at the bottom (audit UX-1) */
+.toast{bottom:auto!important;top:72px!important;box-shadow:0 6px 20px rgba(0,0,0,.18);font-size:14px!important;max-width:calc(100vw - 32px);white-space:normal!important;text-align:center;}

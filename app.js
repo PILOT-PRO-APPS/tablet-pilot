@@ -1268,6 +1268,7 @@ function appBack(){
 function goPage(p,_fromBack){
   if(!APP_USER){showLogin();return;}
   try{if(p!=='ov')closeResumePanel();}catch(e){}
+  try{var _ab=document.getElementById('ask-box');if(_ab&&_ab.getAttribute('data-page')&&_ab.getAttribute('data-page')!==p){_ab.remove();if(co)co._collectAsked=false;}}catch(e){}   // a job question must not sit over another screen
   try{var _cur=((document.querySelector('.page.on')||{}).id||'').replace('page-','');if(!_fromBack&&_cur&&_cur!==p&&_cur!=='login'){NAV_HIST.push(_cur);if(NAV_HIST.length>20)NAV_HIST.shift();}}catch(e){}
   if(['out','cal','rp'].indexOf(p)>=0 && !canSeeOverview() || p==='doc' && !canSeeDocPage()){
     toast('🔒 Not available for '+(APP_USER?APP_USER.name:'you'),'err');
@@ -3546,6 +3547,8 @@ function askCollectionDate(){
   try{
     if(!co||!co.v||!co.v.pu)return;
     if(co.collectedOn||co._collectAsked)return;
+    if(co._drLoading&&(co._collectWait=(co._collectWait||0)+1)<25){setTimeout(askCollectionDate,400);return;}   // wait for the saved work: a signed job must not be asked again
+    if(co.contractSigned)return;                    // contract already signed: the dates are settled, the client has the vehicle
     if(typeof canViewReports==='function'&&!canViewReports())return;   // a contract question: managers only (audit W3)
     var today=localYMD();
     if(co.v.pu>=today)return;                       // booked for today or later: nothing to ask
@@ -3554,7 +3557,7 @@ function askCollectionDate(){
     function days(from){return co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(from))/86400000)):0;}
     // in-app box: the browser's confirm() is unreliable in Fully Kiosk and its OK/Cancel meant nothing to staff
     var _co=co;
-    askBox({title:'📅 When is the client taking the vehicle?',
+    askBox({page:'co',title:'📅 When is the client taking the vehicle?',
       text:'Booked to go out '+pretty(co.v.pu)+'. Today is '+pretty(today)+'.',
       ok:'Today, '+pretty(today)+' ('+days(today)+' days)',cancel:'Booked date, '+pretty(co.v.pu)+' ('+days(co.v.pu)+' days)'}).then(function(a){
     if(co!==_co)return;
@@ -3650,7 +3653,7 @@ function coCsLeft(k){
 }
 function coCsGo(i){
   i=Math.max(0,Math.min(3,i));
-  if(!canDoStep(i<=2?5:6)){toast('The handover is done by Joe, Beverly or Peter — your part is steps 1–3','err');return;}
+  if(!canDoStep(i<=2?5:6)){toast('The handover is done by '+mgrNames()+' — your part is steps 1–3','err');return;}
   window._coLeftSkip=true;
   try{
     if(i<=2){co._cs=i;if(coStep!==5){coStep=5;}drawCO();}
@@ -6476,6 +6479,22 @@ function coInspIssues(){
   });
   return out;
 }
+// Inspection step (28 Oct 2026, audit W4): items from Steps 1–3 are ticked IN their own step by the person who
+// checked them — the inspection no longer re-lists all of them with "All OK (83)" buttons. One line per step.
+function coOpenStepLines(unchecked){
+  var g={},order=[],nOf={'Step 1 — Cleaning':0,'Step 2 — Equipment':2,'Step 3 — Mechanical':3};
+  unchecked.forEach(function(i){if(!g[i.step]){g[i.step]=0;order.push(i.step);}g[i.step]++;});
+  return '<div style="background:#fff;border:2px solid #f3b4b4;border-radius:var(--rs);padding:8px 12px;margin-bottom:12px;">'
+    +'<div style="font-size:13px;font-weight:900;color:var(--rl);padding:2px 0 6px;">Still open from the earlier steps — finish them there</div>'
+    +order.map(function(st){
+      var n=nOf[st];
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #f3e1e1;">'
+        +'<div style="flex:1;font-size:15px;font-weight:800;color:var(--tx);">'+_bx(st)+' <span style="color:var(--rl);">· '+g[st]+' open</span></div>'
+        +(n!=null&&canDoStep(n)?'<button onclick="coGoStep('+n+')" class="bd-btn bd-blue" style="min-height:40px;padding:8px 14px;font-size:14px;">Go to step →</button>'
+          :'<span class="bd-tag">'+_bx(st.split('— ')[1]||'')+' staff</span>')
+        +'</div>';
+    }).join('')+'</div>';
+}
 function coInspDone(){return !!(co&&co.inspBy)&&!coInspIssues().some(function(i){return i.status==='unchecked';})&&!!(co.docItems&&co.docItems.veh)&&(!co.v.xb||!!co.docItems.xb);}
 function inspSetItem(kind,lbl,v){
   // Whoever is logged in can tick a missed item straight from the list — no going back a step
@@ -6582,12 +6601,12 @@ function coStep4_dmg(){
   var done=coInspDone();
   return '<div class="step-intro"><div class="step-ico">🔍</div>'
     +'<div><div class="step-title">Step 4 — Pre-handover Inspection</div>'
-    +'<div class="step-sub">Done by the person doing the handover — spot checks · anything not checked in Steps 1–3 flashes red: check it now</div></div></div>'
+    +'<div class="step-sub">Done by the person doing the handover — documents in the vehicle and spot checks</div></div></div>'
     +who
     +'<div style="background:var(--g1);border:2px solid var(--g2);border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;">'
     +'<div style="font-size:13px;font-weight:800;color:var(--tx);">📄 Documents</div>'+docsHtml+'</div>'
     +(unchecked.length
-      ?qcUncheckedHTML('Not checked yet — check these now')
+      ?coOpenStepLines(unchecked)
       :'<div style="background:var(--sg);border:2px solid var(--gb);border-radius:var(--rs);padding:12px;text-align:center;margin-bottom:12px;"><div style="font-size:15px;font-weight:900;color:var(--se);">✅ Everything from Steps 1–3 has been checked</div></div>')
     +(problems.length?'<div style="background:var(--ag);border:2px solid var(--am);border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;"><div style="font-size:13px;font-weight:900;color:var(--al);margin-bottom:4px;">⚠ Problems reported ('+problems.length+')</div>'+probRows+'</div>':'')
     +(done?'<div class="al ok" style="text-align:center;">✅ Inspection complete — '+_bx(co.inspBy)+' · tap <strong>Next →</strong></div>'
@@ -7039,7 +7058,7 @@ function coReleaseBox(){
   var ready=handoverClosed();
   var me=(APP_USER&&APP_USER.name)||'';
   if(!ready)return '<div style="text-align:center;font-size:13px;color:var(--g5);margin:6px 0 10px;">When the client has signed, <b>Release vehicle</b> appears here.</div>';
-  if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask Joe, Beverly or Peter</div>';
+  if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask '+_bx(mgrNames())+'</div>';
   var rb=co.releaseBlocked;
   return (rb?'<div style="background:#fdeaea;border:2px solid #d13636;border-radius:var(--r);padding:10px 14px;margin-bottom:8px;font-size:14px;font-weight:800;color:#b91c1c;">⛔ Release was refused'+(rb.at?' ('+_bx(new Date(rb.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+(rb.by?', '+_bx(rb.by):'')+')':'')+': '+_bx(rb.why)+'.<br><span style="color:#374151;">'+_bx(rb.who||'')+'.</span></div>':'')
     +'<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
@@ -7278,6 +7297,7 @@ function coOdoNotes(){
   var out=kmInt(co.odometerOut),ret=co.v&&co.v.lastRet?kmInt(co.v.lastRet.km):null;
   if(co.odoAuto)n.push({at:at,by:by,text:'🛣 Km out '+(out||0).toLocaleString()+' not ticked as checked against the dashboard — taken from the screen'});
   if(co.odoLowerOk&&out&&ret&&out<ret)n.push({at:at,by:by,text:'🛣 Km out '+out.toLocaleString()+' is LOWER than the last return ('+ret.toLocaleString()+') — confirmed by '+by+'. Check the return km.'});
+  if(co&&co.wsAcceptedBy)n.push({at:co.wsAcceptedAt||at,by:co.wsAcceptedBy,text:'🔧 Workshop accepted as it stands by '+co.wsAcceptedBy+' — '+(co.wsAcceptedReason||'')+' · open then: '+(co.wsAcceptedOpen||[]).slice(0,40).join('; ')});
   return n.length?n:undefined;
 }
 function coOdoSrc(v){
@@ -7385,8 +7405,29 @@ function coStepMissing(n){
   }
   return m;
 }
+// Owner/audit W5 (28 Oct 2026): a client who arrives before the workshop has finished must not leave a manager
+// stuck behind "Contract locked — 85 checks open". A manager accepts the workshop as it stands, with a reason;
+// the open items are kept on the check-out record and the office is alerted. Workshop steps then count as done.
+var CO_WORKSHOP=[0,2,3,4];
+function coWsAccepted(){return !!(co&&co.wsAcceptedBy);}
+async function coAcceptWorkshop(){
+  if(!canViewReports()){toast('Only a manager can accept the workshop as it stands','err');return;}
+  var open=coLeftList(CO_WORKSHOP);
+  var a=await askBox({title:'Accept the workshop as it stands?',danger:true,ok:'Accept — client goes ahead',cancel:'Back',
+    text:open.length+' workshop check'+(open.length===1?' is':'s are')+' still open. They are recorded on the check-out exactly as they are, and the office is told.\n\nOnly do this if the vehicle is really ready for the client.',
+    reason:'Why? (e.g. client arrived early, checked by eye)',minReason:5});
+  if(!a.ok)return;
+  co.wsAcceptedBy=APP_USER.name;co.wsAcceptedAt=new Date().toISOString();co.wsAcceptedReason=a.reason;co.wsAcceptedOpen=open.slice(0,200);
+  try{saveCOProgress();}catch(e){}
+  try{SB.from('management_alerts').insert(Object.assign(ridOf(co.v),{booking_id:bkKey(co.v),fleet_no:co.fn,client:co.v.cl||'',received_by:APP_USER.name,
+    message:'WORKSHOP ACCEPTED AS IT STANDS — '+co.fn+' / '+(co.v.cl||'')+' by '+APP_USER.name+' ('+open.length+' open): '+a.reason,created_at:new Date().toISOString()})).then(function(){},function(){});}catch(e){}
+  var c=_coLeft;coLeftClose();toast('Workshop accepted by '+APP_USER.name+' — '+open.length+' open items recorded','ok');
+  try{drawCO();}catch(e){}
+  if(c&&c.o&&c.o.onGo)c.o.onGo();
+}
 function coLeftList(steps){
   var out=[];
+  if(coWsAccepted())steps=steps.filter(function(n){return CO_WORKSHOP.indexOf(n)<0;});
   steps.forEach(function(n){
     coStepItems(n).forEach(function(i){out.push((CO_NAMES[n]||'')+': '+i.label);});
     coStepMissing(n).forEach(function(x){out.push(x);});
@@ -7444,7 +7485,7 @@ function coFixLine(i){
   else if(/handover|explained/i.test(x)){cs=3;}
   else if(/equipment not confirmed/i.test(x)){step=2;}
   else if(/odo|disc date|vehicle documents|cross-border papers/i.test(x)){step=4;}
-  if(cs!==null&&!canDoStep(cs===3?6:5)){toast('That part is done by the office (Joe, Beverly or Peter)','err');return;}
+  if(cs!==null&&!canDoStep(cs===3?6:5)){toast('That part is done by the office ('+mgrNames()+')','err');return;}
   if(cs!==null){coCsGo(cs);}else if(step!==null){window._coLeftSkip=true;try{coGoStep(step);}finally{window._coLeftSkip=false;}}
   setTimeout(function(){
     if(sel){var el=document.querySelector(sel);if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}}
@@ -7520,6 +7561,7 @@ function coLeftBox(steps,o){
     +coLeftHTML(steps)
     +'<div style="display:flex;gap:8px;margin-top:12px;position:sticky;bottom:-18px;background:var(--g1);padding:10px 0 4px;">'
     +'<button class="btn g" style="flex:2;" onclick="coLeftClose()">'+(o.block?'← Close — fix these now':'← Stay and fix')+'</button>'
+    +((o.block&&canViewReports()&&!coWsAccepted()&&steps.some(function(x){return CO_WORKSHOP.indexOf(x)>=0;})&&coLeftCount(CO_WORKSHOP))?'<button class="btn s" style="flex:1;" onclick="coAcceptWorkshop()">Manager: accept workshop as it stands</button>':'')
     +(o.block?'':'<button class="btn s" style="flex:1;" onclick="coLeftGo()">'+_bx(o.goLbl||'Go on anyway →')+'</button>')
     +'</div></div>';
   document.body.appendChild(box);
@@ -7562,6 +7604,7 @@ function coMissing(){
 }
 function coFinishCheck(refresh){
   var m=coMissing();
+  if(coWsAccepted())m=m.filter(function(x){return !/^(🧹 Cleaning|📦 Equipment|🔩 Mechanical)/.test(x);});   // accepted by a manager, recorded
   var old=document.getElementById('co-missing');if(old)old.remove();
   if(!m.length){if(refresh){toast('✅ All outstanding items done — tap Complete Check-Out','ok');return;}completeCO();return;}
   var box=document.createElement('div');box.id='co-missing';
@@ -8668,7 +8711,7 @@ function askBox(o){
   o=o||{};
   return new Promise(function(done){
     var old=document.getElementById('ask-box');if(old)old.remove();
-    var w=document.createElement('div');w.id='ask-box';
+    var w=document.createElement('div');w.id='ask-box';if(o.page)w.setAttribute('data-page',o.page);
     w.setAttribute('style','position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;');
     var col=o.danger?'#b91c1c':'#12803c';
     w.innerHTML='<div style="background:#fff;color:#111;border-radius:16px;max-width:520px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.4);border-top:6px solid '+col+';">'
@@ -8890,6 +8933,8 @@ function bdDraft(kind,v){
   try{var k=localStorage.getItem(ipKey(v.fn));if(k){var x=JSON.parse(k);if(x&&(x.type||'checkout')===kind&&(!x.cl||!v.cl||x.cl===v.cl))return {by:x.staff||'',at:x.started||'',step:null};}}catch(e){}
   return null;
 }
+// Manager names for messages, always from the ROLE list (audit W9: hard-coded texts left out Joretha)
+function mgrNames(){try{var l=MANAGEMENT.filter(function(n){return n!=='Peter';}).concat(['Peter']);return l.length>1?l.slice(0,-1).join(', ')+' or '+l[l.length-1]:l[0];}catch(e){return 'a manager';}}
 function bdMgrs(){try{return MANAGEMENT.filter(function(n){return n!=='Peter';}).concat(['Peter']).join(' / ');}catch(e){return 'a manager';}}
 function bdCanOut(){try{return !!APP_USER&&(canDoStep(0)||canDoStep(5));}catch(e){return true;}}
 // What needs doing that is stuck: unfinished check-outs, vehicles back but not checked in, late collections
