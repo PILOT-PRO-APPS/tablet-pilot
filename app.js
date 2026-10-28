@@ -1656,7 +1656,8 @@ function renderCIPicker(){
   // Overdue: checked out on the tablet, return date passed, no check-in. These used to be missing from
   // the list altogether (only 'next 7 days' and 'early return' were shown).
   var overdue=FLEET.filter(function(v){var d=dd(v);return v.rt&&d<0&&d>=-45&&coIsDone(v)&&!ciIsDone(v);}).sort(function(a,b){return a.rt>b.rt?1:-1;});
-  var returning=FLEET.filter(function(v){var d=dd(v);return d>=0&&d<=7&&!_blocked(v);}).sort(function(a,b){return a.rt>b.rt?1:-1;});
+  // finished returns are not listed (28 Oct 2026)
+  var returning=FLEET.filter(function(v){var d=dd(v);return d>=0&&d<=7&&!_blocked(v)&&!ciIsDone(v);}).sort(function(a,b){return a.rt>b.rt?1:-1;});
   // vehicles out on rental now that are due back later (early returns)
   // only vehicles that really left (checked out on the tablet, or OUT in the Fleet Manager) —
   // a booking that was never collected is not "out on rental" and cannot come back early
@@ -1684,13 +1685,16 @@ function renderCIPicker(){
     if(_ip){col='var(--am)';badge='<span style="background:var(--ag);color:var(--al);border:1px solid var(--am);font-size:11px;font-weight:900;padding:3px 10px;border-radius:8px;">IN PROGRESS</span>';}
     var _ipLine=_ip?'<div style="font-size:12px;font-weight:800;color:var(--al);margin-top:4px;">⏳ Check-in started'+((_ip.staff||_ip.updated_by)?' · '+_bx(_ip.staff||_ip.updated_by):'')+resetBtn(v.fn)+forceBtnCI(v)+'</div>'
       :((!_fin&&!early&&d<=0)?'<div style="margin-top:6px;">'+forceBtnCI(v)+'</div>':'');
-    return '<div data-fn="'+v.fn+'" data-bid="'+_bx(v.bid||'')+'" data-s="'+_bx(srch)+'" class="picker-row-ci" style="background:var(--g1);border:2px solid '+col+';border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;">'
-      +'<div><div style="font-size:16px;font-weight:900;color:var(--se);">'+v.fn+'</div>'
-      +'<div style="font-size:13px;font-weight:700;color:var(--tx);margin-top:2px;">'+_bx(v.cl||'')+(waChip(v)?' · '+waChip(v):'')+'</div>'
-      +'<div style="font-size:11px;color:var(--g5);margin-top:3px;">'+_bx(v.reg||'')+' &middot; '+_ciD(v.pu)+' → '+_ciD(v.rt)+' <b class="ci-rt" style="color:#7db8ff;margin-left:6px;"></b></div>'
-      +((!_fin&&!early&&!_isOut(v))?'<div style="font-size:12px;font-weight:800;color:var(--g5);margin-top:4px;">⏸ No tablet check-out on file</div>':'')+_ipLine+'</div>'
-      +'<div>'+badge+'</div></div></div>';
+    // Same card as the Dashboard (28 Oct 2026): H number + client, the vehicle's next client, one button
+    var _nx=null;try{_nx=ciNextBooking(v);}catch(e){}
+    var _btn=_fin?'':'<span class="bd-btn '+(_ip?'bd-amber':d<0?'bd-amber':'bd-green')+'" style="display:inline-block;">▶ '+(_ip?'Carry on':'Check in')+'</span>';
+    return '<div data-fn="'+v.fn+'" data-bid="'+_bx(v.bid||'')+'" data-s="'+_bx(srch)+'" class="picker-row-ci bd-card" style="border-left:6px solid '+col+';padding:12px 14px;margin-bottom:10px;">'
+      +'<div class="bd-fn">'+_bx(v.fn)+'</div>'
+      +'<div class="bd-mid"><div class="bd-cl">'+_bx(v.cl||'')+'</div>'
+      +'<div class="bd-sub">'+_ciD(v.pu)+' → <b>'+_ciD(v.rt)+'</b>'+(v.reg?' · '+_bx(v.reg):'')+(waChip(v)?' · '+waChip(v):'')+' <b class="ci-rt" style="color:#2f5a96;margin-left:4px;"></b></div>'
+      +'<div class="bd-link'+(_nx&&_nx.pu<=_addDays(today,2)?' wait':'')+'">'+(_nx?'Next: <b>'+_bx(_nx.cl||'')+'</b> · '+_ciD(_nx.pu):'No next booking yet')+'</div>'
+      +((!_fin&&!early&&!_isOut(v))?'<div class="bd-sub" style="font-weight:800;">⏸ No tablet check-out on file</div>':'')+_ipLine+'</div>'
+      +'<div style="flex-shrink:0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">'+badge+_btn+'</div></div>';
   }
   var overRows=overdue.map(function(v){return row(v,false);}).join('');
   var rows=returning.map(function(v){return row(v,false);}).join('')||'<div style="padding:24px;text-align:center;color:var(--g5);font-size:13px;">No check-ins in the next 7 days</div>';
@@ -2622,7 +2626,8 @@ function drSummary(kind,obj){
   function keys(o){var r={};Object.keys(o||{}).forEach(function(k){r[k]=1;});return r;}
   if(kind==='checkin')return {receivedBy:obj.receivedBy||'',odoIn:obj.odoIn||'',custSigned:!!obj.custSig};
   return {prepItems:keys(obj.prepItems),mechItems:keys(obj.mechItems),prepBy:obj.prepBy||'',equipBy:obj.equipBy||'',mechCheckBy:obj.mechCheckBy||'',
-    inspBy:obj.inspBy||'',contractBy:obj.contractBy||'',mechBy:obj.mechBy||'',mgmtBy:obj.mgmtBy||'',contractSigned:!!obj.contractSigned};
+    inspBy:obj.inspBy||'',contractBy:obj.contractBy||'',mechBy:obj.mechBy||'',mgmtBy:obj.mgmtBy||'',contractSigned:!!obj.contractSigned,
+    handoverSigned:!!(obj.custSig||obj.sigOverride),releaseBlocked:obj.releaseBlocked||null};
 }
 function drStaffOf(kind,obj){
   if(kind==='checkin')return obj.receivedBy||'';
@@ -3483,11 +3488,13 @@ function askCollectionDate(){
     co._collectAsked=true;
     function pretty(d){return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}
     function days(from){return co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(from))/86400000)):0;}
-    var msg='This booking was due to go out on '+pretty(co.v.pu)+', but today is '+pretty(today)+'.\n\n'
-      +'When is the client actually taking the vehicle?\n\n'
-      +'OK  =  TODAY, '+pretty(today)+'   ('+days(today)+' days on the contract)\n'
-      +'Cancel  =  keep the booked date, '+pretty(co.v.pu)+'   ('+days(co.v.pu)+' days on the contract)';
-    if(confirm(msg)){
+    // in-app box: the browser's confirm() is unreliable in Fully Kiosk and its OK/Cancel meant nothing to staff
+    var _co=co;
+    askBox({title:'📅 When is the client taking the vehicle?',
+      text:'Booked to go out '+pretty(co.v.pu)+'. Today is '+pretty(today)+'.',
+      ok:'Today, '+pretty(today)+' ('+days(today)+' days)',cancel:'Booked date, '+pretty(co.v.pu)+' ('+days(co.v.pu)+' days)'}).then(function(a){
+    if(co!==_co)return;
+    if(a.ok){
       co.collectedOn=today;
       co.collectedNote={booked:co.v.pu,actual:today,by:(APP_USER&&APP_USER.name)||'',at:new Date().toISOString()};
       toast('Contract will be dated '+pretty(today)+' — '+days(today)+' days','ok');
@@ -3496,6 +3503,8 @@ function askCollectionDate(){
       toast('Keeping the booked date, '+pretty(co.v.pu),'ok');
     }
     try{saveCOProgress();}catch(e){}
+    try{drawCO();}catch(e){}
+    });
   }catch(e){}
 }
 function coPickupDate(){return (co&&co.collectedOn)||(co&&co.v&&co.v.pu)||'';}
@@ -5398,8 +5407,8 @@ async function captureDriverDoc(event,driverIdx,field){
     const blob=await(await fetch(b64)).blob();
     const{error}=await SB.storage.from('client-docs').upload(path,blob,{contentType:'image/jpeg',upsert:true});
     hideBanner();
-    if(error)toast('Upload failed: '+error.message,'err');
-    else toast('Photo saved ✅','ok');
+    if(error)toast('Upload failed: '+error.message+' — it is tried again before the contract is signed','err');
+    else{toast('Photo saved ✅','ok');try{var _d=co.drivers[driverIdx];(_d._up=_d._up||{})[field]=path;saveCOProgress();}catch(e){}}
     // Auto-read documents
     if(field==='passportImg'){
       coRedrawDrivers();
@@ -5867,7 +5876,58 @@ function ctMissing(c){
   })();
   return m;
 }
-function previewAndSignContract(){
+// ── ID documents are compulsory (owner 28 Oct 2026, after H-33: contract signed with no passport or licence) ──
+// Every driver needs a passport photo and a licence photo, safely uploaded to the office, before the contract
+// can be signed and before the vehicle is released. Nobody can waive this.
+function idDocsMissing(){
+  var m=[];
+  (co.drivers&&co.drivers.length?co.drivers:[{}]).forEach(function(dr,i){
+    var who=(dr.name||'').trim()||(i===0?'Main driver':'Driver '+(i+1));
+    if(!dr.passportImg)m.push('🛂 '+who+': passport photo');
+    if(!dr.licFront)m.push('🪪 '+who+': licence photo');
+    if(!(dr.name||'').trim())m.push('👤 '+(i===0?'Main driver':'Driver '+(i+1))+': name');
+  });
+  return m;
+}
+// Photos taken while the upload failed (weak Wi-Fi) are sent again here; returns what still could not be uploaded
+async function idDocsEnsureUploaded(){
+  var bad=[],_bk=co&&co.v?bkKey(co.v):'';if(!_bk)return bad;
+  var ds=co.drivers||[];
+  for(var i=0;i<ds.length;i++){
+    var dr=ds[i];dr._up=dr._up||{};
+    for(var f of ['passportImg','licFront','licBack']){
+      var img=dr[f];if(!img||dr._up[f])continue;
+      try{
+        var nm=(dr.name||('driver_'+i)).replace(/[^a-zA-Z0-9]/g,'_');
+        var path='bookings/'+_bk+'/id-docs/'+nm+'_'+f+'_'+Date.now()+'.jpg';
+        var blob=await (await fetch(img)).blob();
+        var r=await withTimeout(SB.storage.from('client-docs').upload(path,blob,{contentType:'image/jpeg',upsert:true}),30000);
+        if(r&&!r.error)dr._up[f]=path;else if(f!=='licBack')bad.push((dr.name||('Driver '+(i+1)))+' '+(f==='passportImg'?'passport':'licence'));
+      }catch(e){if(f!=='licBack')bad.push((dr.name||('Driver '+(i+1)))+' '+(f==='passportImg'?'passport':'licence'));}
+    }
+  }
+  try{saveCOProgress();}catch(e){}
+  return bad;
+}
+async function idDocsGate(what){
+  var m=idDocsMissing();
+  if(m.length){
+    await askBox({title:'🛂 Passport & licence first',danger:true,cancel:false,ok:'Take the photos',
+      text:'The '+what+' cannot go ahead without every driver\'s passport and licence:\n • '+m.join('\n • ')+'\n\nIf there is an accident we must have these. This cannot be skipped.'});
+    try{coCsGo(0);}catch(e){}
+    return false;
+  }
+  if(!drOnline()){await askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'The passport and licence photos must reach the office before the '+what+'. Connect to the internet and try again.'});return false;}
+  banner('Saving passport & licence photos…');
+  var bad=await idDocsEnsureUploaded();hideBanner();
+  if(bad.length){await askBox({title:'⚠ Photos not saved yet',danger:true,cancel:false,ok:'OK',text:'These could not be uploaded:\n • '+bad.join('\n • ')+'\n\nCheck the internet and try again. The '+what+' waits until they are safe.'});return false;}
+  return true;
+}
+async function previewAndSignContract(){
+  if(!co.contractSigned&&!(await idDocsGate('contract')))return;
+  return _previewAndSignContractGo();
+}
+function _previewAndSignContractGo(){
   // Before the client is handed the tablet: anything still open from Steps 1–4
   // Hard stop: every check must be done by staff before the contract can be signed
   if(!co.contractSigned&&coLeftCount(CO_BEFORE_CONTRACT)){
@@ -6245,6 +6305,7 @@ async function submitContractSig(){
 
 async function signContract(sigData){
   if(coLeftCount(CO_BEFORE_CONTRACT)){var _m=document.getElementById('contract-modal');if(_m)_m.remove();coLeftBox(CO_BEFORE_CONTRACT,{block:true,title:'Contract cannot be signed yet',sub:'Staff must finish every check first.'});return;}
+  if(idDocsMissing().length){var _m2=document.getElementById('contract-modal');if(_m2)_m2.remove();idDocsGate('contract');return;}   // passport + licence are compulsory (28 Oct 2026)
   if(!sigData){toast('No signature','err');return;}
   if(!co.contractBy){toast('Select who is doing the contract first','err');var _s=document.getElementById('co-ct-nm');if(_s)_s.scrollIntoView({block:'center'});return;}
   co.contract.client_signed_at=new Date().toISOString();
@@ -6891,7 +6952,9 @@ function coReleaseBox(){
   var me=(APP_USER&&APP_USER.name)||'';
   if(!ready)return '<div style="text-align:center;font-size:13px;color:var(--g5);margin:6px 0 10px;">When the client has signed, <b>Release vehicle</b> appears here.</div>';
   if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask Joe, Beverly or Peter</div>';
-  return '<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
+  var rb=co.releaseBlocked;
+  return (rb?'<div style="background:#fdeaea;border:2px solid #d13636;border-radius:var(--r);padding:10px 14px;margin-bottom:8px;font-size:14px;font-weight:800;color:#b91c1c;">⛔ Release was refused'+(rb.at?' ('+_bx(new Date(rb.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+(rb.by?', '+_bx(rb.by):'')+')':'')+': '+_bx(rb.why)+'.<br><span style="color:#374151;">'+_bx(rb.who||'')+'.</span></div>':'')
+    +'<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
     +'<button class="btn g" style="font-size:18px;padding:18px;" onclick="coRelease()">✅ Release vehicle</button>'
     +'<div style="font-size:12px;color:var(--g5);margin-top:6px;text-align:center;">Released by '+_bx(me)+' · anything still open is shown before it goes</div></div>';
 }
@@ -7097,8 +7160,8 @@ function coAccRows(uncPrep,uncMech){
   return rows;
 }
 // Finish for good: clear the check-out from the tablet and go back to the Dashboard
-function coCloseCheckout(){
-  if(!co._handoverLink&&!confirm('The handover document has not been sent yet.\n\nClose this check-out anyway?'))return;
+async function coCloseCheckout(){
+  if(!co._handoverLink){var _a=await askBox({title:'Handover document not sent yet',text:'The client has not had the handover document on WhatsApp yet.',ok:'Close anyway',cancel:'Go back and send it'});if(!_a.ok)return;}
   try{localStorage.removeItem(ipKey(co.fn));}catch(e){}
   try{if(co.v&&co.v.bid&&CO_DRAFTS[co.v.bid])delete CO_DRAFTS[co.v.bid];delete CO_DRAFTS[co.fn];}catch(e){}
   try{if(co.v)drFinish(drId('checkout',co));}catch(e){}
@@ -7669,10 +7732,19 @@ async function dupCheckoutGate(){
   return true;
 }
 
+// Owner 28 Oct 2026: a Release that is refused (no internet, not fully paid, previous rental not checked in,
+// save failed) used to leave no trace — the client drove off and the check-out stayed unfinished for ever
+// (H-15 Lecomte 10 Oct, H-33 Haagmans 23 Oct). Now the reason is kept on the job and the Dashboard shows it
+// under Needs action with who has to sort it out.
+function coBlocked(why,who){
+  try{co.releaseBlocked={why:why,who:who||'',by:(APP_USER&&APP_USER.name)||'',at:new Date().toISOString()};saveCOProgress();}catch(e){}
+}
 async function completeCO(){
-  if(!drOnline()){askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the check-out when the internet is back.'});return;}
-  if(!(await payGate()))return;   // the rental must be paid in full before release (Peter can override)
-  if(!(await dupCheckoutGate()))return;   // the vehicle must be checked in from the previous rental (Peter can override)
+  if(!drOnline()){coBlocked('No internet when Release was tapped','Release again when online');askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the check-out when the internet is back.'});return;}
+  if(!(await idDocsGate('release'))){coBlocked('Passport / licence photos missing or not uploaded','Take or re-send the photos (client Step 1)');return;}
+  if(!co.contractSigned){coBlocked('Rental contract not signed','The client signs the contract (client Step 3)');await askBox({title:'✍️ Contract not signed',danger:true,cancel:false,ok:'OK',text:'The vehicle cannot leave without the signed rental contract. This cannot be skipped.'});return;}
+  if(!(await payGate())){coBlocked('Not fully paid (or payment could not be checked)','Record the payment, or Peter releases');return;}   // Peter can override
+  if(!(await dupCheckoutGate())){coBlocked('Previous rental of '+co.fn+' has no check-in','Do that check-in, or Peter releases');return;}   // Peter can override
   // Km not ticked as checked: the reading on screen goes out, marked as not checked (never a block, 26 Oct 2026)
   if(!co.odoDone){var _ka=kmInt(co.odometerOut)||kmInt(co.v.odo);if(_ka){co.odometerOut=_ka;co.odoAuto=true;}}
   var _stBefore=co.v.st;
@@ -7718,9 +7790,10 @@ async function completeCO(){
     var _res=co._coRowId
       ? await SB.from('checkouts').update(_coRec).eq('id',co._coRowId).select('id')
       : await SB.from('checkouts').insert(_coRec).select('id');
-    if(_res&&_res.error){toast('Check-out not saved: '+_res.error.message+' — nothing lost, try again','err');co._done=false;co.v.st=_stBefore;drMarkLocal('checkout',co.fn,co.v.cl,co.prepBy||'',false);return;}
+    if(_res&&_res.error){toast('Check-out not saved: '+_res.error.message+' — nothing lost, try again','err');co._done=false;coBlocked('Saving failed: '+_res.error.message,'Tap Release again');co.v.st=_stBefore;drMarkLocal('checkout',co.fn,co.v.cl,co.prepBy||'',false);return;}
     else if(_res&&_res.data&&_res.data[0]&&_res.data[0].id)co._coRowId=_res.data[0].id;
-  }catch(e){toast('Check-out not saved — check the connection. Nothing lost, try again','err');co._done=false;co.v.st=_stBefore;drMarkLocal('checkout',co.fn,co.v.cl,co.prepBy||'',false);return;}
+    delete co.releaseBlocked;
+  }catch(e){toast('Check-out not saved — check the connection. Nothing lost, try again','err');co._done=false;coBlocked('Saving failed (connection)','Tap Release again');co.v.st=_stBefore;drMarkLocal('checkout',co.fn,co.v.cl,co.prepBy||'',false);return;}
   try{drFinish(drId('checkout',co));}catch(e){}
   // Read-only tablet: Fleet Manager data (vehicles/bookings) is never changed from here
 
@@ -8047,7 +8120,8 @@ async function startCI(fn){
   if(daysToReturn>1){
     if(v.pu&&v.pu>today){toast('This booking has not started yet ('+v.pu+')','err');return;}
     var _due=new Date(v.rt+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
-    if(!confirm('EARLY RETURN\n\n'+fn+' ('+(v.cl||'')+') is only due back on '+_due+' — '+daysToReturn+' days early.\n\nCheck it in now as an early return?'))return;
+    var _ea=await askBox({title:'⏪ Early return?',text:fn+' ('+(v.cl||'')+') is only due back on '+_due+' — '+daysToReturn+' days early.',ok:'Check it in now',cancel:'Cancel'});
+    if(!_ea.ok)return;
     _early=true;
   }
   // Mark as in-progress (preserve existing staff if already set)
@@ -8623,7 +8697,7 @@ function bdDay(d){
   return bdDate(d);
 }
 function bdDraft(kind,v){
-  try{var r=DR_SRV[kind+':'+(v.bid||v.fn)];if(r)return {by:r.updated_by||r.staff||'',at:r.updated_at||'',step:r.step,signed:!!(r.summary&&r.summary.contractSigned)};}catch(e){}
+  try{var r=DR_SRV[kind+':'+(v.bid||v.fn)];if(r)return {by:r.updated_by||r.staff||'',at:r.updated_at||'',step:r.step,signed:!!(r.summary&&r.summary.contractSigned),hoSigned:!!(r.summary&&r.summary.handoverSigned),blocked:(r.summary&&r.summary.releaseBlocked)||null};}catch(e){}
   try{var k=localStorage.getItem(ipKey(v.fn));if(k){var x=JSON.parse(k);if(x&&(x.type||'checkout')===kind&&(!x.cl||!v.cl||x.cl===v.cl))return {by:x.staff||'',at:x.started||'',step:null};}}catch(e){}
   return null;
 }
@@ -8633,9 +8707,10 @@ function bdCanOut(){try{return !!APP_USER&&(canDoStep(0)||canDoStep(5));}catch(e
 function bdNeeds(){
   var t=localYMD(),cut=_addDays(t,-21),out=[];
   FLEET.forEach(function(v){
-    if(!v.pu||v.pu>t||v.pu<cut||coIsDone(v)||ciIsDone(v))return;
+    if(!v.pu||v.pu<cut||coIsDone(v)||ciIsDone(v))return;
     if(v.rt&&v.rt<t)return;   // its return date has passed: nothing to check out any more
     var d=bdDraft('checkout',v);
+    if(v.pu>t&&!(d&&d.blocked))return;   // future pickups only when a Release was refused
     if(d)out.push({k:'unfinished',v:v,d:d,sort:'1'+v.pu});
     else if(v.pu<t)out.push({k:'late',v:v,sort:'3'+v.pu});
   });
@@ -8648,7 +8723,11 @@ function bdBtn(lbl,cls,kind,v){
 function bdNeedRow(n){
   var v=n.v,txt,btn='';
   if(n.k==='unfinished'){
-    txt=n.d.signed
+    txt=n.d.blocked
+      ?'<b>Release was refused</b> — '+_bx(n.d.blocked.why)+(n.d.blocked.at?' ('+bdDay(String(n.d.blocked.at).slice(0,10))+(n.d.blocked.by?', '+_bx(n.d.blocked.by):'')+')':'')+'. <b>'+_bx(n.d.blocked.who||'')+'</b>.'
+      :n.d.hoSigned
+      ?'<b>Client signed the handover — never released.</b> Only <b>Release</b> left ('+_bx(bdMgrs())+').'
+      :n.d.signed
       ?'<b>Contract signed — never released.</b> Only Handover &amp; <b>Release</b> left ('+_bx(bdMgrs())+'). Last saved'+(n.d.by?' by '+_bx(n.d.by):'')+(n.d.at?' · '+bdDay(String(n.d.at).slice(0,10)):'')+'.'
       :'<b>Check-out not finished</b> — last saved'+(n.d.by?' by '+_bx(n.d.by):'')+(n.d.at?' · '+bdDay(String(n.d.at).slice(0,10)):'')+'. Finish the steps, client signs, then <b>Release</b> ('+_bx(bdMgrs())+').';
     if(bdCanOut())btn=bdBtn('▶ Finish it','bd-amber','out',v);
@@ -12365,3 +12444,18 @@ function netDotInfo(){
   setInterval(check,30000);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',check);else check();
 })();
+
+// ── Open jobs on the menu buttons (owner 28 Oct 2026: "I must be able to switch between check-outs and check-ins").
+// A check-out and a check-in can both be open; the menu shows which, so one tap switches and comes back to the same step.
+function navJobTags(){
+  try{
+    [['nb-co',(typeof co==='object'&&co&&co.v&&!co._done)?co.fn:''],['nb-ci',(typeof ci==='object'&&ci&&ci.v&&!ci._done)?ci.fn:'']].forEach(function(x){
+      var b=document.getElementById(x[0]);if(!b)return;
+      var t=b.querySelector('.nb-job');
+      if(!x[1]){if(t)t.remove();return;}
+      if(!t){t=document.createElement('span');t.className='nb-job';b.appendChild(t);}
+      if(t.textContent!==x[1])t.textContent=x[1];
+    });
+  }catch(e){}
+}
+setInterval(navJobTags,1000);

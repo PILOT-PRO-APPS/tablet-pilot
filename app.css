@@ -479,3 +479,10 @@ body.guide-next .co-next{display:none!important;}
   .bd-col{max-height:none;} .bd-scroll{overflow:visible;}
   .bd-stat span{max-width:none;}
 }
+
+/* No flashing (owner 28 Oct 2026): the "do this next" item keeps a steady, strong outline instead of blinking */
+.disc-flash.flash-now,.disc-flash-lt.flash-now,.insp-flash.flash-now,.need-flash.flash-now,.wtri.flash-now{animation:none!important;}
+.need-flash.flash-now,.insp-flash.flash-now{box-shadow:0 0 0 3px rgba(209,54,54,.35)!important;border-color:#d13636!important;}
+.disc-flash.flash-now{background:#d13636!important;box-shadow:0 0 0 3px rgba(209,54,54,.3)!important;}
+.disc-flash-lt.flash-now{background:#fde2e2!important;color:#b91c1c!important;box-shadow:0 0 0 2px rgba(209,54,54,.35)!important;}
+.nb-job{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;background:#c2410c;color:#fff;font-size:12px;font-weight:900;letter-spacing:0;vertical-align:1px;}
