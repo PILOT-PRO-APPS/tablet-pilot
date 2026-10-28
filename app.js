@@ -2096,12 +2096,12 @@ function _renderOV(){
   window._clockInterval=setInterval(()=>{
     const el=document.getElementById('ov-clock');
     if(!el){clearInterval(window._clockInterval);return;}
-    el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  },1000);
+    el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  },30000);   // minutes only (audit M6: a ticking clock kept slow tablets busy)
 
   const nowDT=new Date();
   const dateStr=nowDT.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
-  const timeStr=nowDT.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const timeStr=nowDT.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 
   // Filter vehicles for this week / past 7 days
   const WIN=14;  // two weeks ahead / behind
@@ -3370,7 +3370,10 @@ async function loadPrevDamage(fn){
     try{drawCO();}catch(e){}
   }catch(e){}
 }
+// audit M4: a job always opens at the top, with the H number and client in view (it opened at the list's scroll position)
+function jobTop(id){try{var b=document.getElementById(id);if(b)b.scrollTop=0;var pg=b&&b.closest('.page');if(pg)pg.scrollTop=0;window.scrollTo(0,0);}catch(e){}}
 async function startCO(fn){
+  jobTop('co-body');setTimeout(function(){jobTop('co-body');},120);
   const v=pickVeh(fn,'out');
   if(!v){toast('Vehicle '+fn+' not found','err');return;}
   // Marked OUT in the Fleet Manager but never checked out on the tablet: that is exactly the
@@ -3483,6 +3486,7 @@ function askCollectionDate(){
   try{
     if(!co||!co.v||!co.v.pu)return;
     if(co.collectedOn||co._collectAsked)return;
+    if(typeof canViewReports==='function'&&!canViewReports())return;   // a contract question: managers only (audit W3)
     var today=localYMD();
     if(co.v.pu>=today)return;                       // booked for today or later: nothing to ask
     co._collectAsked=true;
@@ -6304,6 +6308,11 @@ async function submitContractSig(){
 }
 
 async function signContract(sigData){
+  if(window._ctSigning){toast('Saving the contract… please wait','');return;}   // audit M5: never two signed contracts
+  window._ctSigning=true;
+  try{return await signContractRun(sigData);}finally{window._ctSigning=false;}
+}
+async function signContractRun(sigData){
   if(coLeftCount(CO_BEFORE_CONTRACT)){var _m=document.getElementById('contract-modal');if(_m)_m.remove();coLeftBox(CO_BEFORE_CONTRACT,{block:true,title:'Contract cannot be signed yet',sub:'Staff must finish every check first.'});return;}
   if(idDocsMissing().length){var _m2=document.getElementById('contract-modal');if(_m2)_m2.remove();idDocsGate('contract');return;}   // passport + licence are compulsory (28 Oct 2026)
   if(!sigData){toast('No signature','err');return;}
@@ -7740,6 +7749,12 @@ function coBlocked(why,who){
   try{co.releaseBlocked={why:why,who:who||'',by:(APP_USER&&APP_USER.name)||'',at:new Date().toISOString()};saveCOProgress();}catch(e){}
 }
 async function completeCO(){
+  // audit M5: a double tap / slow network must never save the check-out twice
+  if(window._coSaving){toast('Saving… please wait','');return;}
+  window._coSaving=true;
+  try{return await completeCORun();}finally{window._coSaving=false;}
+}
+async function completeCORun(){
   if(!drOnline()){coBlocked('No internet when Release was tapped','Release again when online');askBox({title:'📶 No internet',cancel:false,ok:'OK',text:'Everything captured is kept safe on this device and sent to the office automatically once connected.\n\nFinish the check-out when the internet is back.'});return;}
   if(!(await idDocsGate('release'))){coBlocked('Passport / licence photos missing or not uploaded','Take or re-send the photos (client Step 1)');return;}
   if(!co.contractSigned){coBlocked('Rental contract not signed','The client signs the contract (client Step 3)');await askBox({title:'✍️ Contract not signed',danger:true,cancel:false,ok:'OK',text:'The vehicle cannot leave without the signed rental contract. This cannot be skipped.'});return;}
@@ -8079,6 +8094,7 @@ function ciShowDone(v,r){
     +'</div>';
 }
 async function startCI(fn){
+  jobTop('ci-body');setTimeout(function(){jobTop('ci-body');},120);
   if(!canCheckIn()){toast('🔒 Check-in is not available for '+(APP_USER?APP_USER.name:'you'),'err');return;}
   var v=pickVeh(fn,'in');if(!v){toast('Vehicle not found','err');return;}
   // Tapped (or the list offered) the NEXT client's booking while the previous rental is still out:
@@ -12195,15 +12211,13 @@ function closeResumePanel() {
       var lm=Date.parse(r.headers.get('last-modified')||'');
       if(lm&&lm>LOADED+1000){
         var last=0;try{last=+localStorage.getItem('gr_upd_at')||0;}catch(e){}
-        if(Date.now()-last<120000){bar();}          // just reloaded and still old (server catching up): don't loop, just offer
-        else if(busy())bar();
-        else load();
+        bar();   // 28 Oct 2026 (audit M8): never reload by itself in the middle of the day — staff tap the bar when ready
       }
     }catch(e){}
     checking=false;
   }
   setTimeout(check,4000);
-  setInterval(check,5*60000);
+  setInterval(check,30*60000);
   document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')check();});
 })();
 
@@ -12428,14 +12442,16 @@ function netDotInfo(){
   toast(NET_OK?'📶 Online — your work is sent straight away':'📵 No internet — your work is saved on this tablet and sent when the internet is back',NET_OK?'':'err');
 }
 (function(){
-  var busy=false;
+  // 28 Oct 2026 (audit M7): ask the database server itself (that is what saving needs), allow 10 s on a slow
+  // tablet, and only show Offline after two failures in a row — the Blackview showed Offline while sync worked.
+  var busy=false,fails=0;
   async function check(){
     if(busy)return;
-    if(navigator.onLine===false){netDotPaint(false);return;}
+    if(navigator.onLine===false){fails=2;netDotPaint(false);return;}
     busy=true;var ctl=(typeof AbortController!=='undefined')?new AbortController():null;
-    var t=setTimeout(function(){try{if(ctl)ctl.abort();}catch(e){}},6000);
-    try{await fetch(location.pathname+'?net='+Date.now(),{method:'HEAD',cache:'no-store',signal:ctl?ctl.signal:undefined});netDotPaint(true);}
-    catch(e){netDotPaint(false);}
+    var t=setTimeout(function(){try{if(ctl)ctl.abort();}catch(e){}},10000);
+    try{await fetch(SB_URL+'/rest/v1/',{method:'HEAD',cache:'no-store',signal:ctl?ctl.signal:undefined});fails=0;netDotPaint(true);}
+    catch(e){fails++;if(fails>=2)netDotPaint(false);else setTimeout(check,5000);}
     finally{clearTimeout(t);busy=false;}
   }
   window.addEventListener('online',check);
