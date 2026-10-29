@@ -1905,7 +1905,7 @@ async function loadClients(){
 // ── REAL BOOKINGS (from Fleet Manager "bookings" table) ─────────
 var BOOKINGS_LOADED=false;
 var DISCS={};var ALL_FLEET_NOS=[];
-var DISC_WARN_DAYS=45;
+var DISC_WARN_DAYS=21;   // owner 29 Oct 2026: only warn 21 days before a disc runs out (was 45)
 // Owner 17 Oct 2026: warn when the licence disc runs out DURING a rental (before the vehicle comes back)
 function discDuringRental(v){var e=(v&&(v._licExpiry||(v.lic&&v.lic.expiry)))||'',rt=(v&&(v.return_date_new||v.rt))||'';if(!e||!rt)return '';return e<rt&&e>=localYMD()?e:'';}
 function discDuringTxt(v){var e=discDuringRental(v);if(!e)return '';var f=function(x){return new Date(x+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'});};return 'Licence disc expires '+f(e)+(v.pu&&e<v.pu?' — before this rental starts ('+f(v.pu)+')':' — during this rental (back '+f(v.return_date_new||v.rt)+')')+'. Renew it before handover.';}
@@ -2152,7 +2152,7 @@ function ovSetFull(on){try{localStorage.setItem('gorent_dash_full',on?'1':'0');}
 function discFixList(){
   var t=localYMD(),out=[];
   FLEET.forEach(function(v){
-    var e=discDuringRental(v);if(!v.cl||!e)return;
+    var e=discDuringRental(v);if(!v.cl||!e||discDaysLeft(e)>DISC_WARN_DAYS)return;
     var rt=v.return_date_new||v.rt;if(!rt||rt<t)return;
     out.push({v:v,e:e,rt:rt,isOut:!!(v.pu&&v.pu<=t)});
   });
@@ -2505,7 +2505,7 @@ function _renderOV(){
     var remN=_ovRemote.length;
     var bits=[];
     if(discN)bits.push('<b style="color:#92400e;">'+discN+' licence disc'+(discN>1?'s':'')+' due</b>');
-    var durN=[];try{var _t=localYMD();FLEET.forEach(function(x){if(x.cl&&(x.return_date_new||x.rt)>=_t&&discDuringRental(x)&&durN.indexOf(x.fn)<0)durN.push(x.fn);});}catch(e){}
+    var durN=[];try{var _t=localYMD();FLEET.forEach(function(x){var _e=discDuringRental(x);if(x.cl&&(x.return_date_new||x.rt)>=_t&&_e&&discDaysLeft(_e)<=DISC_WARN_DAYS&&durN.indexOf(x.fn)<0)durN.push(x.fn);});}catch(e){}
     if(durN.length)bits.push('<b onclick="event.stopPropagation();discFixOpen()" style="color:#c53030;text-decoration:underline;cursor:pointer;">⚠ Disc runs out during a booking: '+durN.join(', ')+' — tap to fix</b>');
     if(remN)bits.push('<b style="color:#c53030;">'+remN+' remote collection'+(remN>1?'s':'')+'</b>');
     if(staffN)bits.push(staffN+' working now');
