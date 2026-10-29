@@ -1,3 +1,37 @@
+// ── Typing is never disturbed by a screen redraw (owner 29 Oct 2026: "on the Blackviews the cursor jumps to the
+// front … type in reverse"). Many screens redraw with innerHTML while someone types (search boxes, a save from the
+// other tablet, the live link). The new box got the focus back but with the cursor at the start, so every letter
+// landed in front of the last one. Now, when a redraw replaces the box being typed in, the same box is found again
+// and gets back its text, the focus and the cursor position.
+(function(){
+  try{
+    var d=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');if(!d||!d.set||!d.get)return;
+    var TXT=/^(text|search|email|tel|url|password|number|)$/i;
+    function typing(){var a=document.activeElement;if(!a||a===document.body)return null;
+      if(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&TXT.test(a.type||'')))return a;return null;}
+    function sel(el){try{return [el.selectionStart,el.selectionEnd];}catch(e){return null;}}
+    Object.defineProperty(Element.prototype,'innerHTML',{configurable:true,enumerable:d.enumerable,get:d.get,set:function(h){
+      var a=typing(),k=null;
+      if(a&&this!==a&&this.contains(a)){
+        var all=this.querySelectorAll(a.tagName);
+        k={id:a.id,oi:a.getAttribute('oninput'),ph:a.getAttribute('placeholder'),tag:a.tagName,idx:Array.prototype.indexOf.call(all,a),val:a.value,sel:sel(a)};
+      }
+      d.set.call(this,h);
+      if(!k)return;
+      try{
+        var n=null,c=this.querySelectorAll(k.tag),i;
+        if(k.id){try{n=this.querySelector('#'+(window.CSS&&CSS.escape?CSS.escape(k.id):k.id));}catch(e){}}
+        if(!n&&k.oi)for(i=0;i<c.length&&!n;i++)if(c[i].getAttribute('oninput')===k.oi)n=c[i];
+        if(!n&&k.ph)for(i=0;i<c.length&&!n;i++)if(c[i].getAttribute('placeholder')===k.ph)n=c[i];
+        if(!n&&k.idx>=0&&c[k.idx])n=c[k.idx];
+        if(!n)return;
+        if(n.value!==k.val&&(n.value===''||k.val.indexOf(n.value)===0))n.value=k.val;   // the redraw was a step behind the typing
+        if(document.activeElement!==n){try{n.focus({preventScroll:true});}catch(e){n.focus();}}
+        if(k.sel&&k.sel[0]!=null&&n.value===k.val){try{n.setSelectionRange(k.sel[0],k.sel[1]);}catch(e){}}
+      }catch(e){}
+    }});
+  }catch(e){}
+})();
 const TENT_ICON='<span class="tent-ico"></span>';
 // ── Item icons chosen by Peter (icon picker, 25 Sep 2026). Sets: Material Design Icons & Material Symbols (Apache 2.0),
 //    Tabler & Phosphor (MIT), Game-icons.net by Delapouite and contributors (CC BY 3.0) ──
@@ -1539,7 +1573,7 @@ function drawDoc(){
       +FLEET.map(function(v){return v.fn;}).concat(DOC_ROWS.map(function(r){return r.fn;})).filter(function(v,i,a){return v&&a.indexOf(v)===i;}).sort(function(a,b){return fnNum(a)-fnNum(b);})
         .map(function(fn){return '<option'+(DOC_FN===fn?' selected':'')+'>'+_bx(fn)+'</option>';}).join('')
     +'</select>'
-    +'<input class="search-bar" id="doc-find" style="flex:1;min-width:220px;margin:0;" placeholder="🔎 Search client name, fleet no. or booking no." value="'+_bx(DOC_FIND)+'" oninput="DOC_FIND=this.value;drawDoc();document.getElementById(\'doc-find\').focus();">'
+    +'<input class="search-bar" id="doc-find" style="flex:1;min-width:220px;margin:0;" placeholder="🔎 Search client name, fleet no. or booking no." value="'+_bx(DOC_FIND)+'" oninput="DOC_FIND=this.value;drawDoc();var e=document.getElementById(\'doc-find\');if(e){e.focus();try{e.setSelectionRange(e.value.length,e.value.length);}catch(_){}}">'
     +'</div>'
     +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;"><span style="font-size:13px;font-weight:800;color:var(--g5);">Group by</span>'+gbtn('veh','🚗 Vehicle')+gbtn('cl','👤 Client')+'</div>'
     +'<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0 4px;">'
