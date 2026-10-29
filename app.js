@@ -897,6 +897,19 @@ function qmN(x){var n=Math.round(Number(x||0)*100)/100;return 'N$ '+n.toLocaleSt
 function qmMeth(m){m=String(m||'');return /adumo_link/i.test(m)?'Adumo link':/adumo/i.test(m)?'Adumo':/swipe|card/i.test(m)?'Card machine':/cash/i.test(m)?'Cash':/eft|bank/i.test(m)?'EFT':m;}
 var QM_VIEWERS=['Peter','Joe','Beverly','Joretha'];   // owner 18 Oct: prices and payments are for these three only
 function canSeeMoney(){return !!(APP_USER&&QM_VIEWERS.indexOf(APP_USER.name)>=0);}
+// Owner 29 Oct 2026: "staff may not see any money figures" in customer information.
+// moneyMask() hides amounts in free text (booking notes etc.) for anyone not on QM_VIEWERS.
+var MONEY_NUM='\\d[\\d\\s\\u00a0.,\']*\\d|\\d';
+function moneyMask(t){
+  t=String(t==null?'':t);
+  if(canSeeMoney())return t;
+  var cur='(?:N\\$|NAD|ZAR|USD|EUR|GBP|US\\$|\\$|€|£|\\bR(?=\\s?\\d))';
+  t=t.replace(new RegExp(cur+'\\s?(?:'+MONEY_NUM+')','gi'),function(m){var c=m.match(new RegExp('^'+cur,'i'));return (c?c[0]:'')+' •••';});
+  t=t.replace(new RegExp('(?:'+MONEY_NUM+')\\s?(?:N\\$|NAD|ZAR|USD|EUR|GBP|rand|dollars?|euros?)\\b','gi'),'••• ');
+  t=t.replace(/\b(total|deposit|price|paid|payment|balance|owing|outstanding|amount|cost|rate|fee|refund(?:ed)?|discount|invoice)(\s*(?:of|is|was|:|=|-)?\s*)(\d[\d\s .,']*\d|\d)(?!\s?(?:km|day|night|pax|x\b|%))/gi,function(m,a,b){return a+b+'•••';});
+  return t;
+}
+function moneyHidden(t){return !canSeeMoney()&&moneyMask(t)!==String(t==null?'':t);}
 function qmBtn(bid,client,key){
   if(!canSeeMoney()||(!bid&&!key))return '';
   var a=function(s){return String(s||'').replace(/[\'\\"<>]/g,'');};
@@ -2116,7 +2129,7 @@ function showBookingDetail(v){
   h+=row(cell('Client age',age),cell('Cross border',xb));
   h+=row(cell('Baby seat',yn(b.baby_seat)),cell('Satphone',yn(b.satphone)));
   h+=row(cell('Extra fuel',yn(b.extra_fuel)),cell('Itinerary received',yn(b.itinerary)));
-  h+=cell('Additional notes',b.notes?_bx(b.notes):'<span style="color:#9ca3af;">—</span>');
+  h+=cell('Additional notes',b.notes?_bx(moneyMask(b.notes))+(moneyHidden(b.notes)?'<div style="font-size:12px;font-weight:600;color:#9ca3af;margin-top:6px;">🔒 Amounts hidden — ask the office</div>':''):'<span style="color:#9ca3af;">—</span>');
   var m=document.createElement('div');
   m.id='bk-modal';
   m.setAttribute('style','position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;');
@@ -7791,7 +7804,7 @@ function payState(st){
   return {txt:'💳 Fully paid ✓',col:'#fff',bg:'#12803c',key:'paid'};
 }
 function payChip(v){
-  if(!v||!v.bid)return '';
+  if(!v||!v.bid||!canSeeMoney())return '';
   var st=PAY_ST[v.bid], s=payState(st);
   if(!st)payLoad(v.bid).then(function(){var el=document.getElementById('pay-chip');if(el)el.outerHTML=payChip(v);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(v);});
   return '<span id="pay-chip" onclick="payChipOpen()" title="Tap to record how the client paid" class="'+(s.key==='owing'?'disc-flash':'')+'" style="cursor:pointer;background:'+s.bg+';color:'+s.col+';border:1px solid '+s.bg+';font-weight:900;"><span class="fh-t">'+_bx(s.txt)+'</span></span>';
@@ -9863,6 +9876,7 @@ function rfLabel(path){
 }
 function closeRentalFile(){var m=document.getElementById('rf-modal');if(m)m.parentNode.removeChild(m);}
 function rfShowContract(){
+  if(!canSeeMoney()){toast('The signed contract (with prices) is for the office only','err');return;}
   var h=window._rfContractHTML||'';if(!h)return;
   openDoc('<!DOCTYPE html><html><head><meta charset="UTF-8">'
     +'<meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -9945,8 +9959,8 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
       +'<div style="font-size:12px;color:var(--g5);margin-bottom:6px;">Pick what you need — contract, passports, equipment &amp; vehicle checks, damage, photos, return report — then print it or save it as a PDF.</div>'
       +(((RD.handover&&part!=='in')||(RD.ret&&part!=='out'))?'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+((RD.handover&&part!=='in')?'<button class="btn s" style="flex:1;text-align:center;" onclick="rfOpenSaved(\'handover\')">🤝 Open handover document</button>':'')+((RD.ret&&part!=='out')?'<button class="btn s" style="flex:1;text-align:center;" onclick="rfOpenSaved(\'ret\')">🏠 Open return report</button>':'')+'</div>':'');
     if(RD.handoverPath&&part!=='in')h+=rfResendBox();
-    h+=sec('📝 Signed contract',contract?(line('Signed by client',_bx(contract.client_name||'')+(contract.client_signed_at?' · '+new Date(contract.client_signed_at).toLocaleString('en-GB'):''))+line('Staff',_bx(contract.staff_signed_by||contract.created_by||'—'))+line('Deposit',contract.deposit_amount?('N$ '+Number(contract.deposit_amount).toLocaleString()):'—')
-      +(window._rfContractHTML?'<button class="btn g" style="margin-top:8px;width:auto;padding:10px 16px;" onclick="rfShowContract()">📄 Open full signed contract</button>':'')):'<div style="font-size:13px;color:var(--g5);">No signed contract saved for this booking yet.</div>');
+    h+=sec('📝 Signed contract',contract?(line('Signed by client',_bx(contract.client_name||'')+(contract.client_signed_at?' · '+new Date(contract.client_signed_at).toLocaleString('en-GB'):''))+line('Staff',_bx(contract.staff_signed_by||contract.created_by||'—'))+(canSeeMoney()?line('Deposit',contract.deposit_amount?('N$ '+Number(contract.deposit_amount).toLocaleString()):'—'):'')
+      +(window._rfContractHTML&&canSeeMoney()?'<button class="btn g" style="margin-top:8px;width:auto;padding:10px 16px;" onclick="rfShowContract()">📄 Open full signed contract</button>':'')):'<div style="font-size:13px;color:var(--g5);">No signed contract saved for this booking yet.</div>');
     h+=sec('🪪 Passport, ID & licence scans',idDocs.length?idDocs.map(function(p){return signed[p]?thumb(signed[p],rfLabel(p)+(_from[p]&&_from[p]!==key?' · from '+_from[p]:''),p,'client-docs'):'';}).join(''):'<div style="font-size:13px;color:var(--g5);">No scans saved for this booking yet.</div>');
     h+=sec('🚗 Check-out',cko?(line('Prepared by',_bx((cko.prep_by_all||[cko.prep_by]).filter(Boolean).join(', ')||'—'))+line('Handed over by',_bx(cko.handover_by||'—'))+line('Manager',_bx(cko.manager_name||'—'))+line('Km out · fuel out',Number(cko.odo_out||0).toLocaleString()+' km · '+_bx(cko.fuel_out||'—'))+line('Date',new Date(cko.created_at).toLocaleString('en-GB'))):'<div style="font-size:13px;color:var(--g5);">Not checked out on the tablet yet.</div>');
     if(cko&&(cko.out_notes||[]).length)h+=sec('📝 Notes while out',(cko.return_date_new?line('Return date changed to',_bx(cko.return_date_new)):'')+(cko.return_time?line('Expected return time',_bx(cko.return_time)):'')+cko.out_notes.map(function(n){return '<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--g2);"><b>'+_bx(n.by||'')+'</b> · '+_bx(new Date(n.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' — '+_bx(n.text)+'</div>';}).join(''));
@@ -10004,7 +10018,7 @@ function rfPrintPicker(){
   var R=window._rfData;if(!R){toast('Open the rental file first','err');return;}
   var opts=[
     ['sum','📄 Summary page (vehicle, client, dates, who did what)',true],
-    ['contract','📋 Signed rental contract',!!(R.contract&&R.contract.contract_html)],
+    ['contract','📋 Signed rental contract',!!(R.contract&&R.contract.contract_html)&&canSeeMoney()],
     ['ids','🪪 Passport, ID &amp; licence pictures',R.ids.length>0],
     ['handover','🚗 Check-out: vehicle checks, equipment list &amp; handover',!!R.handover],
     ['notes','📝 Notes while out',!!(R.cko&&(R.cko.out_notes||[]).length)],
@@ -10058,7 +10072,7 @@ async function rfPrintAll(pick){
     +line('Checked in',i.created_at?new Date(i.created_at).toLocaleString('en-GB')+' · received by '+esc(i.received_by||'—'):'still out')
     +line('Km / fuel in',i.odo_in?Number(i.odo_in).toLocaleString()+' km · '+esc(i.fuel_in||''):'')
     +line('Printed',new Date().toLocaleString('en-GB'))+'</table>'):'')
-    +(pick.contract?('<h2 class="pb">Signed Rental Contract</h2>'+(c.contract_html||'<p>No signed contract on file for this booking.</p>')):'')
+    +(pick.contract&&canSeeMoney()?('<h2 class="pb">Signed Rental Contract</h2>'+(c.contract_html||'<p>No signed contract on file for this booking.</p>')):'')
     +(pick.ids?('<h2 class="pb">Passports, ID &amp; Driver\'s Licences</h2>'+(R.ids.length?imgs(R.ids):'<p>No scans on file.</p>')):'')
     +(pick.handover?('<h2 class="pb">Check-out — Vehicle Checks, Equipment &amp; Handover</h2>'+(ho||'<p>No handover document on file.</p>')):'')
     +(pick.notes&&(k.out_notes||[]).length?('<h2>Notes While Out</h2><table>'+k.out_notes.map(function(n){return '<tr><td style="width:30%;">'+esc(new Date(n.at).toLocaleString('en-GB'))+' · '+esc(n.by||'')+'</td><td>'+esc(n.text)+'</td></tr>';}).join('')+'</table>'):'')
