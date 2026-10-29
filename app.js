@@ -2146,6 +2146,65 @@ function ovSetView(v){window._ovView=v;window._ovMode=null;window._ovExpanded=nu
 // vehicle's own card, and the extra strips folded into one line. "Full view" brings the old one back.
 function ovFull(){try{return localStorage.getItem('gorent_dash_full')==='1';}catch(e){return false;}}
 function ovSetFull(on){try{localStorage.setItem('gorent_dash_full',on?'1':'0');}catch(e){}window._ovInfoOpen=false;renderOV();}
+// ── Licence discs that run out during a booking (owner 29 Oct 2026: "when clicked — show list of vehicles to
+// remedy"). One line per booking: vehicle, client, dates, where the vehicle is, the disc date, what to do, and a
+// box to enter the new disc date once it is renewed (saved to vehicle_discs, the Desktop APP sees it live).
+function discFixList(){
+  var t=localYMD(),out=[];
+  FLEET.forEach(function(v){
+    var e=discDuringRental(v);if(!v.cl||!e)return;
+    var rt=v.return_date_new||v.rt;if(!rt||rt<t)return;
+    out.push({v:v,e:e,rt:rt,isOut:!!(v.pu&&v.pu<=t)});
+  });
+  return out.sort(function(a,b){return a.e>b.e?1:a.e<b.e?-1:(a.v.pu>b.v.pu?1:-1);});
+}
+function discFixOpen(){
+  var old=document.getElementById('disc-fix');if(old)old.remove();
+  var f=function(x){return x?new Date(x+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}):'';};
+  var L=discFixList();
+  var rows=L.map(function(x){
+    var v=x.v,d=discDaysLeft(x.e),fx='df-'+String(v.fn).replace(/[^A-Za-z0-9]/g,'_')+'-'+String(v.bid||v.pu).replace(/[^A-Za-z0-9]/g,'_');
+    var todo=x.isOut
+      ?'🚗 Out with the client now (back '+f(x.rt)+'). Renew the disc and get it to the client, or arrange a swap.'
+      :'🅿 Client collects '+f(v.pu)+'. Renew the disc before then'+(x.e<v.pu?' — it runs out even before the pickup.':'.');
+    return '<div style="border:2px solid '+(x.isOut?'#f5a3a3':'#f6cf7a')+';background:'+(x.isOut?'#fff5f5':'#fffbeb')+';border-radius:12px;padding:12px;margin-bottom:10px;">'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap;">'
+        +'<div style="font-size:18px;font-weight:900;color:#111;">'+_bx(v.fn)+' · '+_bx(v.cl)+'</div>'
+        +'<div style="font-size:13px;font-weight:800;color:#555;">'+f(v.pu)+' → '+f(x.rt)+'</div></div>'
+      +'<div style="font-size:15px;font-weight:900;color:#b91c1c;margin:6px 0 2px;">Disc runs out '+f(x.e)+(d===0?' (today)':d>0?' (in '+d+' day'+(d===1?'':'s')+')':'')+'</div>'
+      +'<div style="font-size:14px;color:#333;margin-bottom:8px;">'+todo+'</div>'
+      +'<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">'
+        +'<label style="font-size:13px;font-weight:800;color:#555;">Renewed? New disc date:</label>'
+        +'<input type="date" id="'+fx+'" min="'+localYMD()+'" style="color-scheme:light;padding:10px;font-size:16px;border-radius:10px;border:2px solid #cbd5e1;">'
+        +'<button onclick="discFixSave(\''+_bx(v.fn)+'\',\''+fx+'\')" class="bd-btn bd-green" style="min-height:44px;padding:8px 16px;">Save</button>'
+        +'<button onclick="discFixClose();openVehReport(\''+_bx(v.fn)+'\')" class="bd-btn bd-blue" style="min-height:44px;padding:8px 16px;">Vehicle file</button>'
+      +'</div></div>';
+  }).join('');
+  var w=document.createElement('div');w.id='disc-fix';
+  w.setAttribute('style','position:fixed;inset:0;z-index:99000;background:rgba(0,0,0,.55);display:flex;align-items:flex-start;justify-content:center;padding:70px 14px 14px;overflow:auto;');
+  w.onclick=function(e){if(e.target===w)discFixClose();};
+  w.innerHTML='<div style="background:#fff;color:#111;border-radius:16px;max-width:640px;width:100%;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.4);border-top:6px solid #b91c1c;">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div style="font-size:19px;font-weight:900;color:#b91c1c;">⚠ Licence disc runs out during a booking</div>'
+    +'<button onclick="discFixClose()" style="border:0;background:#f1f5f9;border-radius:10px;padding:10px 14px;font-size:16px;font-weight:900;cursor:pointer;">✕</button></div>'
+    +(rows||'<div style="padding:16px;font-size:16px;font-weight:800;color:#12803c;">✅ Nothing to fix — every disc lasts until its booking ends.</div>')
+    +'</div>';
+  document.body.appendChild(w);
+}
+function discFixClose(){var w=document.getElementById('disc-fix');if(w)w.remove();}
+async function discFixSave(fn,fx){
+  var el=document.getElementById(fx),val=el&&el.value;
+  if(!val){toast('Choose the date on the new disc first','err');return;}
+  if(val<localYMD()){toast('That date has already passed — check the disc','err');return;}
+  var r=await SB.from('vehicle_discs').upsert({fleet_no:fn,expiry:val,updated_by:(APP_USER&&APP_USER.name)||'',updated_at:new Date().toISOString()});
+  if(r&&r.error){toast('Could not save the disc date: '+r.error.message,'err');return;}
+  DISCS[fn]=val;
+  FLEET.forEach(function(x){if(x.fn===fn){x.lic={expiry:val};x._licExpiry=val;}});
+  try{if(co&&co.v&&co.v.fn===fn){co.v.lic={expiry:val};co.v._licExpiry=val;}}catch(e){}
+  try{if(ci&&ci.v&&ci.v.fn===fn){ci.v.lic={expiry:val};ci.v._licExpiry=val;}}catch(e){}
+  toast(fn+': new disc date saved ✅','ok');
+  try{renderOV();}catch(e){}
+  discFixOpen();
+}
 function ovInfoToggle(){window._ovInfoOpen=!window._ovInfoOpen;renderOV();}
 function ovExpand(fn){window._ovExpanded=window._ovExpanded===fn?null:fn;renderOV();}
 
@@ -2447,7 +2506,7 @@ function _renderOV(){
     var bits=[];
     if(discN)bits.push('<b style="color:#92400e;">'+discN+' licence disc'+(discN>1?'s':'')+' due</b>');
     var durN=[];try{var _t=localYMD();FLEET.forEach(function(x){if(x.cl&&(x.return_date_new||x.rt)>=_t&&discDuringRental(x)&&durN.indexOf(x.fn)<0)durN.push(x.fn);});}catch(e){}
-    if(durN.length)bits.push('<b style="color:#c53030;">⚠ Disc runs out during a booking: '+durN.join(', ')+'</b>');
+    if(durN.length)bits.push('<b onclick="event.stopPropagation();discFixOpen()" style="color:#c53030;text-decoration:underline;cursor:pointer;">⚠ Disc runs out during a booking: '+durN.join(', ')+' — tap to fix</b>');
     if(remN)bits.push('<b style="color:#c53030;">'+remN+' remote collection'+(remN>1?'s':'')+'</b>');
     if(staffN)bits.push(staffN+' working now');
     var open=!!window._ovInfoOpen;
