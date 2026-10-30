@@ -497,7 +497,7 @@ async function showWorkProgress(kind,fn){
       +miss.map(function(k){return row(false,_bx(k)+(q[k]!=null?' ('+q[k]+' back)':'')+' — MISSING',(by[k]&&by[k].by)||'',true);}).join('')
       +ok.map(function(k){return row(true,_bx(k)+(q[k]!=null?' · '+q[k]:''),(by[k]&&by[k].by)||'');}).join(''));
   }
-  var when=w.at?(String(w.at).indexOf('now')===0?w.at:new Date(w.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'';
+  var when=w.at?(String(w.at).indexOf('now')===0?w.at:new Date(w.at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})):'';
   box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">'
     +'<div><div style="font-size:12px;font-weight:900;letter-spacing:.06em;color:#6b7280;">'+(kind==='checkout'?'CHECK-OUT':'CHECK-IN')+' PROGRESS</div>'
     +'<div style="font-size:20px;font-weight:900;">'+_bx(fn)+' · '+_bx(o.clientName||v.cl||'')+'</div>'
@@ -1452,7 +1452,7 @@ function renderCOPicker(){
       +'<div style="min-width:0;"><div style="font-size:22px;font-weight:900;color:var(--se);line-height:1.15;">'+v.fn+' <span style="color:var(--tx);font-size:19px;">· '+_bx(v.cl||renterName(v))+'</span></div>'
       +'<div style="font-size:13px;color:var(--g5);margin-top:4px;font-weight:700;">'+dt+(v.reg?' &middot; '+v.reg:'')+'</div>'
       +(ip?'<div style="margin-top:6px;font-size:12px;font-weight:800;color:var(--al);">⏳ '+_bx(ip.stepName||'Started')+(ip._name?' · '+_bx(ip._name):'')+(ip.done?' · '+ip.done+' items done':'')
-          +(ip.updated?' · last touched '+new Date(ip.updated).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'')+resetBtn(v.fn)+'</div>'
+          +(ip.updated?' · last touched '+new Date(ip.updated).toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}):'')+resetBtn(v.fn)+'</div>'
         :'')
       +'</div>'
       +'<div style="flex-shrink:0;text-align:right;">'+(late||ip?'<div style="margin-bottom:6px;">'+badge+'</div>':'')
@@ -1691,7 +1691,7 @@ function drawOut(){
         +'<div class="fi"><label>Return date'+(v.rt?' (booked: '+fmt(v.rt)+')':'')+'</label><input type="date" id="out-date" min="'+localYMD()+'" value="'+_bx(due)+'" style="color-scheme:light;"></div>'
         +'<div class="fi"><label>Expected return time</label>'+timePickers('out-time',offHours(r.return_time)?'':(r.return_time||''),"",false,true)+'</div></div>'
         +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;margin:10px 0 6px;">📝 Notes</div>'
-        +((r.out_notes||[]).map(function(n){return '<div style="background:var(--g0);border:1px solid var(--g2);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:14px;"><div style="font-size:11px;color:var(--g5);font-weight:800;">'+_bx(n.by||'')+' · '+_bx(new Date(n.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+'</div>'+_bx(n.text)+'</div>';}).join('')||'<div style="font-size:13px;color:var(--g5);margin-bottom:6px;">No notes yet.</div>')
+        +((r.out_notes||[]).map(function(n){return '<div style="background:var(--g0);border:1px solid var(--g2);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:14px;"><div style="font-size:11px;color:var(--g5);font-weight:800;">'+_bx(n.by||'')+' · '+_bx(new Date(n.at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+'</div>'+_bx(n.text)+'</div>';}).join('')||'<div style="font-size:13px;color:var(--g5);margin-bottom:6px;">No notes yet.</div>')
         +'<textarea id="out-note" placeholder="Add a note — e.g. client called, extending by 2 days; flat tyre in Sesriem…" style="width:100%;min-height:70px;padding:10px 12px;border-radius:var(--rs);border:2px solid var(--g3);background:var(--g0);color:var(--tx);font-size:15px;"></textarea>'
         +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">'
         +'<button class="btn g" style="flex:2;min-width:160px;" onclick="saveOut('+o.i+')">💾 Save</button>'
@@ -2233,12 +2233,12 @@ function _renderOV(){
   window._clockInterval=setInterval(()=>{
     const el=document.getElementById('ov-clock');
     if(!el){clearInterval(window._clockInterval);return;}
-    el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    el.textContent=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   },30000);   // minutes only (audit M6: a ticking clock kept slow tablets busy)
 
   const nowDT=new Date();
   const dateStr=nowDT.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
-  const timeStr=nowDT.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const timeStr=nowDT.toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
 
   // Filter vehicles for this week / past 7 days
   const WIN=14;  // two weeks ahead / behind
@@ -4251,7 +4251,7 @@ function hoTopRow(){
     +miniBox('🌍 Cross-border docs — '+_bx(v.xb),d.xb||'',"coSetDoc('xb','ok')","coSetDoc('xb','issue')",'Handed over','Missing')
     +'</div>';
 }
-function coSetDoc(k,v){if(!co.docItems)co.docItems={};co.docItems[k]=v;if(!co.docWho)co.docWho={};co.docWho[k]=((APP_USER&&APP_USER.name)||'')+' · '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});saveCOProgress();drawCO();}
+function coSetDoc(k,v){if(!co.docItems)co.docItems={};co.docItems[k]=v;if(!co.docWho)co.docWho={};co.docWho[k]=((APP_USER&&APP_USER.name)||'')+' · '+new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});saveCOProgress();drawCO();}
 // Check-in: one compact box per small item — name on top, Returned / Not returned under it
 function ciMiniRet(id,title,val,onOk,onBad){
   var bad=val==='missing',ok=val==='ok';
@@ -4272,9 +4272,9 @@ function ciRcvMini(){
     +'<select id="ci-rcv" onchange="staffSelected(\'ci-rcv\',this.value)" style="color-scheme:light;width:100%;padding:7px 8px;font-size:14px;font-weight:800;border-radius:8px;border:2px solid var(--g3);background:var(--g0);color:var(--tx);">'
     +'<option value="">— name —</option>'+STAFF_HO.map(function(n){return '<option'+(n===val?' selected':'')+'>'+n+'</option>';}).join('')+'</select></div>';
 }
-function ciSetRet(k,v){retSt[k]=(retSt[k]===v)?'':v;if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[k]={st:retSt[k],by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+function ciSetRet(k,v){retSt[k]=(retSt[k]===v)?'':v;if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[k]={st:retSt[k],by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})};
   if(retSt[k]==='missing')toast('✗ '+k+' NOT returned — shows on the client and management report','err');drawCI();}
-function ciSetWifi(v){retSt['WiFi device']=v;if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy['WiFi device']={st:v,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};drawCI();}
+function ciSetWifi(v){retSt['WiFi device']=v;if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy['WiFi device']={st:v,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})};drawCI();}
 // ── No-camping bookings: only vehicle, mechanical, Box 4 and a few loose items ─────────
 // Camping (2 or 4 pax): every tent / camping check is done. No camping: hide the camping gear below.
 var NO_CAMP_HIDE=['Towels','Towels & pillows','Fridge','Table','Chairs','Sleeping bags','Braai grid','Gas stove'];  // canvas bag stays: it holds the first aid kit, gauge and multi plug
@@ -4351,7 +4351,7 @@ function secAllGood(which,idx,ev){
   var labels=secItems(which,idx);
   var _qty=secQtyItems(which,idx);
   if(!labels.length&&!_qty.length){toast('Nothing to mark here','err');return;}
-  var t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),n=0;
+  var t=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}),n=0;
   // counts: filled in with the booked number when nobody has chosen one yet
   _qty.forEach(function(q){
     var cur=co.prepItems[q.lbl];if(cur!=null&&cur!=='')return;
@@ -4494,7 +4494,7 @@ function tapPrep(i){
   // Tap: grey → ✅ OK → ⚠ Problem → ✅ OK … (optional items also offer N/A)
   if(isOpt) newSt=prevSt==='ok'?'prob':prevSt==='prob'?'na':'ok';
   else newSt=prevSt==='ok'?'prob':'ok';
-  const ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const ts=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   co.prepItems[lbl]={st:newSt,by:co.prepBy,at:ts};
   if(newSt) co.prepLog.push({lbl,st:newSt,by:co.prepBy,at:ts});
   co.prepCheckedBy[co.prepBy]=(co.prepCheckedBy[co.prepBy]||0)+1;
@@ -4631,7 +4631,7 @@ function setMechItem(k,v){
   if(!co.mechWho)co.mechWho={};
   if(!co.mechCheckBy){toast('Select who is checking first','err');var sel=document.getElementById('co-mech-nm');if(sel)sel.focus();return;}
   co.mechItems[k]=(co.mechItems[k]===v)?'':v;
-  co.mechWho[k]=co.mechItems[k]?co.mechCheckBy+' · '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'';
+  co.mechWho[k]=co.mechItems[k]?co.mechCheckBy+' · '+new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}):'';
   saveCOProgress(); drawCO();
 }
 
@@ -4749,7 +4749,7 @@ function tapPrepIdx(i){
   // Tap: grey → ✅ OK → ⚠ Problem → ✅ OK … (optional items also offer N/A)
   if(isOpt) newSt=prevSt==='ok'?'prob':prevSt==='prob'?'na':'ok';
   else newSt=prevSt==='ok'?'prob':'ok';
-  const ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const ts=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   co.prepItems[lbl]={st:newSt,by:co.prepBy,at:ts};
   if(newSt) co.prepLog.push({lbl,st:newSt,by:co.prepBy,at:ts});
   co.prepCheckedBy[co.prepBy]=(co.prepCheckedBy[co.prepBy]||0)+1;
@@ -6656,7 +6656,7 @@ function inspSetItem(kind,lbl,v){
   // Whoever is logged in can tick a missed item straight from the list — no going back a step
   var who=co.inspBy||(APP_USER&&APP_USER.name)||'';
   if(!who){toast('Log in first','err');return;}
-  var t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  var t=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   if(!co.prepItems)co.prepItems={};if(!co.mechItems)co.mechItems={};
   if(kind==='qty'){co.prepItems[lbl]=String(v);}
   else if(kind==='prep'){co.prepItems[lbl]={st:v==='ok'?'ok':'prob',by:who+' (quick check)',at:t};}
@@ -7216,7 +7216,7 @@ function coReleaseBox(){
   if(!ready)return '<div style="text-align:center;font-size:13px;color:var(--g5);margin:6px 0 10px;">When the client has signed, <b>Release vehicle</b> appears here.</div>';
   if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask '+_bx(mgrNames())+'</div>';
   var rb=co.releaseBlocked;
-  return (rb?'<div style="background:#fdeaea;border:2px solid #d13636;border-radius:var(--r);padding:10px 14px;margin-bottom:8px;font-size:14px;font-weight:800;color:#b91c1c;">⛔ Release was refused'+(rb.at?' ('+_bx(new Date(rb.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+(rb.by?', '+_bx(rb.by):'')+')':'')+': '+_bx(rb.why)+'.<br><span style="color:#374151;">'+_bx(rb.who||'')+'.</span></div>':'')
+  return (rb?'<div style="background:#fdeaea;border:2px solid #d13636;border-radius:var(--r);padding:10px 14px;margin-bottom:8px;font-size:14px;font-weight:800;color:#b91c1c;">⛔ Release was refused'+(rb.at?' ('+_bx(new Date(rb.at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+(rb.by?', '+_bx(rb.by):'')+')':'')+': '+_bx(rb.why)+'.<br><span style="color:#374151;">'+_bx(rb.who||'')+'.</span></div>':'')
     +'<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
     +'<button class="btn g" style="font-size:18px;padding:18px;" onclick="coRelease()">✅ Release vehicle</button>'
     +'<div style="font-size:12px;color:var(--g5);margin-top:6px;text-align:center;">Released by '+_bx(me)+' · anything still open is shown before it goes</div></div>';
@@ -7372,7 +7372,7 @@ function mgmtResolve(lbl, section){
   const noteId='mgmt-note-'+section+'-'+lbl.replace(/[^a-zA-Z0-9]/g,'_');
   const note=(function(){var _e=document.getElementById(noteId);return _e?_e.value:undefined;})()||'';
   if(!co.mgmtResolved) co.mgmtResolved={};
-  co.mgmtResolved[lbl]={by:nm, at:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), note};
+  co.mgmtResolved[lbl]={by:nm, at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}), note};
   // Redraw step
   const s=document.getElementById('cos');
   if(s){
@@ -7610,7 +7610,7 @@ function eqResolve(lbl){
 }
 function eqResolveSet(lbl,v){
   var w=document.getElementById('eq-res');if(w)w.remove();
-  var who=(APP_USER&&APP_USER.name)||'',t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  var who=(APP_USER&&APP_USER.name)||'',t=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   if(!co.prepItems)co.prepItems={};
   co.prepItems[lbl]=v==='na'?'na':{st:'ok',by:who+' (at handover)',at:t};
   saveCOProgress();drawCO();
@@ -7856,7 +7856,7 @@ function payUndoLines(v,st){
   var l=payUndoable(st);if(!l.length)return '';
   var M={adumo:'Adumo',card_swipe:'card machine',cash:'cash'};
   return l.map(function(r){
-    var t=r.created?new Date(r.created).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}):'';
+    var t=r.created?new Date(r.created).toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}):'';
     return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:8px 10px;margin-bottom:8px;">'
       +'<div style="flex:1;min-width:200px;font-size:14px;font-weight:800;color:#9a3412;">Recorded on the tablet'+(t?' at '+t:'')+': '+payFmt(r.amount)+' by '+_bx(M[r.method]||r.method||'')+' ('+_bx(String(r.by).replace('tablet: ',''))+')</div>'
       +'<button onclick="payUndo(\''+_bx(v.bid)+'\',\''+_bx(r.id)+'\')" style="padding:10px 14px;border-radius:10px;border:2px solid #c2410c;background:#fff;color:#9a3412;font-size:14px;font-weight:900;cursor:pointer;">↩ Undo — wrong button</button></div>';
@@ -8221,7 +8221,7 @@ async function completeCORun(){
   </style></head><body>
   <div class="logo">Go Rent <span>4×4</span> Namibia</div>
   <h1>Vehicle Handover Document</h1>
-  <p style="color:#666;font-size:14px;">Generated: ${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} · ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</p>
+  <p style="color:#666;font-size:14px;">Generated: ${new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} · ${new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})}</p>
 
   <div class="meta">
     <div class="meta-item"><div class="meta-label">Vehicle</div><div class="meta-value">${co.fn}</div></div>
@@ -8445,7 +8445,7 @@ function ciShowDone(v,r){
   ci={};ciStep=0;
   goPage('ci');
   var body=document.getElementById('ci-body');if(!body)return;
-  var when=r.created_at?new Date(r.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
+  var when=r.created_at?new Date(r.created_at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'';
   var line=function(l,val){return '<div style="display:flex;gap:8px;font-size:15px;padding:7px 0;border-bottom:1px solid var(--g2);"><div style="width:45%;color:var(--g5);">'+l+'</div><div style="color:var(--tx);font-weight:800;">'+val+'</div></div>';};
   var key=bkKey(v),safeCl=_bx(String(v.cl||'').replace(/'/g,''));
   body.innerHTML='<div style="padding:16px;max-width:640px;margin:0 auto;">'
@@ -9466,7 +9466,7 @@ function tapRetItem(i){
   let newSt;
   if(isOpt) newSt=prevSt==='ok'?'prob':prevSt==='prob'?'na':'ok';
   else newSt=prevSt==='ok'?'prob':'ok';
-  const ts=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  const ts=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   ci.retItems[lbl]={st:newSt,by:ci.receivedBy,at:ts};
   if(!ci.retLog) ci.retLog=[];
   if(!ci.retCheckedBy) ci.retCheckedBy={};
@@ -9578,7 +9578,7 @@ function ciVehicleIssues(){
 function ciVehAllGood(){
   var who=ci.receivedBy||(APP_USER&&APP_USER.name)||'';if(!who){toast('Select your name first','err');return;}
   if(!ci.receivedBy)ci.receivedBy=who;
-  var t=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),n=0;
+  var t=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}),n=0;
   L_CI.forEach(function(x,i){if(x[0]==='__SECTION__'||x[0]==='__OPTIONAL__'||!ciShow(x,i)||!ciStep1Item(i))return;
     var y=ci.retItems[x[1]];if(y&&(y.st!==undefined?y.st:y))return;
     ci.retItems[x[1]]={st:'ok',by:who,at:t};if(!ci.retLog)ci.retLog=[];ci.retLog.push({lbl:x[1],st:'ok',by:who,at:t});n++;});
@@ -9963,7 +9963,7 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
       +(window._rfContractHTML&&canSeeMoney()?'<button class="btn g" style="margin-top:8px;width:auto;padding:10px 16px;" onclick="rfShowContract()">📄 Open full signed contract</button>':'')):'<div style="font-size:13px;color:var(--g5);">No signed contract saved for this booking yet.</div>');
     h+=sec('🪪 Passport, ID & licence scans',idDocs.length?idDocs.map(function(p){return signed[p]?thumb(signed[p],rfLabel(p)+(_from[p]&&_from[p]!==key?' · from '+_from[p]:''),p,'client-docs'):'';}).join(''):'<div style="font-size:13px;color:var(--g5);">No scans saved for this booking yet.</div>');
     h+=sec('🚗 Check-out',cko?(line('Prepared by',_bx((cko.prep_by_all||[cko.prep_by]).filter(Boolean).join(', ')||'—'))+line('Handed over by',_bx(cko.handover_by||'—'))+line('Manager',_bx(cko.manager_name||'—'))+line('Km out · fuel out',Number(cko.odo_out||0).toLocaleString()+' km · '+_bx(cko.fuel_out||'—'))+line('Date',new Date(cko.created_at).toLocaleString('en-GB'))):'<div style="font-size:13px;color:var(--g5);">Not checked out on the tablet yet.</div>');
-    if(cko&&(cko.out_notes||[]).length)h+=sec('📝 Notes while out',(cko.return_date_new?line('Return date changed to',_bx(cko.return_date_new)):'')+(cko.return_time?line('Expected return time',_bx(cko.return_time)):'')+cko.out_notes.map(function(n){return '<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--g2);"><b>'+_bx(n.by||'')+'</b> · '+_bx(new Date(n.at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' — '+_bx(n.text)+'</div>';}).join(''));
+    if(cko&&(cko.out_notes||[]).length)h+=sec('📝 Notes while out',(cko.return_date_new?line('Return date changed to',_bx(cko.return_date_new)):'')+(cko.return_time?line('Expected return time',_bx(cko.return_time)):'')+cko.out_notes.map(function(n){return '<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--g2);"><b>'+_bx(n.by||'')+'</b> · '+_bx(new Date(n.at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' — '+_bx(n.text)+'</div>';}).join(''));
     h+=sec('🏠 Check-in',cki?(line('Received by',_bx(cki.received_by||'—'))+line('Manager sign-off',_bx(cki.manager_name||'—'))+line('Km in · fuel in',Number(cki.odo_in||0).toLocaleString()+' km · '+_bx(cki.fuel_in||'—'))+line('Deposit decision',_bx(cki.deposit_decision||'—'))+line('Return report',cki.report_link?'<a href="'+cki.report_link+'" target="_blank" style="color:var(--se);">📄 Open report</a> · <a href="https://wa.me/?text='+encodeURIComponent('Your Go Rent 4×4 vehicle return report: '+cki.report_link)+'" target="_blank" style="color:#25d366;">📱 Share on WhatsApp</a>':'—')+(cki.report_whatsapp_at?line('Sent on WhatsApp',new Date(cki.report_whatsapp_at).toLocaleString('en-GB')):'')+line('Return report emailed',cki.report_sent_to?_bx(cki.report_sent_to)+' · '+new Date(cki.report_sent_at).toLocaleString('en-GB'):'Not sent')+line('Date',new Date(cki.created_at).toLocaleString('en-GB'))):'<div style="font-size:13px;color:var(--g5);">Not checked in on the tablet yet.</div>');
     h+=sec('📷 Photos & fuel receipts',picUrls.length?picUrls.map(function(x){return thumb(x.url,rfLabel(x.path)+(_from[x.path]&&_from[x.path]!==key?' · from '+_from[x.path]:''),(x.path.indexOf('x/fuel-receipt/')===0?'':x.path),'vehicle-photos');}).join(''):'<div style="font-size:13px;color:var(--g5);">No photos saved for this booking yet.</div>');
     h+=sec('✍️ Signatures',sigDocs.length?sigDocs.map(function(p){return signed[p]?thumb(signed[p],rfLabel(p),p,'client-docs'):'';}).join(''):'<div style="font-size:13px;color:var(--g5);">No signatures saved for this booking yet.</div>');
@@ -10290,7 +10290,7 @@ function ciReportHTML(){
   var missing=RET_GROUPS.reduce(function(a,g){return a.concat(g.items.filter(function(i){return retSt[i]==='missing';}));},[]).map(ciQtyLabel);
   var fuelShort=!!ci.fuelIn&&ci.fuelIn!==v.fuelOut;
   var odoOut=ci.odometerOut||v.odo||0, odoIn=ci.odoIn||0;
-  var when=new Date().toLocaleString('en-GB',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  var when=new Date().toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
   function row(l,val){return '<tr><td style="padding:7px 10px;border-bottom:1px solid #eee;color:#666;font-size:13px;width:42%;">'+l+'</td><td style="padding:7px 10px;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;">'+val+'</td></tr>';}
   function h(t){return '<h3 style="font-size:15px;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #1d6b3d;color:#1d6b3d;">'+t+'</h3>';}
   function img(u,w){return '<img src="'+u+'" alt="" style="width:'+(w||180)+'px;max-width:100%;border:1px solid #ddd;border-radius:6px;margin:0 6px 6px 0;">';}
@@ -10780,7 +10780,7 @@ async function loadHistory(){
   ])].sort();
 
   const fmtDate=d=>d?new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—';
-  const fmtTime=d=>d?new Date(d).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'—';
+  const fmtTime=d=>d?new Date(d).toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'}):'—';
 
   function recordCard(c){
     const isOut=c._type==='out';
@@ -11065,9 +11065,9 @@ async function loadAccountability(){
       if(x.st==='prob')lines.push('<div style="color:var(--al);">⚠ Problem: <b>'+k+'</b> — ticked by '+(x.by||'—')+(x.at?' at '+x.at:'')+'</div>');
       if(x.st==='unchecked')lines.push('<div style="color:var(--g5);">⬜ Not checked: <b>'+k+'</b> — '+(x.by||c.received_by||'—')+' responsible</div>');});
     Object.keys(eq).forEach(function(k){var x=eq[k]||{};if(x.st==='unchecked')lines.push('<div style="color:var(--g5);">⬜ Equipment not confirmed returned: <b>'+k+'</b> — '+(x.by||c.received_by||'—')+' responsible</div>');});
-    var log=(c.receiver_log||[]).filter(function(x){return x.from;}).map(function(x){return (x.from||'—')+' → '+x.to+(x.pin_verified?' (PIN ✓)':'')+' '+new Date(x.at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}).join(' · ');
+    var log=(c.receiver_log||[]).filter(function(x){return x.from;}).map(function(x){return (x.from||'—')+' → '+x.to+(x.pin_verified?' (PIN ✓)':'')+' '+new Date(x.at).toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});}).join(' · ');
     return '<div class="rpt-card" style="margin-bottom:10px;border-color:'+(lines.length?'var(--am)':'var(--g2)')+';">'
-      +'<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="font-size:15px;font-weight:900;color:var(--tx);">'+c.fleet_no+' · '+(c.client||'')+'</div><div style="font-size:12px;color:var(--g5);">'+new Date(c.created_at).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div></div>'
+      +'<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;"><div style="font-size:15px;font-weight:900;color:var(--tx);">'+c.fleet_no+' · '+(c.client||'')+'</div><div style="font-size:12px;color:var(--g5);">'+new Date(c.created_at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})+'</div></div>'
       +'<div style="font-size:13px;color:var(--g6);margin:4px 0 6px;">📥 Received by <b>'+(c.received_by||'—')+'</b> · 👔 Signed off by <b>'+(c.manager_name||'—')+'</b>'+(log?'<br>🔁 Receiver changed: '+log:'')+'</div>'
       +(lines.length?'<div style="font-size:13px;line-height:1.7;">'+lines.join('')+'</div>':'<div style="font-size:13px;color:var(--se);">✅ Everything checked, nothing missing</div>')
       +'</div>';
@@ -11287,7 +11287,7 @@ async function saveLicExpiry(fn, expiry, context){
   else if(v)drawCI();
   toast('Licence disc date saved ✅','ok');
 }
-function now(){return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+function now(){return new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});}
 function okSVG(){return`<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="rgba(61,220,132,.15)" stroke="#3ddc84" stroke-width="2"/><path d="M7 12l4 4 6-7" stroke="#3ddc84" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;}
 function probSVG(){return`<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="rgba(240,80,80,.15)" stroke="#f05050" stroke-width="2"/><path d="M12 8v5M12 15.5v.5" stroke="#f05050" stroke-width="2.5" stroke-linecap="round"/></svg>`;}
 function uncSVG(){return`<svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="#3a4f6a" stroke-width="2"/></svg>`;}
@@ -11651,7 +11651,7 @@ function ciSetQty(gi,ii,n){
   var i=RET_GROUPS[gi].items[ii],o=ciQtyOut(i);
   if(!ci.retQty)ci.retQty={};ci.retQty[i]=n;
   retSt[i]=n>=o?'ok':'missing';
-  if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[i]={st:retSt[i],qty:n,out:o,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};
+  if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[i]={st:retSt[i],qty:n,out:o,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})};
   var m=document.getElementById('qty-pick');if(m)m.remove();
   if(n<o)toast('⚠ '+i+': only '+n+' of '+o+' returned — flagged','err');
   var el=document.getElementById('ret-grps');if(el)el.innerHTML=renderRetGroups();
@@ -11692,7 +11692,7 @@ function renderRetGroups(){
 // One tap: every item nobody has answered yet = returned (counts as booked out). Missing ones
 // already marked stay missing; staff then tap ✗ on anything that is not back.
 function ciEqAllReturned(){
-  var who=(ci&&ci.receivedBy)||(APP_USER&&APP_USER.name)||'';var at=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  var who=(ci&&ci.receivedBy)||(APP_USER&&APP_USER.name)||'';var at=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});
   if(!ci.retEqBy)ci.retEqBy={};var n=0;
   RET_GROUPS.forEach(function(g){g.items.forEach(function(i){if(retSt[i])return;retSt[i]='ok';var o=ciQtyOut(i);if(o){if(!ci.retQty)ci.retQty={};ci.retQty[i]=o;}ci.retEqBy[i]={st:'ok',by:who,at:at};n++;});});
   toast('✓ '+n+' items returned — now tap ✗ on anything missing','ok');
@@ -11703,7 +11703,7 @@ function setRetState(gi,ii,want){
   var i=RET_GROUPS[gi].items[ii],o=ciQtyOut(i),cur=retSt[i]||'';
   if(o){ if(want==='ok'){ if(cur==='ok'){retSt[i]='';if(ci.retQty)delete ci.retQty[i];} else {ciSetQty(gi,ii,o);return;} } else {ciPickQty(gi,ii);return;} }
   else retSt[i]=(cur===want)?'':want;
-  if(ci){if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[i]={st:retSt[i]||'',by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};}
+  if(ci){if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[i]={st:retSt[i]||'',by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})};}
   if(retSt[i]==='missing')toast('✗ '+i+' marked MISSING — shows on the client and management report','err');
   var el=document.getElementById('ret-grps');if(el)el.innerHTML=renderRetGroups();
 }
@@ -11712,7 +11712,7 @@ function setRetItem(gi,ii){
   var cur=retSt[i]||'';
   var nx=cur==='ok'?'missing':'ok';
   retSt[i]=nx;
-  if(ci){if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[i]={st:nx,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})};}
+  if(ci){if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy[i]={st:nx,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})};}
   var el=document.getElementById('ret-grps');if(el)el.innerHTML=renderRetGroups();
 }
 // Equipment result for saving: includes items nobody confirmed (receiver responsible)
@@ -11725,7 +11725,7 @@ function ciEqChecks(){
   });});
   return out;
 }
-function setRetGrp(gi,status){var _who=(ci&&ci.receivedBy)||(APP_USER&&APP_USER.name)||'';var _at=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});if(ci&&!ci.retEqBy)ci.retEqBy={};RET_GROUPS[gi].items.forEach(i=>{retSt[i]=status;if(ci){var _o=ciQtyOut(i);if(_o&&status==='ok'){if(!ci.retQty)ci.retQty={};ci.retQty[i]=_o;}ci.retEqBy[i]={st:status,by:_who,at:_at};}});var _rg=document.getElementById('ret-grps');if(_rg)_rg.innerHTML=renderRetGroups();}
+function setRetGrp(gi,status){var _who=(ci&&ci.receivedBy)||(APP_USER&&APP_USER.name)||'';var _at=new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'});if(ci&&!ci.retEqBy)ci.retEqBy={};RET_GROUPS[gi].items.forEach(i=>{retSt[i]=status;if(ci){var _o=ciQtyOut(i);if(_o&&status==='ok'){if(!ci.retQty)ci.retQty={};ci.retQty[i]=_o;}ci.retEqBy[i]={st:status,by:_who,at:_at};}});var _rg=document.getElementById('ret-grps');if(_rg)_rg.innerHTML=renderRetGroups();}
 
 // ── SIGNATURES ────────────────────────────────────────────────────
 // Every stroke is remembered as points in 0..1 space, not just painted onto the canvas.
