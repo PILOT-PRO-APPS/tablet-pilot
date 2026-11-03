@@ -1298,6 +1298,11 @@ function canDoStep(n){var a=allowedSteps();return !a||a.indexOf(n)>=0;}
 function firstAllowedStep(){var a=allowedSteps();return a?a[0]:0;}
 // Staff who may also do check-ins (deposit decisions still go to management)
 const CHECKIN_STAFF=['Vince'];
+// Owner 3 Nov 2026: Vince also records damage at check-out Step 4 (Pre-handover inspection). The same pictures and
+// damage photos as the Handover step, so what he marks is there when the client is shown the vehicle.
+// To add someone else: put their name here.
+const DAMAGE_STAFF=['Vince'];
+function canRecordDamage4(){return !!(APP_USER&&DAMAGE_STAFF.indexOf(APP_USER.name)>=0);}
 function canCheckIn(){return !allowedSteps()||!!(APP_USER&&CHECKIN_STAFF.indexOf(APP_USER.name)>=0);}
 function canSeeContracts(){ return !!(APP_USER && !PREP_ONLY.includes(APP_USER.name)); }
 // Admin overrides: Peter sees everything management + reports + all client info
@@ -6769,12 +6774,26 @@ function coStep4_dmg(){
   var problems=issues.filter(function(i){return i.status==='problem';});
   var probRows=problems.map(function(i){return '<div style="font-size:13px;color:var(--al);padding:3px 0;">⚠ '+i.step+': <b>'+_bx(i.label)+'</b></div>';}).join('');
   var done=coInspDone();
+  var dmg4='';
+  if(canRecordDamage4()){
+    try{co.dmgd=getDmgData();}catch(e){}
+    var _pr=(co.dmgd||[]).reduce(function(a,d){return a+((d.cells||[]).filter(function(c){return c.t==='pr';}).length);},0);
+    dmg4='<div id="co-dmg4" style="background:var(--g1);border:2px solid var(--g2);border-radius:var(--rs);padding:12px 14px;margin-bottom:12px;">'
+      +'<div style="font-size:15px;font-weight:800;margin-bottom:8px;">🚗 Damage — mark what you find</div>'
+      +(_pr?'<div class="al warn" style="margin-bottom:10px;font-size:13px;">⭐ '+_pr+' yellow block'+(_pr===1?'':'s')+' = damage already on record'+(co._prevDmgSrc?' (from the '+co._prevDmgSrc+')':'')+'. Mark anything NEW: blue = scratch · red = dent. Old damage not yet on record = Pre-existing.</div>'
+        :'<div class="al info" style="margin-bottom:10px;font-size:13px;">No damage on record for this vehicle. Mark anything you find: blue = scratch · red = dent · yellow = pre-existing.</div>')
+      +insHTML()
+      +photoHTML('co.dmgPhotos','📷 Damage Photos','Photograph all damage — these protect the company.',8)
+      +'<div style="font-size:12px;opacity:.75;margin-top:6px;">Saved with this check-out — the office sees the same marks at the Handover.</div>'
+      +'</div>';
+  }
   return '<div class="step-intro"><div class="step-ico">🔍</div>'
     +'<div><div class="step-title">Step 4 — Pre-handover Inspection</div>'
     +'<div class="step-sub">Done by the person doing the handover — documents in the vehicle and spot checks</div></div></div>'
     +who
     +'<div style="background:var(--g1);border:2px solid var(--g2);border-radius:var(--rs);padding:10px 14px;margin-bottom:12px;">'
     +'<div style="font-size:13px;font-weight:800;color:var(--tx);">📄 Documents</div>'+docsHtml+'</div>'
+    +dmg4
     +(unchecked.length
       ?coOpenStepLines(unchecked)
       :'<div style="background:var(--sg);border:2px solid var(--gb);border-radius:var(--rs);padding:12px;text-align:center;margin-bottom:12px;"><div style="font-size:15px;font-weight:900;color:var(--se);">✅ Everything from Steps 1–3 has been checked</div></div>')
