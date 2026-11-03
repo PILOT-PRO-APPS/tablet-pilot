@@ -3522,7 +3522,7 @@ async function loadPrevDamage(fn){
     if(!panels||!co||co.fn!==fn||co._done)return;
     panels.forEach(function(d){
       var sz=d.size||'M';if(!imarks[d.view]||!imarks[d.view][sz])return;
-      (d.cells||[]).forEach(function(c){imarks[d.view][sz][c.r+','+c.c]='pr';});   // everything already there counts as pre-existing
+      (d.cells||[]).forEach(function(c){imarks[d.view][sz][c.r+','+c.c]='pr';co._carried=co._carried||{};co._carried[d.view+'|'+sz+'|'+c.r+','+c.c]=d.view_name||d.view;});   // everything already there counts as pre-existing
     });
     if(panels[0]&&panels[0].size)isize=panels[0].size;
     co._prevDmgSrc=src;co.dmgd=getDmgData();
@@ -7049,7 +7049,7 @@ function coStep5_client(){
   <div style="background:var(--g1);border:2px solid var(--g2);border-radius:var(--rs);padding:12px 14px;margin-bottom:14px;">
     <div style="font-size:15px;font-weight:800;margin-bottom:8px;">🔍 Damage Inspection</div>
     ${(function(){var pr=(co.dmgd||[]).reduce(function(a,d){return a+((d.cells||[]).filter(function(c){return c.t==='pr';}).length);},0);
-      return pr?'<div class="al warn" style="margin-bottom:10px;font-size:13px;">⭐ '+pr+' yellow block'+(pr===1?'':'s')+' = damage already on this vehicle'+(co._prevDmgSrc?' (from the '+co._prevDmgSrc+')':'')+'. Check it with the client: tap a yellow block with <b>Pre-existing</b> selected to remove it if it is no longer there, or add more with <b>Pre-existing</b>.</div>'
+      return pr?'<div class="al warn" style="margin-bottom:10px;font-size:13px;">⭐ '+pr+' yellow block'+(pr===1?'':'s')+' = damage already on this vehicle'+(co._prevDmgSrc?' (from the '+co._prevDmgSrc+')':'')+'. Check it with the client. It stays on record until it is repaired. <b>Repaired</b> (e.g. in our workshop)? Select <b>Pre-existing</b> and tap the yellow block — you say what was repaired and it is saved with this hand-over. Found more old damage? Mark it with <b>Pre-existing</b>.</div>'
         :'<div class="al info" style="margin-bottom:10px;font-size:13px;">No damage on record for this vehicle. Mark anything you find: blue = scratch · red = dent · yellow = pre-existing.</div>';})()}
     ${insHTML()}
     ${photoHTML('co.dmgPhotos','📷 Damage Photos','Photograph all damage — these protect the company.',8)}
@@ -7466,6 +7466,7 @@ function coOdoNotes(){
   var out=kmInt(co.odometerOut),ret=co.v&&co.v.lastRet?kmInt(co.v.lastRet.km):null;
   if(co.odoAuto)n.push({at:at,by:by,text:'🛣 Km out '+(out||0).toLocaleString()+' not ticked as checked against the dashboard — taken from the screen'});
   if(co.odoLowerOk&&out&&ret&&out<ret)n.push({at:at,by:by,text:'🛣 Km out '+out.toLocaleString()+' is LOWER than the last return ('+ret.toLocaleString()+') — confirmed by '+by+'. Check the return km.'});
+  if(co&&co.repairs&&co.repairs.length){var g={};co.repairs.forEach(function(x){var k=x.view+' — '+x.note+' ('+x.by+')';g[k]=(g[k]||0)+1;});Object.keys(g).forEach(function(k){n.push({at:at,by:by,text:'🔧 Damage on record marked REPAIRED: '+k+' · '+g[k]+' block'+(g[k]>1?'s':'')});});}
   if(co&&co.wsAcceptedBy)n.push({at:co.wsAcceptedAt||at,by:co.wsAcceptedBy,text:'🔧 Workshop accepted as it stands by '+co.wsAcceptedBy+' — '+(co.wsAcceptedReason||'')+' · open then: '+(co.wsAcceptedOpen||[]).slice(0,40).join('; ')});
   return n.length?n:undefined;
 }
@@ -11656,8 +11657,26 @@ function ciRefreshClientSign(){
     }catch(e){}
   },300);
 }
-function iCT(cell,v,r,c){const key=r+','+c;const cur=imarks[v][isize][key]||null;iundo={v,sz:isize,key,prev:cur};eU();if(cur===itool){cell.classList.remove(cur);delete imarks[v][isize][key];}else{if(cur)cell.classList.remove(cur);cell.classList.add(itool);imarks[v][isize][key]=itool;}renderIS();}
-function iCP(cell,v,r,c){const key=r+','+c;const cur=imarks[v][isize][key]||null;if(cur===itool)return;iundo={v,sz:isize,key,prev:cur};eU();if(cur)cell.classList.remove(cur);cell.classList.add(itool);imarks[v][isize][key]=itool;renderIS();}
+// Owner 3 Nov 2026: damage carried over from the last hand-over / return stays on the vehicle until a staff member
+// records that it was REPAIRED (e.g. in our workshop). Removing such a block asks who repaired what; the repair is
+// saved with the hand-over (out_notes), so the history stays and the next hand-over no longer shows it.
+function dmgCarried(v,sz,key){try{return !!(co&&co._carried&&co._carried[v+'|'+sz+'|'+key]&&document.getElementById('co-body'));}catch(e){return false;}}
+async function dmgRepairAsk(cell,v,r,c){
+  var key=r+','+c, sz=isize, nm=(co._carried||{})[v+'|'+sz+'|'+key]||v;
+  var a=await askBox({title:'🔧 Remove damage already on record?',text:'This block ('+nm+') is damage carried over from the '+(co._prevDmgSrc||'last rental')+'.\n\nOnly remove it if it was REPAIRED (for example in our workshop). The repair is saved with this hand-over, so the history stays.\n\nNot repaired? Tap "Keep it" — it stays marked as existing damage.',ok:'Yes — it was repaired',cancel:'Keep it',reason:'What was repaired, and by whom?',minReason:4});
+  if(!a.ok)return;
+  iundo=null;var ub=document.getElementById('ins-undo');if(ub){ub.disabled=true;ub.style.opacity='.4';}
+  cell.classList.remove('pr');delete imarks[v][sz][key];delete co._carried[v+'|'+sz+'|'+key];
+  co.repairs=co.repairs||[];co.repairs.push({at:new Date().toISOString(),by:(APP_USER&&APP_USER.name)||'staff',view:nm,size:sz,cell:key,note:a.reason});
+  renderIS();try{co.dmgd=getDmgData();}catch(e){}
+  toast('🔧 Marked as repaired — saved with this hand-over','ok');
+}
+function iCT(cell,v,r,c){const key=r+','+c;const cur=imarks[v][isize][key]||null;
+  if(cur==='pr'&&dmgCarried(v,isize,key)){
+    if(itool==='pr'){dmgRepairAsk(cell,v,r,c);return;}
+    toast('Damage already on record here — it stays yellow. Repaired? Select Pre-existing and tap it.','');return;
+  }iundo={v,sz:isize,key,prev:cur};eU();if(cur===itool){cell.classList.remove(cur);delete imarks[v][isize][key];}else{if(cur)cell.classList.remove(cur);cell.classList.add(itool);imarks[v][isize][key]=itool;}renderIS();}
+function iCP(cell,v,r,c){const key=r+','+c;const cur=imarks[v][isize][key]||null;if(cur===itool)return;if(cur==='pr'&&dmgCarried(v,isize,key))return;iundo={v,sz:isize,key,prev:cur};eU();if(cur)cell.classList.remove(cur);cell.classList.add(itool);imarks[v][isize][key]=itool;renderIS();}
 function eU(){const b=document.getElementById('ins-undo');if(b){b.disabled=false;b.style.opacity='1';}}
 function setIT(t,btn){itool=t;document.querySelectorAll('.ins-t').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
 // Switching brush size keeps the marks: they are carried over to the new grid
