@@ -3753,7 +3753,7 @@ function coCsLeft(k){
       ctMissing(c).forEach(function(x){if(/Remote return/.test(x))m.push('Return place & time');});
     }else if(k==='pay'){
       if(!co.contractSigned)ctMissing(c).forEach(function(x){if(/Remote return/.test(x))return;if(!v.camping&&/Camping Equipment cover/.test(x))return;m.push(x.replace(/^\S+\s/,''));});
-      var st=PAY_ST[v.bid];if(st&&st.ok&&st.owing>0.5)m.push('Rental not fully paid ('+payFmt(st.owing)+')');
+      var st=PAY_ST[v.bid];if(canSeeMoney()&&st&&st.ok&&st.owing>0.5)m.push('Rental not fully paid ('+payFmt(st.owing)+')');
     }else if(k==='sign'){
       if(!co.contractSigned)m.push('Client signs the contract');
     }else if(k==='hand'){
@@ -7838,10 +7838,12 @@ function payUpdHTML(){
     +'<div style="flex:1;min-width:220px;font-size:12px;color:#475569;line-height:1.35;">🔄 <b>Payment box looks different from what the office says?</b> Check the tablet has the latest version: tap the button, or swipe in from the <b>left edge</b> → <b>Clear Cache</b> → <b>Reload Start URL</b>. Nothing you entered is lost.'+(appVer()?' <span style="color:#94a3b8;">(version '+appVer()+')</span>':'')+'</div>'
     +'<button onclick="if(window.grUpdateNow)grUpdateNow();else location.reload();" style="padding:9px 12px;border-radius:10px;border:2px solid #64748b;background:#f8fafc;color:#334155;font-size:13px;font-weight:900;cursor:pointer;">🔄 Check for update</button></div>';
 }
-function payPanelHTML(v){ return '<div id="co-pay" style="margin-bottom:14px;">'+payPanelInner(v)+'</div>'; }
+// Owner 3 Nov 2026 13:19: "only management can see any money movements - fully paid, or still due, and how it was paid".
+function payPanelHTML(v){ if(!canSeeMoney())return ''; return '<div id="co-pay" style="margin-bottom:14px;">'+payPanelInner(v)+'</div>'; }
 // Simple payment box (owner 2026-10-11): what is paid / still to pay, and one tap for HOW the client paid.
 // No payment links, no reference numbers, no history table on the tablet: those stay on the Desktop APP.
 function payPanelInner(v){
+  if(!canSeeMoney())return '';
   var st=PAY_ST[v.bid], s=payState(st);
   var col=s.key==='paid'?'#12803c':s.key==='owing'?'#d13636':'#b45309';
   var h='<div style="background:#fff;border:3px solid '+col+';border-radius:14px;padding:12px 14px;">';
@@ -7963,7 +7965,7 @@ async function payCall(body){
 }
 // Tap the flashing payment chip in the header: a small box with the same three buttons, then carry on
 function payChipOpen(){
-  if(!co||!co.v||!co.v.bid)return;
+  if(!co||!co.v||!co.v.bid||!canSeeMoney())return;
   var old=document.getElementById('pay-pop');if(old)old.remove();
   var w=document.createElement('div');w.id='pay-pop';
   w.setAttribute('style','position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;');
@@ -9237,7 +9239,7 @@ function bdNeedRow(n){
   var v=n.v,txt,btn='';
   if(n.k==='unfinished'){
     txt=n.d.blocked
-      ?'<b>Release was refused</b> — '+_bx(n.d.blocked.why)+(n.d.blocked.at?' ('+bdDay(String(n.d.blocked.at).slice(0,10))+(n.d.blocked.by?', '+_bx(n.d.blocked.by):'')+')':'')+'. <b>'+_bx(n.d.blocked.who||'')+'</b>.'
+      ?'<b>Release was refused</b> — '+_bx(!canSeeMoney()&&/paid|pay|deposit|money/i.test(String(n.d.blocked.why||''))?'the office is sorting it out':n.d.blocked.why)+(n.d.blocked.at?' ('+bdDay(String(n.d.blocked.at).slice(0,10))+(n.d.blocked.by?', '+_bx(n.d.blocked.by):'')+')':'')+'. <b>'+_bx(!canSeeMoney()&&/paid|pay|deposit|money/i.test(String(n.d.blocked.why||''))?'Ask '+mgrNames():(n.d.blocked.who||''))+'</b>.'
       :n.d.hoSigned
       ?'<b>Client signed the handover — never released.</b> Only <b>Release</b> left ('+_bx(bdMgrs())+').'
       :n.d.signed
