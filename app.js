@@ -7822,7 +7822,7 @@ function payChip(v){
   if(!v||!v.bid||!canSeeMoney())return '';
   var st=PAY_ST[v.bid], s=payState(st);
   if(!st)payLoad(v.bid).then(function(){var el=document.getElementById('pay-chip');if(el)el.outerHTML=payChip(v);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(v);});
-  return '<span id="pay-chip" onclick="payChipOpen()" title="Tap to record how the client paid" class="'+(s.key==='owing'?'disc-flash':'')+'" style="cursor:pointer;background:'+s.bg+';color:'+s.col+';border:1px solid '+s.bg+';font-weight:900;"><span class="fh-t">'+_bx(s.txt)+'</span></span>';
+  return '<span id="pay-chip" onclick="payChipOpen()" title="Payment status from the Desktop APP — tap to see it" class="'+(s.key==='owing'?'disc-flash':'')+'" style="cursor:pointer;background:'+s.bg+';color:'+s.col+';border:1px solid '+s.bg+';font-weight:900;"><span class="fh-t">'+_bx(s.txt)+'</span></span>';
 }
 // Owner 3 Nov 2026 08:04: a note for staff to check that the tablet has the latest version (payment rules changed)
 function appVer(){try{var sc=[].slice.call(document.scripts).filter(function(x){return /app\.js\?v=/.test(x.src);})[0];return sc?sc.src.split('v=')[1].slice(0,6):'';}catch(e){return '';}}
@@ -7850,23 +7850,16 @@ function payPanelInner(v){
     +'</div>';
   if(st.group_n>1)h+='<div style="margin-top:6px;font-size:14px;font-weight:800;color:#1e3a8a;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:6px 10px;">🚙 One booking, '+st.group_n+' vehicles ('+((st.vehicles||[]).map(function(x){return _bx(x.fleet||x.id);}).join(' + '))+') — these amounts are for all of them together.</div>';
   if(st.marked_full)h+='<div style="margin-top:6px;font-size:12px;color:#475569;">The office marked this booking fully paid.</div>';
+  // Owner 3 Nov 2026 09:38: "remove the tablet payment tapping, this confuses everyone". The tablet only SHOWS what the
+  // Desktop APP has recorded. The office records every payment (Adumo, card machine, cash, EFT) in the Desktop APP;
+  // the hand-over is blocked until the Desktop APP shows the rental (and any cross-border deposit) paid.
   if(owing){
-    var can=APP_USER&&PAY_STAFF.indexOf(APP_USER.name)>=0;
-    if(!can)return h+'<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">Only '+PAY_STAFF.join(', ')+' can take the payment — call one of them.</div>'+payUpdHTML()+'</div>';
-    // Owner 3 Nov 2026 (audit): no money without proof. Card machine = slip number, cash = receipt number.
-    // Adumo money is never tapped in: Pilot counts it by itself from the payment link / Adumo's email.
-    var b=function(m,l){return '<button onclick="payQuick(\''+_bx(v.bid)+'\',\''+m+'\')" style="flex:1;min-width:140px;padding:16px 10px;border-radius:12px;border:2px solid #12803c;background:#f0fdf4;color:#14532d;font-size:18px;font-weight:900;cursor:pointer;">'+l+'</button>';};
-    var b2=function(js,l){return '<button onclick="'+js+'" style="flex:1;min-width:140px;padding:14px 10px;border-radius:12px;border:2px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:16px;font-weight:900;cursor:pointer;">'+l+'</button>';};
-    h+='<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Client pays '+payFmt(st.owing)+' now at the office — tap how:</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+b('card','💳 Card machine (POS)')+(isPeter()?b('cash','💵 Cash (Peter)'):'')+'</div>'
-      +'<div style="font-size:12px;color:#64748b;margin-top:4px;">You type the POS transaction number from the slip — nothing is saved without it.'+(isPeter()?'':' Cash only with Peter — management must allow a cash payment.')+'</div>'
-      +'<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Paying online (Adumo)?</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+(st.has_quote?b2("payLinkOpen(\'"+_bx(v.bid)+"\')",'🔗 Send payment link'):'')+b2("payRefresh(\'"+_bx(v.bid)+"\')",'↻ Check again')+'</div>'
-      +'<div style="font-size:12px;color:#64748b;margin-top:4px;">Adumo payments show here by themselves a few minutes after the client pays — never tap them in.'+(st.has_quote?'':' No Pilot quote for this booking: the office sends the link from the Desktop APP.')+'</div>';
+    h+='<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:#fef2f2;border:2px solid #fecaca;color:#7f1d1d;font-size:15px;font-weight:800;line-height:1.4;">'
+      +'⛔ Not paid in full — the hand-over waits until the office records the payment in the <b>Desktop APP</b>.<br>'
+      +'<span style="font-size:13px;font-weight:700;">Client wants to pay now? Call the office: they send the payment link or take the card payment and record it. Then tap ↻ Check again.</span></div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><button onclick="payRefresh(\''+_bx(v.bid)+'\')" style="flex:1;min-width:160px;padding:14px 10px;border-radius:12px;border:2px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:16px;font-weight:900;cursor:pointer;">↻ Check again</button></div>';
   }else{
-    // Owner 17 Oct 2026: nothing owing according to the Desktop APP (Adumo records) → staff take NO money. Only Peter may override.
-    h+='<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">'+(st.total>0?'Paid according to the Desktop APP (Adumo records) — do NOT take any payment from the client.':'The Desktop APP does not know what is owing — do NOT take money; the office checks it.')+'</div>';
-    if(APP_USER&&APP_USER.name===(st.override_by||'Peter'))h+='<button onclick="payOverride(\''+_bx(v.bid)+'\')" style="margin-top:8px;padding:10px 14px;border-radius:10px;border:2px solid #b45309;background:#fffbeb;color:#92400e;font-size:14px;font-weight:900;cursor:pointer;">Peter only: record a payment anyway (override)</button>';
+    h+='<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">'+(st.total>0?'Paid according to the Desktop APP — do NOT take any payment from the client.':'The Desktop APP does not know what is owing — do NOT take money; the office checks it in the Desktop APP.')+'</div>';
   }
   return h+payUpdHTML()+'</div>';
 }
@@ -8050,7 +8043,7 @@ async function xbGate(){
   // a card-machine deposit with its POS number is saved the moment the contract is signed — re-check once
   if(cardRef&&co.contractSigned){var st2=await payLoad(co.v.bid,true);var x2=st2&&st2.ok?(st2.xb||[]).filter(function(r){return r.key===key||r.fleet===co.fn;})[0]:null;if(x2&&+x2.held>=amt-0.5)return true;held=x2?+x2.held||0:held;}
   var txt=payFmt(amt-held)+' of the N$30,000 cross-border deposit is not received ('+_bx(co.v.xb||c.cross_border||(x&&x.country)||'cross-border')+').\n\n'
-    +(/^adumo|online/i.test(m)?'Adumo: Pilot counts it only once Adumo confirms the payment — tap ↻ Check again in the payment box when the client has paid.':'Card machine: tick the deposit on the contract with the POS transaction number. Adumo: ask the office for the deposit link.')
+    +'The office records the deposit in the Desktop APP (deposit link, or the card-machine payment with its POS number). Then tap ↻ Check again in the payment box.'
     +(isPeter()?'':'\n\nOnly Peter can release the vehicle before the deposit is received.');
   if(!isPeter()){
     await askBox({title:'⛔ Cross-border deposit not received',danger:true,cancel:false,ok:'OK',text:txt});
@@ -8091,7 +8084,7 @@ async function payGateRental(){
     return true;
   }
   if(!isPeter()){
-    await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nIn the payment box: card machine or cash (with the slip / receipt number), or send an Adumo payment link and wait for it to show as paid. Only Peter can release a vehicle that is not fully paid.'});
+    await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nPayments are recorded only in the Desktop APP. Ask the office to send the payment link or take the payment and record it — then tap ↻ Check again in the payment box. Only Peter can release a vehicle that is not fully paid.'});
     coCsGo(1); setTimeout(function(){var el=document.getElementById('co-pay');if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}},250); return false;
   }
   var a=await askBox({title:'⚠ Release with '+payFmt(st.owing)+' unpaid?',danger:true,ok:'Release anyway',text:'The rental is not fully paid. Management is alerted.',reason:'Why is the vehicle released before payment?',minReason:5});
