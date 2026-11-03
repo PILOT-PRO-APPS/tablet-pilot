@@ -924,6 +924,7 @@ async function qmOpen(bid,client,key){
   var body=document.getElementById('td-body');if(!body)return;
   if(!d||!d.found){body.innerHTML='<div class="al warn">'+_bx(err||'This booking was not found in the Desktop APP')+'</div>';return;}
   window._qmLast=d;
+  try{var pst=bid?await payLoad(bid,true):null;if(pst&&pst.ok&&pst.total>0)d._pay=pst;}catch(e){}
   body.innerHTML='<div style="text-align:right;margin:-4px 0 10px;"><button onclick="qmPrint()" style="padding:10px 18px;border-radius:10px;border:0;background:#1d6b3d;color:#fff;font-size:15px;font-weight:900;cursor:pointer;">🖨 Print quote</button></div>'+qmHTML(d);
 }
 function qmCalc(d){
@@ -932,6 +933,8 @@ function qmCalc(d){
   pays.forEach(function(p){var a=+p.amount||0,s=QM_SEC.indexOf(p.cat)>=0,r=QM_RENT.indexOf(p.cat)>=0;
     if(p.dir==='out'){if(s)secOut+=a;else if(r)rentOut+=a;}else{if(s)secIn+=a;else if(r)rentIn+=a;}});
   var price=+b.rental_total||(q?+q.total:0)||0,paid=rentIn-rentOut,owing=Math.max(0,Math.round((price-paid)*100)/100),held=secIn-secOut;
+  // 3 Nov 2026 (audit): several vehicles on one booking and deposits paid before Pilot — use the payment check's answer
+  if(d._pay){price=+d._pay.total||price;paid=+d._pay.paid||0;owing=d._pay.owing!=null?+d._pay.owing:owing;}
   // security deposits still to take: from the quote, else the booking (fuel & admin deposit is no longer taken since 13 Oct 2026)
   var want=[];
   if(q&&q.deps&&q.deps.length)q.deps.forEach(function(x){want.push({l:x.label,a:+x.amount||0});});
@@ -3506,14 +3509,16 @@ function coChangeVehicle(){
 async function loadPrevDamage(fn){
   try{
     var panels=null,src='';
-    var a=await SB.from('checkins').select('damage_panels,created_at').eq('fleet_no',fn).order('created_at',{ascending:false}).limit(1);
-    var ra=a&&a.data&&a.data[0];
-    if(ra&&Array.isArray(ra.damage_panels)&&ra.damage_panels.length){panels=ra.damage_panels;src='last return';}
-    if(!panels){
-      var b=await SB.from('checkouts').select('damage_panels,created_at').eq('fleet_no',fn).order('created_at',{ascending:false}).limit(1);
-      var rb=b&&b.data&&b.data[0];
-      if(rb&&Array.isArray(rb.damage_panels)&&rb.damage_panels.length){panels=rb.damage_panels;src='last hand-over';}
-    }
+    // 3 Nov 2026 (audit): checkins has no damage_panels column (it is new_damage_panels), so the damage found at the
+    // last return was never carried over and the next client could be blamed for it. Now: the last hand-over's
+    // marks + everything marked at the return after it.
+    var res=await Promise.all([
+      SB.from('checkins').select('new_damage_panels,created_at').eq('fleet_no',fn).order('created_at',{ascending:false}).limit(1),
+      SB.from('checkouts').select('damage_panels,created_at').eq('fleet_no',fn).order('created_at',{ascending:false}).limit(1)]);
+    var ra=res[0]&&res[0].data&&res[0].data[0], rb=res[1]&&res[1].data&&res[1].data[0];
+    var hasA=ra&&Array.isArray(ra.new_damage_panels)&&ra.new_damage_panels.length, hasB=rb&&Array.isArray(rb.damage_panels)&&rb.damage_panels.length;
+    if(hasB){panels=rb.damage_panels.slice();src='last hand-over';}
+    if(hasA&&(!rb||String(ra.created_at)>=String(rb.created_at))){panels=(panels||[]).concat(ra.new_damage_panels);src=hasB?'last hand-over + last return':'last return';}
     if(!panels||!co||co.fn!==fn||co._done)return;
     panels.forEach(function(d){
       var sz=d.size||'M';if(!imarks[d.view]||!imarks[d.view][sz])return;
@@ -5711,14 +5716,19 @@ function ctMethodButtons(c){
 // Owner 2026-10-11 (later the same day): "just a tick of where what was paid is good enough, dont need to put in
 // reference numbers or payment links on the tablet pilot, only on the desktop pilot". The Adumo transaction ID is
 // no longer asked for on the tablet; the office enters it in PilotDesktop. (Old: Adumo / Paid online needed the ID.)
-function ctIsAdumo(c){return false;}
+// Owner 2–3 Nov 2026 (audit): replaces the 11 Oct "just a tick". A deposit is only taken with proof: Adumo / paid online
+// → the Adumo transaction ID (Pilot itself only counts it once Adumo confirms it; "Paid online" = a Pilot deposit link, checked by the server), card machine → slip number,
+// cash → receipt number, EFT → bank reference. (Name kept: ctIsAdumo = "a reference is needed".)
+function ctRefWhat(c){var m=String((c&&c.deposit_method)||'');return /^adumo/i.test(m)?'Adumo transaction ID':/swipe|card/i.test(m)?'card-machine slip number':/cash/i.test(m)?'cash receipt number':/eft|bank/i.test(m)?'EFT / bank reference':'';}
+function ctIsAdumo(c){return !!ctRefWhat(c);}
 function ctRefInput(c,id){
   var ok=(c.deposit_ref||'').trim().length>=4;
-  return '<div style="margin-top:8px;"><label style="font-size:14px;font-weight:900;color:var(--tx);">🔢 Adumo transaction ID *</label>'
-    +'<input id="'+id+'" value="'+_bx(c.deposit_ref||'')+'" placeholder="Copy it from the Adumo payment email / portal" autocomplete="off" autocapitalize="off" spellcheck="false"'
+  var what=ctRefWhat(c)||'reference number', ad=/Adumo/.test(what);
+  return '<div style="margin-top:8px;"><label style="font-size:14px;font-weight:900;color:var(--tx);">🔢 '+_bx(what.charAt(0).toUpperCase()+what.slice(1))+' *</label>'
+    +'<input id="'+id+'" value="'+_bx(c.deposit_ref||'')+'" placeholder="'+(ad?'Copy it from the Adumo payment email / portal':'Type it from the slip / receipt')+'" autocomplete="off" autocapitalize="off" spellcheck="false"'
     +' oninput="(co.contract=co.contract||{}).deposit_ref=this.value.trim();this.style.borderColor=this.value.trim().length>=4?\'var(--gb)\':\'var(--re)\';"'
     +' style="width:100%;margin-top:4px;padding:10px 12px;border-radius:9px;border:2px solid '+(ok?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;font-family:ui-monospace,Menlo,monospace;">'
-    +'<div style="font-size:12px;color:var(--g5);margin-top:3px;">Needed to refund the deposit to the client\'s card after the return.</div></div>';
+    +'<div style="font-size:12px;color:var(--g5);margin-top:3px;">'+(ad?'Pilot only counts an Adumo deposit once Adumo confirms the payment — the office checks this ID. Not paid yet? Ask the office for the deposit link, or take it on the card machine.':'Needed to match and refund the deposit after the return.')+'</div></div>';
 }
 function ctYesNo(c,key){
   var v=c[key];
@@ -5791,7 +5801,7 @@ function ctOpenQuestions(){
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
   if(!c.deposit_method)q.push({s:'Deposit method',t:'💳 How was the deposit paid?',h:ctMethodButtons(c)});
-  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)q.push({s:'Adumo transaction ID',t:'🔢 Adumo transaction ID of the deposit payment',h:ctRefInput(c,'ct-ask-dref'),manual:true});
+  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)q.push({s:ctRefWhat(c),t:'🔢 '+ctRefWhat(c)+' of the deposit payment',h:ctRefInput(c,'ct-ask-dref'),manual:true});
   if(rl&&rl!==GR_HQ&&(!c.return_address||!c.return_place_time))q.push({s:'Return place & time',t:'📍 Vehicle returned at '+_bx(rl)+' — exact place and time',
     h:'<textarea placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" style="width:100%;min-height:56px;padding:9px 11px;border-radius:9px;border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;margin-bottom:6px;">'+_bx(c.return_address||'')+'</textarea>'
       +'<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:13px;font-weight:800;color:var(--g5);">Time:</span>'+timePickers('ct-ask-rt',c.return_place_time||'',"var _t=timePickValue('ct-ask-rt');if(_t){(co.contract=co.contract||{}).return_place_time=_t;}")+'</div>',
@@ -6092,7 +6102,7 @@ function ctMissing(c){
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
   if(ctXdepOpen(c))m.push('🛂 N$7,500 country deposit: Received or Not needed?');
   if(!c.deposit_method)m.push('💳 Deposit method not selected (Adumo, Swipe, Cash…)');
-  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)m.push('🔢 Adumo transaction ID of the deposit payment not entered');
+  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)m.push('🔢 '+ctRefWhat(c)+' of the deposit payment not entered');
   if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)m.push('🌍 N$30,000 Cross-border deposit not ticked (travel to '+(co.v.xb||c.cross_border)+')');
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' not taken ('+extraDriverTxt()+')');
@@ -7826,13 +7836,21 @@ function payPanelInner(v){
     +(owing?'💳 Still to pay: '+payFmt(st.owing):(st.total>0?'✅ Rental fully paid':'💳 Rental total unknown — ask the office'))+'</div>'
     +(st.total>0?'<div style="font-size:13px;font-weight:700;color:#475569;">Total '+payFmt(st.total)+' · paid '+payFmt(st.paid)+'</div>':'')
     +'</div>';
+  if(st.group_n>1)h+='<div style="margin-top:6px;font-size:14px;font-weight:800;color:#1e3a8a;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:6px 10px;">🚙 One booking, '+st.group_n+' vehicles ('+((st.vehicles||[]).map(function(x){return _bx(x.fleet||x.id);}).join(' + '))+') — these amounts are for all of them together.</div>';
+  if(st.marked_full)h+='<div style="margin-top:6px;font-size:12px;color:#475569;">The office marked this booking fully paid.</div>';
   if(owing){
     var can=APP_USER&&PAY_STAFF.indexOf(APP_USER.name)>=0;
     if(!can)return h+'<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">Only '+PAY_STAFF.join(', ')+' can take the payment — call one of them.</div></div>';
+    // Owner 3 Nov 2026 (audit): no money without proof. Card machine = slip number, cash = receipt number.
+    // Adumo money is never tapped in: Pilot counts it by itself from the payment link / Adumo's email.
     var b=function(m,l){return '<button onclick="payQuick(\''+_bx(v.bid)+'\',\''+m+'\')" style="flex:1;min-width:140px;padding:16px 10px;border-radius:12px;border:2px solid #12803c;background:#f0fdf4;color:#14532d;font-size:18px;font-weight:900;cursor:pointer;">'+l+'</button>';};
-    h+='<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Client paid '+payFmt(st.owing)+' now — tap how:</div>'
-      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+b('adumo','💳 Adumo')+b('card','💳 Card machine')+b('cash','💵 Cash')+'</div>'
-      +'<div style="font-size:12px;color:#64748b;margin-top:6px;">Paid a different amount, by EFT, or need a payment link? The office does that in the Desktop APP.</div>';
+    var b2=function(js,l){return '<button onclick="'+js+'" style="flex:1;min-width:140px;padding:14px 10px;border-radius:12px;border:2px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:16px;font-weight:900;cursor:pointer;">'+l+'</button>';};
+    h+='<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Client pays '+payFmt(st.owing)+' now at the office — tap how:</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+b('card','💳 Card machine')+b('cash','💵 Cash')+'</div>'
+      +'<div style="font-size:12px;color:#64748b;margin-top:4px;">You type the slip / receipt number — nothing is saved without it.</div>'
+      +'<div style="margin-top:10px;font-size:15px;font-weight:900;color:var(--tx);">Paying online (Adumo)?</div>'
+      +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">'+(st.has_quote?b2("payLinkOpen(\'"+_bx(v.bid)+"\')",'🔗 Send payment link'):'')+b2("payRefresh(\'"+_bx(v.bid)+"\')",'↻ Check again')+'</div>'
+      +'<div style="font-size:12px;color:#64748b;margin-top:4px;">Adumo payments show here by themselves a few minutes after the client pays — never tap them in.'+(st.has_quote?'':' No Pilot quote for this booking: the office sends the link from the Desktop APP.')+'</div>';
   }else{
     // Owner 17 Oct 2026: nothing owing according to the Desktop APP (Adumo records) → staff take NO money. Only Peter may override.
     h+='<div style="margin-top:8px;font-size:15px;font-weight:800;color:#475569;">'+(st.total>0?'Paid according to the Desktop APP (Adumo records) — do NOT take any payment from the client.':'The Desktop APP does not know what is owing — do NOT take money; the office checks it.')+'</div>';
@@ -7892,13 +7910,13 @@ function payForm(o){
     w.setAttribute('style','position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;');
     var inp='width:100%;box-sizing:border-box;font-size:22px;font-weight:900;padding:12px;border-radius:10px;border:2px solid var(--g3);';
     var meth=o.methods?'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">How did the client pay?</div><div style="display:flex;gap:8px;">'
-      +[['adumo','Adumo'],['card','Card'],['cash','Cash']].map(function(m){return '<button data-m="'+m[0]+'" class="pf-m" style="flex:1;padding:16px;border-radius:12px;border:2px solid #cbd5e1;background:#f8fafc;font-size:18px;font-weight:900;cursor:pointer;">'+m[1]+'</button>';}).join('')+'</div>':'';
+      +(o.methodList||[['card','Card'],['cash','Cash']]).map(function(m){return '<button data-m="'+m[0]+'" class="pf-m" style="flex:1;padding:16px;border-radius:12px;border:2px solid #cbd5e1;background:#f8fafc;font-size:18px;font-weight:900;cursor:pointer;">'+m[1]+'</button>';}).join('')+'</div>':'';
     w.innerHTML='<div style="background:#fff;color:#111;border-radius:16px;max-width:520px;width:100%;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.4);border-top:6px solid #12803c;">'
       +'<div style="font-size:19px;font-weight:900;margin-bottom:6px;">'+_bx(o.title)+'</div><div style="font-size:14px;color:#475569;margin-bottom:10px;white-space:pre-line;">'+_bx(o.text||'')+'</div>'
       +(o.fixedAmount?'<input id="pf-amt" type="hidden" value="'+(o.amount||'')+'">':'<div style="font-size:14px;font-weight:800;margin-bottom:6px;">Amount (N$)</div><input id="pf-amt" type="number" inputmode="decimal" step="0.01" value="'+(o.amount||'')+'" style="'+inp+'">')
       +meth
-      +(o.reference?'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">Slip / reference number (optional)</div><input id="pf-ref" style="'+inp+'font-size:18px;">':'')
-      +'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">'+_bx((APP_USER&&APP_USER.name)||'')+' — your PIN</div><input id="pf-pin" type="password" inputmode="numeric" autocomplete="off" style="'+inp+'letter-spacing:6px;">'
+      +(o.reference?'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">'+_bx(o.refLabel||'Slip / receipt number / Adumo transaction ID *')+'</div><input id="pf-ref" autocomplete="off" autocapitalize="off" spellcheck="false" style="'+inp+'font-size:18px;">'+(o.refHint?'<div style="font-size:12px;color:#64748b;margin-top:3px;">'+_bx(o.refHint)+'</div>':''):'')
+      +'<div style="font-size:14px;font-weight:800;margin:12px 0 6px;">'+_bx((APP_USER&&APP_USER.name)||'')+' — your PIN</div><input id="pf-pin" type="password" inputmode="numeric" autocomplete="off" value="'+_bx(o.pin||'')+'" style="'+inp+'letter-spacing:6px;">'
       +'<div id="pf-err" style="color:#d13636;font-weight:900;min-height:22px;margin-top:8px;"></div>'
       +'<div style="display:flex;gap:10px;margin-top:6px;"><button id="pf-no" style="flex:1;padding:16px;border-radius:12px;border:2px solid #cbd5e1;background:#f8fafc;font-size:16px;font-weight:800;">Cancel</button>'
       +'<button id="pf-yes" style="flex:1.4;padding:16px;border-radius:12px;border:none;background:#12803c;color:#fff;font-size:16px;font-weight:900;">'+_bx(o.ok)+'</button></div></div>';
@@ -7911,9 +7929,10 @@ function payForm(o){
       if(busy)return;
       var a=Math.round(Number(w.querySelector('#pf-amt').value)*100)/100, pin=String(w.querySelector('#pf-pin').value||'').trim(), err=w.querySelector('#pf-err');
       if(!(a>0)){err.textContent='Enter the amount';return;}
-      if(o.methods&&!method){err.textContent='Choose Adumo, Card or Cash';return;}
-      if(!pin){err.textContent='Type your PIN';return;}
+      if(o.methods&&!method){err.textContent='Choose how the client paid';return;}
       var ref=w.querySelector('#pf-ref');
+      if(ref&&ref.value.replace(/\s/g,'').length<(o.refMin||2)){err.textContent='Type the '+String(o.refLabel||'slip / receipt number').replace(/\s*\*$/,'').toLowerCase()+' — nothing is saved without it';try{ref.focus();}catch(e){}return;}
+      if(!pin){err.textContent='Type your PIN';return;}
       var f={amount:a,method:method,pin:pin,reference:ref?ref.value.trim():''};
       busy=true; yes.disabled=true; err.style.color='#475569'; err.textContent=o.busyText||'Saving…';
       var r=await o.submit(f);
@@ -7921,7 +7940,7 @@ function payForm(o){
       if(!r||!r.ok){ err.textContent=(r&&r.error)||'Not saved'; var pi=w.querySelector('#pf-pin'); if(/PIN/i.test(err.textContent)&&pi){pi.value='';pi.focus();} return; }
       w.remove(); done({form:f,res:r});
     };
-    setTimeout(function(){try{w.querySelector('#pf-amt').focus();}catch(e){}},60);
+    setTimeout(function(){try{var fr=w.querySelector('#pf-ref');(o.fixedAmount&&fr?fr:w.querySelector('#pf-amt')).focus();}catch(e){}},60);
   });
 }
 async function payCall(body){
@@ -7947,15 +7966,15 @@ var _payPin=null;
 async function payQuick(bid,method){
   var st=PAY_ST[bid]||await payLoad(bid,true);
   if(!st||!(st.owing>0.5)){toast('Nothing left to pay','ok');return;}
-  var lbl={adumo:'Adumo',card:'card machine',cash:'cash'}[method]||method, amt=st.owing;
+  var lbl={card:'card machine',cash:'cash'}[method]||method, amt=st.owing;
+  var ref={card:{label:'Card-machine slip number *',min:4,hint:'The number printed on the card-machine slip'},cash:{label:'Cash receipt number *',min:2,hint:'The number of the receipt you gave the client'}}[method];
+  if(!ref){toast('Choose card machine or cash','err');return;}
   var cached=(_payPin&&_payPin.name===APP_USER.name&&Date.now()-_payPin.at<600000)?_payPin.pin:
              (typeof _docPin!=='undefined'&&_docPin&&_docPin.name===APP_USER.name&&Date.now()-_docPin.at<600000)?_docPin.pin:'';
-  var save=function(pin){return payCall({action:'record',booking_id:bid,name:APP_USER.name,pin:pin,amount:amt,method:method,reference:''});};
-  var res=null;
-  if(cached){var a=await askBox({title:'💳 '+payFmt(amt)+' — paid by '+lbl.toUpperCase()+'?',text:'Check: did the client really pay '+payFmt(amt)+' by '+lbl+' just now?\n\nSaved as paid at collection by '+APP_USER.name+'. Wrong? You can undo it for 30 minutes.',ok:'✓ Yes — '+lbl,cancel:'✗ Wrong — go back'});if(!a.ok)return;
-    banner('Saving payment…');res=await save(cached);hideBanner();if(!res||!res.ok){_payPin=null;toast((res&&res.error)||'Not saved','err');if(!/PIN/i.test((res&&res.error)||''))return;res=null;}}
-  if(!res){var x=await payForm({title:'💳 '+payFmt(amt)+' paid by '+lbl,text:'Type your PIN to save it.',amount:amt,fixedAmount:true,ok:'✓ Save — paid',submit:function(f){return save(f.pin);}});
-    if(!x)return;res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};}
+  var x=await payForm({title:'💳 '+payFmt(amt)+' paid by '+lbl,text:'Check: did the client really pay '+payFmt(amt)+' by '+lbl+' just now?\nWrong? You can undo it for 30 minutes.',amount:amt,fixedAmount:true,reference:true,refLabel:ref.label,refMin:ref.min,refHint:ref.hint,pin:cached,ok:'✓ Save — paid',
+    submit:function(f){return payCall({action:'record',booking_id:bid,name:APP_USER.name,pin:f.pin,amount:amt,method:method,reference:f.reference});}});
+  if(!x)return;
+  var res=x.res;_payPin={name:APP_USER.name,pin:x.form.pin,at:Date.now()};
   res._at=Date.now();PAY_ST[bid]=res;
   toast('✓ '+payFmt(amt)+' paid by '+lbl+' — saved','ok');
   try{var _pp=document.getElementById('pay-pop');if(_pp)_pp.remove();}catch(e){}
@@ -7967,7 +7986,7 @@ async function payOverride(bid){
   var st=PAY_ST[bid]||await payLoad(bid,true);
   var a=await askBox({title:'⚠ Override — record a payment anyway?',text:(st&&st.total>0?'The Desktop APP shows this rental as fully paid ('+payFmt(st.paid)+' of '+payFmt(st.total)+').':'The Desktop APP does not know this rental\'s total.')+'\n\nOnly record money the client really paid now. Management is told about this override.',ok:'Yes, record it',cancel:'Back'});
   if(!a.ok)return;
-  var x=await payForm({title:'💵 Override payment (Peter)',text:'Amount the client paid now, how, and the slip number.',amount:'',methods:true,reference:true,ok:'Save — override',
+  var x=await payForm({title:'💵 Override payment (Peter)',text:'Amount the client paid now, how, and the slip number / receipt number / Adumo transaction ID.',amount:'',methods:true,methodList:[['card','Card'],['cash','Cash'],['adumo','Adumo']],reference:true,refLabel:'Slip no. / receipt no. / Adumo transaction ID *',refMin:2,ok:'Save — override',
     submit:function(f){return payCall({action:'record',booking_id:bid,name:APP_USER.name,pin:f.pin,amount:f.amount,method:f.method,reference:f.reference,confirm_extra:true});}});
   if(!x)return;
   x.res._at=Date.now(); PAY_ST[bid]=x.res;
@@ -7986,7 +8005,7 @@ async function payRecordOpen(bid){
 }
 async function payLinkOpen(bid){
   var st=PAY_ST[bid]||await payLoad(bid,true);
-  var x=await payForm({title:'🔗 Send Adumo payment link',text:'A new secure link (valid 24 h) for the balance.'+(st&&st.email?'\nIt is emailed to '+st.email+'.':'\nThere is no email address — you can send it by WhatsApp next.'),amount:st&&st.owing>0?st.owing:'',ok:'Make link',busyText:'Making the link…',
+  var x=await payForm({title:'🔗 Send Adumo payment link',text:'A new secure link (valid 12 h) for the balance.'+(st&&st.email?'\nIt is emailed to '+st.email+'.':'\nThere is no email address — you can send it by WhatsApp next.'),amount:st&&st.owing>0?st.owing:'',ok:'Make link',busyText:'Making the link…',
     submit:function(f){return payCall({action:'link',booking_id:bid,name:APP_USER.name,pin:f.pin,amount:f.amount});}});
   if(!x)return;
   var f=x.form, res=x.res; res._at=Date.now(); PAY_ST[bid]=res;
@@ -8001,12 +8020,27 @@ async function payGate(){
   if(!co||!co.v||!co.v.bid)return true;
   var st=await payLoad(co.v.bid,true);
   if(!st||!st.ok){
-    var a0=await askBox({title:'💳 Payment could not be checked',text:'Payments could not be checked ('+((st&&st.error)||'no answer')+').\n\nOnly release the vehicle if you are sure the client has paid in full.',ok:'Client has paid — continue',cancel:'Go back'});
+    var a0=await askBox({title:'💳 Payment could not be checked',text:'Payments could not be checked ('+((st&&st.error)||'no answer')+').\n\nOnly release the vehicle if you are sure the client has paid in full. The office is told.',ok:'Client has paid — continue',cancel:'Go back'});
+    if(a0.ok){try{SB.from('management_alerts').insert({booking_id:bkKey(co.v),fleet_no:co.fn,client:co.v.cl,received_by:APP_USER.name,kind:'released_unchecked',
+      message:'RELEASED WITHOUT PAYMENT CHECK — '+co.fn+'/'+co.v.cl+' ('+co.v.bid+'): the payment check did not answer. Released by '+APP_USER.name+'. Check the payments.',created_at:new Date().toISOString()}).then(function(){},function(){});}catch(e){}}
     return a0.ok;
   }
-  if(!(st.total>0)||!(st.owing>0.5))return true;
+  if(st.owing!=null&&!(st.owing>0.5))return true;
+  if(st.owing==null){
+    // Owner 3 Nov 2026 (audit): the Desktop APP cannot say what is owing → the office checks first; only Peter may release
+    if(!isPeter()){
+      await askBox({title:'⛔ Payment not known',danger:true,cancel:false,ok:'OK',text:'The Desktop APP does not know this rental\'s total, so it cannot say the client has paid.\n\nAsk the office to check the booking. Only Peter can release the vehicle before that.'});
+      return false;
+    }
+    var u=await askBox({title:'⚠ Release — payment not known?',danger:true,ok:'Release anyway',text:'The Desktop APP does not know this rental\'s total. Management is alerted.',reason:'Why is it fine to release it?',minReason:5});
+    if(!u.ok)return false;
+    co.payOverride={by:APP_USER.name,at:new Date().toISOString(),reason:u.reason,owing:null};
+    try{SB.from('management_alerts').insert({booking_id:bkKey(co.v),fleet_no:co.fn,client:co.v.cl,received_by:APP_USER.name,kind:'released_unknown_total',
+      message:'RELEASED, PAYMENT NOT KNOWN — '+co.fn+'/'+co.v.cl+' ('+co.v.bid+'): the Desktop APP has no total. Released by '+APP_USER.name+': '+u.reason,created_at:new Date().toISOString()}).then(function(){},function(){});}catch(e){}
+    return true;
+  }
   if(!isPeter()){
-    await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nTap how the client paid (Adumo, card machine or cash) in the payment box. Only Peter can release a vehicle that is not fully paid.'});
+    await askBox({title:'⛔ Not fully paid',danger:true,cancel:false,ok:'OK',text:payFmt(st.owing)+' is still to pay.\n\nIn the payment box: card machine or cash (with the slip / receipt number), or send an Adumo payment link and wait for it to show as paid. Only Peter can release a vehicle that is not fully paid.'});
     coCsGo(1); setTimeout(function(){var el=document.getElementById('co-pay');if(el){try{el.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}flashTo(el);}},250); return false;
   }
   var a=await askBox({title:'⚠ Release with '+payFmt(st.owing)+' unpaid?',danger:true,ok:'Release anyway',text:'The rental is not fully paid. Management is alerted.',reason:'Why is the vehicle released before payment?',minReason:5});
@@ -12663,7 +12697,7 @@ function guideCO(){
       var c0=co.contract||{};
       if(co.v.xb&&!c0.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
-      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the Adumo transaction ID of the deposit payment (from the Adumo email / portal).',b);}
+      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the '+ctRefWhat(co.contract)+' of the deposit payment.',b);}
     }
     if(!co.returnTime)return t('Ask the client what time they will bring it back, and set the time.',document.getElementById('ct-rtime-box'));
     if(!(co.docItems&&co.docItems.wifi))return t('WiFi device: tap Handed over (or Not available).',document.getElementById('ct-wifi-box'));
@@ -12679,7 +12713,7 @@ function guideCO(){
       if(c.addon_windscreen!==true&&c.addon_windscreen!==false)return t('Ask the client: Windscreen & Tyre cover? Tap Taken or Declined.',document.getElementById('ct-aws'));
       if(co.v.xb&&!c.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
       if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
-      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the Adumo transaction ID of the deposit payment (from the Adumo email / portal).',b);}
+      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the '+ctRefWhat(co.contract)+' of the deposit payment.',b);}
       // the same list the contract itself checks (ctMissing): the guide used to send staff to
       // "Preview & Sign" while e.g. the extra driver fee was still open, and the contract
       // then only said "cannot be signed yet"
