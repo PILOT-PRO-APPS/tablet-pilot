@@ -5712,7 +5712,7 @@ function ctBtn(on,html,js,tone){
 function ctInsButtons(c){
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+Object.keys(CT_INS).map(function(k){var o=CT_INS[k],on=c.insurance_option===k;
     var nm=o.t.replace(/^Option \d+ — /,'').replace(' (zero excess)','');
-    return ctBtn(on,(on?'✓ ':'')+nm+'<div style="font-size:12px;font-weight:700;opacity:.85;margin-top:2px;">N$'+ctInsRate(k)+'/day'+(vehClassic()?' (Classic)':'')+' · '+(o.dep?'deposit N$'+o.dep.toLocaleString('en-US'):'zero excess')+'</div>',"ctSet('insurance_option','"+k+"')");}).join('')+'</div>';
+    return ctBtn(on,(on?'✓ ':'')+nm+'<div style="font-size:12px;font-weight:700;opacity:.85;margin-top:2px;">N$'+ctInsRate(k)+'/day'+(vehClassic()?' (Classic)':'')+(o.dep?'':' · zero excess')+'</div>',"ctSet('insurance_option','"+k+"')");}).join('')+'</div>';
 }
 function ctMethodButtons(c){
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+CT_METHODS.map(function(m){var on=(c.deposit_method||'')===m;
@@ -5805,11 +5805,7 @@ function ctOpenQuestions(){
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
   if(!c.insurance_option)q.push({s:'Insurance',t:'📋 Which insurance does the client take?',h:ctInsButtons(c)});
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$'+plN(PL_TYRE)+'/day × '+days+' = '+ctMoney(PL_TYRE*days),h:ctYesNo(c,'addon_windscreen')});
-  if(ctXdepOpen(c))q.push({s:'Country deposit',t:'🛂 Extra security deposit N$7,500 by country (section 2.1)',h:ctXdepButtons(c)});
-  if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)q.push({s:'Cross-border deposit',t:'🌍 Cross-border deposit N$30,000 ('+_bx(co.v.xb||c.cross_border)+')',h:ctGot(c,'cross_border_deposit')});
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
-  if(!c.deposit_method)q.push({s:'Deposit method',t:'💳 How was the deposit paid?',h:ctMethodButtons(c)});
-  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)q.push({s:ctRefWhat(c),t:'🔢 '+ctRefWhat(c)+' of the deposit payment',h:ctRefInput(c,'ct-ask-dref'),manual:true});
   if(rl&&rl!==GR_HQ&&(!c.return_address||!c.return_place_time))q.push({s:'Return place & time',t:'📍 Vehicle returned at '+_bx(rl)+' — exact place and time',
     h:'<textarea placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" style="width:100%;min-height:56px;padding:9px 11px;border-radius:9px;border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;margin-bottom:6px;">'+_bx(c.return_address||'')+'</textarea>'
       +'<div style="display:flex;align-items:center;gap:8px;"><span style="font-size:13px;font-weight:800;color:var(--g5);">Time:</span>'+timePickers('ct-ask-rt',c.return_place_time||'',"var _t=timePickValue('ct-ask-rt');if(_t){(co.contract=co.contract||{}).return_place_time=_t;}")+'</div>',
@@ -5877,7 +5873,6 @@ function ctDetailsForm(){
   }
   var insSel='<div class="fi" id="ct-ins" style="padding:10px 12px;border-radius:10px;border:2px solid '+(c.insurance_option?'var(--gb)':'var(--re)')+';background:'+(c.insurance_option?'var(--sg)':'var(--rg)')+';"><label style="font-size:15px;font-weight:900;color:var(--tx);">Insurance option *</label>'
     +ctInsButtons(c)
-    +(c.insurance_option&&CT_INS[c.insurance_option]?'<div style="font-size:13px;color:var(--se);margin-top:6px;font-weight:700;">Security deposit: '+(CT_INS[c.insurance_option].dep?ctMoney(CT_INS[c.insurance_option].dep):'none (zero excess)')+'</div>':'')
     +'</div>';
   var OFFICE='Go Rent Office, 6 Diehl Str, Windhoek';
   // follow the Collection / Return choice on this screen straight away (gatherContract does the
@@ -5896,7 +5891,7 @@ function ctDetailsForm(){
     ;
   return h;
 }
-// Deposits sit at the TOP of the contract step (taken first, before the photos)
+// Owner 3 Nov 2026: "remove the deposit section … the desktop pilot will manage these". Only the extra driver fee is left here.
 function ctDepositsHTML(){
   if(co.contractSigned)return '';
   var c=co.contract=co.contract||{};
@@ -5911,17 +5906,13 @@ function ctDepositsHTML(){
   }
   var h=''
 
-    +tick('ct-xbd',c.cross_border_deposit===true,'🌍 Cross-border/Damage deposit — N$30,000.00',need?'Required: this booking goes cross-border ('+_bx(co.v.xb||c.cross_border)+')':'Only for travel outside Namibia',c.cross_border_deposit===true?'✓ Received':(need?'Required':'Not needed'),need?'req':'opt')
     +((function(){var n=extraDriverCharged();if(!n)return '';return tick('ct-edf',c.extra_driver_paid===true,'\uD83D\uDC64 Extra driver fee \u2014 '+ctMoney(extraDriverFee()),extraDriverTxt()+' once-off \u00b7 take this at collection',c.extra_driver_paid?'\u2713 Received':'TAKE PAYMENT','req');})())
-    +(!ctXdepAsk(c)?'':'<div id="ct-xdep" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--gb)':'var(--re)')+';background:'+((c.country_deposit==='received'||c.country_deposit==='exempt')?'var(--sg)':'var(--rg)')+';"><div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px;">🛂 Extra security deposit by country — N$7,500.00 *</div>'+ctXdepButtons(c)+'</div>')
-    +'<div class="fi" id="ct-dmethod" style="margin-bottom:8px;padding:10px 12px;border-radius:10px;border:2px solid '+(c.deposit_method?'var(--gb)':'var(--re)')+';background:'+(c.deposit_method?'var(--sg)':'var(--rg)')+';"><label style="font-size:15px;font-weight:900;color:var(--tx);">💳 How was the deposit paid? *</label>'
-      +ctMethodButtons(c)
-      +(ctIsAdumo(c)?ctRefInput(c,'ct-dref'):'')
-    +'</div>';
+    ;
+  if(!h)return '';
   setTimeout(function(){
     [['ct-xbd','cross_border_deposit'],['ct-edf','extra_driver_paid']].forEach(function(p){var e=document.getElementById(p[0]);if(e)e.onchange=function(){ctSet(p[1],this.checked);};});
   },0);
-  return '<div class="sum-box sec-dep" style="margin-bottom:12px"><div class="sum-title" style="margin-bottom:10px">💰 Deposits received</div>'+h+'</div>';
+  return '<div class="sum-box sec-dep" style="margin-bottom:12px"><div class="sum-title" style="margin-bottom:10px">👤 Extra driver fee</div>'+h+'</div>';
 }
 // Insurance, extra cover and cross-border: sits right under the deposits on step 5a
 function ctInsuranceHTML(){
@@ -6088,7 +6079,8 @@ function gatherContract(){
   co.contract.deposit_amount=+(function(){var _e=document.getElementById('ct-dep');return _e?_e.value:undefined;})()||co.contract.deposit_amount;
   delete co.contract.fuel_deposit; delete co.contract.fuel_deposit_received; // fuel deposit discontinued (owner, 13 Oct 2026)
   co.contract.insurance_option=(function(){var _e=document.getElementById('ct-ins');return _e?_e.value:undefined;})()||co.contract.insurance_option;
-  (function(){var _e=document.getElementById('ct-xbd');if(_e)co.contract.cross_border_deposit=_e.checked;})();
+  (function(){try{var st=PAY_ST[co.v.bid];if(!st||!st.ok)return;var key=bkKey(co.v),x=(st.xb||[]).filter(function(r){return r.key===key||r.fleet===co.fn;})[0];
+    if(x&&+x.held>=+(st.xb_amount||30000)-0.5)co.contract.cross_border_deposit=true;}catch(e){}})();   // from the Desktop APP's payments (owner 3 Nov)
   (function(){var _e=document.getElementById('ct-edf');if(_e)co.contract.extra_driver_paid=_e.checked;})();
   if(co.contract.insurance_option&&CT_INS[co.contract.insurance_option])co.contract.deposit_amount=CT_INS[co.contract.insurance_option].dep;
   co.contract.cross_border=(function(){var _e=document.getElementById('ct-xb');return _e?_e.value:undefined;})()||co.contract.cross_border;
@@ -6108,11 +6100,8 @@ function ctMissing(c){
   if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
-  if(ctXdepOpen(c))m.push('🛂 N$7,500 country deposit: Received or Not needed?');
-  if(!c.deposit_method)m.push('💳 Deposit method not selected (Adumo, Swipe, Cash…)');
-  else if(ctIsAdumo(c)&&(c.deposit_ref||'').trim().length<4)m.push('🔢 '+ctRefWhat(c)+' of the deposit payment not entered');
-  if(/^cash$/i.test(String(c.deposit_method||''))&&!isPeter())m.push('💵 Cash deposit — only Peter can allow cash');
-  if((co.v.xb||c.cross_border)&&c.cross_border_deposit!==true)m.push('🌍 N$30,000 Cross-border deposit not ticked (travel to '+(co.v.xb||c.cross_border)+')');
+  // Owner 3 Nov 2026: no deposits on the tablet (country, cross-border, method, reference) — the Desktop APP manages them.
+  // The cross-border deposit is still checked at Release from the Desktop APP's payments (xbGate).
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' not taken ('+extraDriverTxt()+')');
   })();
@@ -7087,7 +7076,7 @@ function coStep5_client(){
     {key:'docs', ico:'📋', title:'Documents & Payment',
      items:[
        {k:'contract', lbl:'Rental contract signed',      det:'Client has read and signed — copy provided'},
-       {k:'payment',  lbl:'Payment confirmed',           det:'Deposit & balance settled, receipt issued'},
+       {k:'payment',  lbl:'Payment confirmed',           det:'Rental paid — shown by the Desktop APP'},
        {k:'xb',       lbl:'Cross-border docs',           det:'All country letters present, valid for destination'},
        {k:'insurance',lbl:'Insurance explained',         det:'Coverage, excess, what is/is not covered'},
        {k:'idcheck',  lbl:'Passport & licence verified', det:'Matches contract, valid for all drivers'},
@@ -7781,7 +7770,6 @@ function coMissing(){
   if(!d0.licFront)m.push('🪪 No licence photo');
   if(!c.insurance_option)m.push('📋 Insurance option not selected');
   if(!co.contractSigned&&c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover not taken/declined');
-  if(v.xb&&!c.cross_border_deposit)m.push('🌍 Cross-border deposit not ticked');
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' NOT TAKEN ('+extraDriverTxt()+')');
   })();
@@ -9651,7 +9639,7 @@ function ciStep1_CI(){
     </div>
   </div>
   ${open?`<div id="ci-dmg-grid"><div class="al info" style="margin-bottom:8px;font-size:13px;">Tap the pictures where the NEW damage is — blue = new scratch · red = new dent · yellow = existing from check-out</div>${insHTML(true)}</div>`:''}
-  ${photoHTML('ci.dmgPhotos','📷 Photos'+(open?' — photograph every new damage *':' (optional)'),open?'Close-ups of each new damage — evidence for the deposit.':'Exterior or anything worth recording.',8)}`;
+  ${photoHTML('ci.dmgPhotos','📷 Photos'+(open?' — photograph every new damage *':' (optional)'),open?'Close-ups of each new damage — evidence for the office.':'Exterior or anything worth recording.',8)}`;
 }
 
 function ciStep2_CI(){
@@ -10968,7 +10956,7 @@ async function loadHistory(){
         ]:[
           ['🛣 KM driven',(c.km_driven?c.km_driven.toLocaleString()+' km':'—')],
           ['⛽ Fuel in',c.fuel_in||'—'],
-          ['⚠️ Deposit',c.deposit_decision||'—'],
+          ['📦 Not returned',(c.missing_items&&c.missing_items.length)?'⚠ '+c.missing_items.length:'None'],
           ['🔍 New damage',((c.new_damage_panels&&c.new_damage_panels.length)?'⚠ '+c.new_damage_panels.length+' panel(s)':'None')],
         ]).map(([l,v])=>'<div style="text-align:center;background:var(--g0);border-radius:6px;padding:6px 4px;">'
           +'<div style="font-size:13px;color:var(--g5);text-transform:uppercase;margin-bottom:2px;">'+l+'</div>'
@@ -12506,10 +12494,9 @@ function buildContractHTML(c,sigUrl){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       ${[
         ['Rental period', days?days+' days':'—'],
-        ['Cross-border deposit', c.cross_border_deposit?'N$ 30,000.00 received':(c.cross_border?'Not received':'N/A')],
+        ['Cross-border deposit', c.cross_border_deposit?'N$ 30,000.00 received':(c.cross_border?'N$ 30,000.00 — taken by the office':'N/A')],
         ['Windscreen & Tyre add-on', c.addon_windscreen?'Selected':'Not selected'],
-        ['Deposit method', (c.deposit_method||'—')+(c.deposit_ref?' · ref '+c.deposit_ref:'')],
-      ].map(([l,v])=>`<div style="padding:5px 8px;border-bottom:1px solid #eee;font-size:14px;"><span style="color:#555;font-weight:600;">${l}:</span> <span style="color:#111;font-weight:700;">${v}</span></div>`).join('')}
+      ].concat(c.deposit_method?[['Deposit method', c.deposit_method+(c.deposit_ref?' · ref '+c.deposit_ref:'')]]:[]).map(([l,v])=>`<div style="padding:5px 8px;border-bottom:1px solid #eee;font-size:14px;"><span style="color:#555;font-weight:600;">${l}:</span> <span style="color:#111;font-weight:700;">${v}</span></div>`).join('')}
     </div>
   </div>
 
@@ -12810,9 +12797,6 @@ function guideCO(){
     // same order as the screen: deposits first, then the photos, then the cover
     if(!co.contractSigned){
       var c0=co.contract||{};
-      if(co.v.xb&&!c0.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
-      if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
-      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the '+ctRefWhat(co.contract)+' of the deposit payment.',b);}
     }
     if(!co.returnTime)return t('Ask the client what time they will bring it back, and set the time.',document.getElementById('ct-rtime-box'));
     if(!(co.docItems&&co.docItems.wifi))return t('WiFi device: tap Handed over (or Not available).',document.getElementById('ct-wifi-box'));
@@ -12826,9 +12810,6 @@ function guideCO(){
       var c=co.contract||{};
       if(!c.insurance_option){b=document.getElementById('ct-ins');return t('Ask the client which insurance they take, then tap it.',b);}
       if(c.addon_windscreen!==true&&c.addon_windscreen!==false)return t('Ask the client: Windscreen & Tyre cover? Tap Taken or Declined.',document.getElementById('ct-aws'));
-      if(co.v.xb&&!c.cross_border_deposit){b=gFind(R,'label,div',function(x){return /Cross-border\/Damage deposit/.test(x.textContent)&&x.querySelector('input[type=checkbox]')&&x.textContent.length<200;});return t('Take the Cross-border deposit, then tick it.',b);}
-      if(!(co.contract||{}).deposit_method){b=document.getElementById('ct-dmethod');if(b)return t('Tap how the deposit was paid (Adumo, Swipe, Cash…).',b);}
-      if(ctIsAdumo(co.contract)&&((co.contract||{}).deposit_ref||'').trim().length<4){b=document.getElementById('ct-dref');if(b)return t('Type the '+ctRefWhat(co.contract)+' of the deposit payment.',b);}
       // the same list the contract itself checks (ctMissing): the guide used to send staff to
       // "Preview & Sign" while e.g. the extra driver fee was still open, and the contract
       // then only said "cannot be signed yet"
