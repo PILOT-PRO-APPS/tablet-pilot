@@ -1970,6 +1970,7 @@ async function loadBookings(){
     if(r.error){toast('Could not load bookings: '+r.error.message,'err');return false;}
     var vres=await SB.from('vehicles').select('*');
     var vmap={};(vres.data||[]).forEach(function(v){vmap[v.fleet_no]=v;});
+    window.VEH_LIC={};(vres.data||[]).forEach(function(v){VEH_LIC[v.fleet_no]=v.lic_expiry||'';});
     FLEET.length=0;
     (r.data||[]).forEach(function(b){if(b.fleet_no)FLEET.push(bkToVeh(b,vmap[b.fleet_no],today));});
     // Licence disc dates entered on the tablet (vehicle_discs table)
@@ -8549,7 +8550,41 @@ function ciShowDone(v,r){
     +(isAdmin()?'<button class="btn s" style="width:100%;border-color:var(--re);color:var(--rl);" onclick="if(confirm(\'Start the check-in of '+_bx(v.fn)+' again?\\n\\nThe check-in already saved stays on file; a second one is added.\')){window._ciRedo=\''+_bx(key)+'\';startCI(\''+_bx(v.fn)+'\');}">↻ Start the check-in again (Peter)</button>':'')
     +'</div>';
 }
+// Owner 3 Nov 2026: the vehicle list's own licence-expiry date was out of date (H-05, H-13, H-16 "expired" though the
+// discs run to 2027). When a vehicle comes back, staff are asked once a day to read the disc on the windscreen and
+// enter its date when Pilot has none, the two dates disagree, or it runs out within 60 days. Saving updates both.
+function discReturnCheck(fn){
+  try{
+    var disc=DISCS[fn]||'', veh=(window.VEH_LIC||{})[fn]||'', left=disc?discDaysLeft(disc):null;
+    var why=!disc?'Pilot has no disc date for '+fn+'.':(veh&&veh!==disc)?'Pilot has two different dates for '+fn+': disc '+disc+', vehicle list '+veh+'.':(left!==null&&left<=60)?'The disc of '+fn+' runs out on '+disc+'.':'';
+    if(!why)return;
+    var k='gr_disc_chk_'+fn+'_'+localYMD();try{if(localStorage.getItem(k))return;localStorage.setItem(k,'1');}catch(e){}
+    var old=document.getElementById('disc-chk');if(old)old.remove();
+    var y0=new Date().getFullYear(),opt=function(a,lab){return a.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>';}).join('');};
+    var D=[],M=[],Y=[];for(var i=1;i<=31;i++)D.push([('0'+i).slice(-2),i]);for(i=0;i<12;i++)M.push([('0'+(i+1)).slice(-2),DT_MONTHS[i]]);for(i=y0-1;i<=y0+3;i++)Y.push([i,i]);
+    var sel='padding:12px 6px;font-size:16px;font-weight:800;border:2px solid #cbd5e1;border-radius:10px;color-scheme:light;';
+    var w=document.createElement('div');w.id='disc-chk';
+    w.setAttribute('style','position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;');
+    w.innerHTML='<div style="background:#fff;color:#111;border-radius:16px;max-width:520px;width:100%;padding:18px;border-top:6px solid #b45309;">'
+      +'<div style="font-size:19px;font-weight:900;margin-bottom:6px;">🪪 Check the licence disc — '+_bx(fn)+'</div>'
+      +'<div style="font-size:14px;color:#475569;margin-bottom:12px;">'+_bx(why)+'<br>Read the expiry date on the <b>disc on the windscreen</b> and enter it here.</div>'
+      +'<div style="display:flex;gap:6px;"><select id="dc-d" style="'+sel+'"><option value="">Day</option>'+opt(D)+'</select><select id="dc-m" style="'+sel+'"><option value="">Month</option>'+opt(M)+'</select><select id="dc-y" style="'+sel+'"><option value="">Year</option>'+opt(Y)+'</select></div>'
+      +'<div id="dc-err" style="color:#d13636;font-weight:800;min-height:20px;margin-top:6px;"></div>'
+      +'<div style="display:flex;gap:10px;margin-top:6px;"><button id="dc-no" style="flex:1;padding:14px;border-radius:12px;border:2px solid #cbd5e1;background:#f8fafc;font-size:15px;font-weight:800;">Later</button>'
+      +'<button id="dc-yes" style="flex:1.4;padding:14px;border-radius:12px;border:none;background:#12803c;color:#fff;font-size:15px;font-weight:900;">Save disc date</button></div></div>';
+    document.body.appendChild(w);
+    w.querySelector('#dc-no').onclick=function(){w.remove();};
+    w.querySelector('#dc-yes').onclick=async function(){
+      var d=w.querySelector('#dc-d').value,m=w.querySelector('#dc-m').value,yy=w.querySelector('#dc-y').value;
+      if(!d||!m||!yy){w.querySelector('#dc-err').textContent='Pick the day, month and year';return;}
+      await saveLicExpiry(fn,yy+'-'+m+'-'+d,null);
+      try{VEH_LIC[fn]=yy+'-'+m+'-'+d;}catch(e){}
+      w.remove();toast('🪪 Disc date saved for '+fn,'ok');
+    };
+  }catch(e){}
+}
 async function startCI(fn){
+  setTimeout(function(){discReturnCheck(fn);},2500);
   jobTop('ci-body');setTimeout(function(){jobTop('ci-body');},120);
   if(!canCheckIn()){toast('🔒 Check-in is not available for '+(APP_USER?APP_USER.name:'you'),'err');return;}
   var v=pickVeh(fn,'in');if(!v){toast('Vehicle not found','err');return;}
