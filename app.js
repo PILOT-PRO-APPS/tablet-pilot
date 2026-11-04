@@ -709,7 +709,8 @@ async function rtApply(){
   try{
     if(t.payments||t.quotes){   // payment box of the open job follows the Desktop APP at once
       PAY_ST={};
-      if(co&&co.v&&co.v.bid&&!co._done){await payLoad(co.v.bid,true);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(co.v);var c=document.getElementById('pay-chip');if(c)c.outerHTML=payChip(co.v);}
+      if(co&&co.v&&co.v.bid&&!co._done){var _st=await payLoad(co.v.bid,true);var p=document.getElementById('co-pay');if(p)p.innerHTML=payPanelInner(co.v);var c=document.getElementById('pay-chip');if(c)c.outerHTML=payChip(co.v);payNowPaid(_st);}
+      try{var _ov=document.getElementById('page-ov');if(_ov&&_ov.classList.contains('on'))renderOV();}catch(e){}   // Needs action: "paid now — ready to release"
     }
     if(t.bookings||t.vehicles||t.vehicle_discs||t.booking_overrides||t.checkouts||t.checkins||t.rental_contracts||t.service_history||t.tyre_history)await autoRefresh(false);
     if(t.app_settings){try{loadDriverPrices();}catch(e){}try{loadRetPapers();}catch(e){}}
@@ -7237,7 +7238,7 @@ function coReleaseBox(){
   var me=(APP_USER&&APP_USER.name)||'';
   if(!ready)return '<div style="text-align:center;font-size:13px;color:var(--g5);margin:6px 0 10px;">When the client has signed, <b>Release vehicle</b> appears here.</div>';
   if(!canViewReports())return '<div class="al warn" style="text-align:center;">👔 A manager releases the vehicle — ask '+_bx(mgrNames())+'</div>';
-  var rb=co.releaseBlocked;
+  var rb=co.releaseBlocked;if(payBlockWhy(rb)&&payAllPaid(PAY_ST[co.v&&co.v.bid]))rb=null;   // the office has recorded the payment since
   return (rb?'<div style="background:#fdeaea;border:2px solid #d13636;border-radius:var(--r);padding:10px 14px;margin-bottom:8px;font-size:14px;font-weight:800;color:#b91c1c;">⛔ Release was refused'+(rb.at?' ('+_bx(new Date(rb.at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+(rb.by?', '+_bx(rb.by):'')+')':'')+': '+_bx(rb.why)+'.<br><span style="color:#374151;">'+_bx(rb.who||'')+'.</span></div>':'')
     +'<div style="background:var(--g1);border:3px solid var(--gb);border-radius:var(--r);padding:14px;margin-bottom:10px;">'
     +'<button class="btn g" style="font-size:18px;padding:18px;" onclick="coRelease()">✅ Release vehicle</button>'
@@ -7816,6 +7817,7 @@ async function payLoad(bid,force){
     res=r.data; if(r.error){try{res=await r.error.context.json();}catch(_){res={ok:false,error:r.error.message||'Could not reach the server'};}}
   }catch(e){res={ok:false,error:(e&&e.message)||'Could not reach the server'};}
   res=res||{ok:false,error:'No answer'}; res._at=Date.now(); PAY_ST[bid]=res;
+  try{if(co&&co.v&&String(co.v.bid)===String(bid)&&res.ok){if(!payAllPaid(res))co._payOwing=true;else if(!co._done&&payBlockWhy(co.releaseBlocked)&&!co._payOwing){delete co.releaseBlocked;try{saveCOProgress();}catch(e){}}}}catch(e){}   // paid since a refusal: the old refusal goes (job opened after the office recorded it)   // remembered so the job hears when the office records it (payNowPaid)
   return res;
 }
 function payState(st){
@@ -8034,6 +8036,27 @@ async function payLinkOpen(bid){
 // Owner 3 Nov 2026: the hand-over is blocked until the client has paid — rental money AND the N$30,000 cross-border
 // deposit. Adumo counts only once Adumo confirms it (Pilot sees it by itself); card machine only with the POS
 // transaction number; cash only with Peter. Peter alone can release earlier, with a reason (management alerted).
+// Owner 4 Nov 2026: "load the payment at the office (POS, cash or Adumo), push it to the tablet, and the vehicle can be
+// released when everything is paid". Paid = rental balance nothing owing AND every cross-border deposit held.
+function payAllPaid(st){
+  if(!st||!st.ok||st.owing==null||st.owing>0.5)return false;
+  return (st.xb||[]).every(function(x){return !x.required||!(x.owing>0.5);});
+}
+function payBlockWhy(rb){return !!rb&&/paid|payment|deposit/i.test(String(rb.why||''));}
+// Called when the office's payment arrives live (rtApply): the old "Release was refused — not paid" goes, and the
+// person on the job is told the vehicle can now be handed over.
+function payNowPaid(st){
+  try{
+    if(!co||!co.v||co._done||!payAllPaid(st))return;
+    var was=payBlockWhy(co.releaseBlocked)||co._payOwing;
+    co._payOwing=false;
+    if(payBlockWhy(co.releaseBlocked)){delete co.releaseBlocked;try{saveCOProgress();}catch(e){}}
+    if(!was)return;
+    try{if(typeof drawCO==='function'&&document.getElementById('page-co')&&document.getElementById('page-co').classList.contains('on'))drawCO();}catch(e){}
+    toast(canSeeMoney()?'✅ The office recorded the payment — '+co.fn+' is fully paid. Client signs → 🔑 Hand over keys':'✅ The office has sorted the payment — '+co.fn+' can be handed over','ok');
+    try{var el=document.getElementById('toast');clearTimeout(el._t);el._t=setTimeout(function(){el.classList.remove('show');},9000);}catch(e){}
+  }catch(e){}
+}
 async function payGate(){
   if(!(await payGateRental()))return false;
   return await xbGate();
@@ -9238,6 +9261,20 @@ function bdBtn(lbl,cls,kind,v){
 function bdNeedRow(n){
   var v=n.v,txt,btn='';
   if(n.k==='unfinished'){
+    // refused for payment, but the office has recorded it since (owner 4 Nov 2026) → say it is ready
+    var _pst=payBlockWhy(n.d.blocked)&&v.bid?PAY_ST[v.bid]:null;
+    if(payBlockWhy(n.d.blocked)&&v.bid&&!_pst&&!(window._bdPayAsk||(window._bdPayAsk={}))[v.bid]){
+      window._bdPayAsk[v.bid]=1;
+      payLoad(v.bid).then(function(s){delete window._bdPayAsk[v.bid];if(payAllPaid(s)){try{var o=document.getElementById('page-ov');if(o&&o.classList.contains('on'))renderOV();}catch(e){}}});
+    }
+    if(_pst&&payAllPaid(_pst)){
+      txt=canSeeMoney()?'<b>✅ Paid now — ready to release.</b> The office recorded the payment. Client signs, then <b>🔑 Hand over keys</b> ('+_bx(bdMgrs())+').'
+        :'<b>✅ The office sorted the payment — ready to release.</b> Ask '+_bx(mgrNames())+'.';
+      if(bdCanOut())btn=bdBtn('▶ Release','bd-green','out',v);
+      return '<div class="bd-need" onclick="ovExpandTo(\'x\',\''+_bx(v.bid||v.fn)+'\')">'
+        +'<div class="bd-fn">'+_bx(v.fn)+'</div>'
+        +'<div class="bd-mid"><div class="bd-cl">'+_bx(renterName(v)||v.cl||'')+'</div><div class="bd-sub">'+txt+'</div></div>'+btn+'</div>';
+    }
     txt=n.d.blocked
       ?'<b>Release was refused</b> — '+_bx(!canSeeMoney()&&/paid|pay|deposit|money/i.test(String(n.d.blocked.why||''))?'the office is sorting it out':n.d.blocked.why)+(n.d.blocked.at?' ('+bdDay(String(n.d.blocked.at).slice(0,10))+(n.d.blocked.by?', '+_bx(n.d.blocked.by):'')+')':'')+'. <b>'+_bx(!canSeeMoney()&&/paid|pay|deposit|money/i.test(String(n.d.blocked.why||''))?'Ask '+mgrNames():(n.d.blocked.who||''))+'</b>.'
       :n.d.hoSigned
