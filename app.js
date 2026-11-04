@@ -12284,7 +12284,7 @@ function buildContractHTML(c,sigUrl){
   <div style="font-size:13px;margin-bottom:6px;"><strong>4.1 GR CONTRACT SPEED LIMITS</strong> — Go Rent contractual speed limits take precedence over posted road signs. The Renter must keep to them at all times.</div>
   <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
     <tr style="background:#111;color:#fff;"><th style="padding:5px 10px;text-align:left;font-weight:700;">Road Type</th><th style="padding:5px 10px;text-align:right;font-weight:700;">GR Contract Limit</th></tr>
-    ${[['Town / Built-up area','60 km/h'],['Gravel road (good condition)','80 km/h'],['Gravel road (corrugated / poor condition)','60 km/h'],['National tarred highway','110 km/h'],['Safari / 8-seater','100 km/h'],['4x4 High Range (off-road)','60 km/h'],['4x4 Low Range (off-road)','10 km/h'],['National Parks','40 km/h']].map((r,i)=>
+    ${[['Town / Built-up area','60 km/h'],['Gravel road (good condition)','80 km/h'],['Gravel road (corrugated / poor condition)','60 km/h'],['National tarred highway','120 km/h'],['Safari / 8-seater','100 km/h'],['4x4 High Range (off-road)','60 km/h'],['4x4 Low Range (off-road)','10 km/h'],['National Parks','40 km/h']].map((r,i)=>
       `<tr style="background:${i%2?'#f9f9f9':'#fff'}"><td style="padding:4px 10px;border-bottom:1px solid #eee;">${r[0]}</td><td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">${r[1]}</td></tr>`
     ).join('')}
   </table>
@@ -12479,14 +12479,14 @@ function buildContractHTML(c,sigUrl){
     GR is not liable for indirect or consequential losses — including missed flights, accommodation costs, lost income, or tour bookings — under any circumstances.<br>
     <strong>9.5 LOSS OF USE</strong><br>
     If the Renter declines insurance and the vehicle is out of service for repairs, the Renter also pays GR's lost rental income at the daily rate for up to 60 days.<br>
-    <strong>9.6 CREDIT CHECKS &amp; DEFAULT</strong><br>
-    The Renter consents to GR conducting a credit check and, in the event of default, recording and disclosing payment information to credit bureaux and third parties for debt recovery purposes.<br>
+    <strong>9.6 PAYMENT BEFORE COLLECTION</strong><br>
+    The full rental amount and any security deposits must be paid before the vehicle is handed over to the Renter.<br>
     <strong>9.7 GOVERNING LAW</strong><br>
     This Agreement is governed by the laws of the Republic of Namibia. Disputes shall be heard in the Magistrate's Court or High Court of Namibia, Windhoek. If any provision is found invalid, all remaining provisions continue in full force.<br>
     <strong>9.8 ENTIRE AGREEMENT</strong><br>
     This document (and any signed addenda) constitutes the entire agreement between GR and the Renter. No verbal representations, promises, or prior agreements are binding. Variations are valid only in writing, signed by an authorised GR representative.<br>
     <strong>9.9 PERSONAL INFORMATION &amp; DATA PROTECTION (POPIA)</strong><br>
-    The Renter consents to Go Rent processing personal information in compliance with Namibian data-protection legislation. Data is used solely for: rental administration, credit assessment, GPS monitoring, insurer communication, and debt recovery. Go Rent will not sell or disclose personal information to third parties except as required by law or this Agreement.
+    The Renter consents to Go Rent processing personal information in compliance with Namibian data-protection legislation. Data is used solely for: rental administration, GPS monitoring and insurer communication. Go Rent will not sell or disclose personal information to third parties except as required by law or this Agreement.
   </div>
 
 
