@@ -1954,7 +1954,7 @@ function bkToVeh(b,vr,today){
   var pax=parseInt(String(b.pax||'').replace(/\D/g,''),10)||parseInt(campTxt.replace(/\D/g,''),10)||0;
   var out=b.pickup_date&&b.return_date&&b.pickup_date<today&&today<=b.return_date;
   return {bid:String(b.id),b:b,fn:b.fleet_no||'',reg:vr.registration||'',cl:b.client||'',pu:b.pickup_date,rt:b.return_date,
-    quote:b.quote||'',pax:pax,xb:(b.cross_border&&b.cross_border!=='None')?b.cross_border:null,
+    quote:b.quote||'',pax:pax,xb:(b.cross_border&&b.cross_border!=='None')?b.cross_border:null,wifiReq:b.wifi_device==='Yes',
     puLocation:b.pickup_loc||'Windhoek',doLocation:b.dropoff_loc||'Windhoek',
     flightIn:_fmtFlight(b.arrival_flight,'arr'),flightOut:_fmtFlight(b.departure_flight,'dep'),
     transfer:(inc||cli)?tr:'',transferPays:inc?'included':(cli?'client':''),location:b.pickup_loc||'',
@@ -1972,7 +1972,7 @@ async function loadBookings(){
     if(!(s&&s.data&&s.data.session))return false;
     var today=localYMD();
     var from=_addDays(today,-120),to=_addDays(today,365);  // wide enough for the 14-day dashboard and the calendar
-    var r=await SB.from('bookings').select('id,quote,fleet_no,client,email,phone,nationality,driver_age,drivers,camping,pax,pickup_date,return_date,pickup_loc,dropoff_loc,cross_border,satphone,baby_seat,extra_fuel,itinerary,notes,arrival_flight,arrival_flight_date,departure_flight,departure_flight_date,airport_transfer').lte('pickup_date',to).gte('return_date',from);
+    var r=await SB.from('bookings').select('id,quote,fleet_no,client,email,phone,nationality,driver_age,drivers,camping,pax,pickup_date,return_date,pickup_loc,dropoff_loc,cross_border,satphone,wifi_device,baby_seat,extra_fuel,itinerary,notes,arrival_flight,arrival_flight_date,departure_flight,departure_flight_date,airport_transfer').lte('pickup_date',to).gte('return_date',from);
     if(r.error){toast('Could not load bookings: '+r.error.message,'err');return false;}
     var vres=await SB.from('vehicles').select('*');
     var vmap={};(vres.data||[]).forEach(function(v){vmap[v.fleet_no]=v;});
@@ -3750,7 +3750,8 @@ function coCsLeft(k){
         if(!dr.name)m.push(who+': name');
       });
       if(!co.returnTime||offHours(co.returnTime))m.push('Return time (office hours '+OFFICE_FROM+'–'+OFFICE_TO+')');
-      if(!d.wifi)m.push('WiFi device');
+      if(!d.sim)m.push('SIM card');
+      if(!coWifiDone(d))m.push('WiFi device');
       ctMissing(c).forEach(function(x){if(/Remote return/.test(x))m.push('Return place & time');});
     }else if(k==='pay'){
       if(!co.contractSigned)ctMissing(c).forEach(function(x){if(/Remote return/.test(x))return;if(!v.camping&&/Camping Equipment cover/.test(x))return;m.push(x.replace(/^\S+\s/,''));});
@@ -4176,7 +4177,25 @@ function coStep0(){
   ${coCleanReport()}`;
 }
 
-// ── WiFi device (goes with EVERY vehicle) + cross-border documents — big, flashing until checked ──
+// ── SIM card + WiFi device (owner 5 Nov 2026) ──
+// Every rental gets a free Go Rent SIM card with 31 GB data (client puts it in their phone) — handed over at check-out,
+// MUST come back at check-in. WiFi devices only go out on special request (booking 'WiFi device = Yes', or the client
+// asks at the counter): then they are checked out and back in; otherwise no WiFi step at all.
+function coWifiReq(){return !!(co&&co.v&&co.v.wifiReq);}
+function coWifiDone(d){d=d||(co&&co.docItems)||{};return !!d.wifi||!coWifiReq();}          // nothing to do when not asked for
+function coWifiBad(d){d=d||(co&&co.docItems)||{};return coWifiReq()&&d.wifi!=='ok';}       // asked for, not handed over
+function coWifiTxt(d){d=d||(co&&co.docItems)||{};return d.wifi==='ok'?'handed over — must be returned':coWifiReq()?'NOT handed over (client asked for one)':'not requested';}
+function coSimTxt(d){d=d||(co&&co.docItems)||{};return d.sim==='ok'?'handed over — must be returned':d.sim?'NOT available':'NOT handed over';}
+// Check-in: what went out, from this rental's check-out record (doc_items). Check-outs from before 5 Nov 2026 have no
+// record: the WiFi device went with every vehicle then, so it is still checked; the SIM card was not asked back then.
+function ciDocsOut(){if(ci&&ci._coDocs)return ci._coDocs;try{if(co&&ci&&co.fn===ci.fn&&co._done&&co.docItems)return co.docItems;}catch(e){}return null;}
+function ciWifiOut(){var d=ciDocsOut();return d?d.wifi==='ok':true;}
+function ciSimOut(){var d=ciDocsOut();return d?d.sim==='ok':false;}
+function ciSetSim(v){retSt['SIM card']=v;if(!ci.retEqBy)ci.retEqBy={};ci.retEqBy['SIM card']={st:v,by:ci.receivedBy||(APP_USER&&APP_USER.name)||'',at:new Date().toLocaleTimeString('en-GB',{hourCycle:'h23',hour:'2-digit',minute:'2-digit'})};
+  if(v==='missing')toast('✗ SIM card NOT returned — shows on the client and management report','err');drawCI();}
+function ciWifiOpen(){return ciWifiOut()&&!retSt['WiFi device'];}
+function ciSimOpen(){return ciSimOut()&&!retSt['SIM card'];}
+// ── cross-border documents — big, flashing until checked ──
 function wifiBox(title,sub,val,onOk,onBad,okLbl,badLbl){
   var done=!!val,bad=val==='missing'||val==='issue';
   var bs='padding:14px 18px;border-radius:10px;font-size:16px;font-weight:900;cursor:pointer;touch-action:manipulation;flex:1;';
@@ -4247,13 +4266,24 @@ function ctReturnWifiHTML(){
     +'<span style="display:flex;gap:6px;min-width:260px;flex:0 1 300px;">'+timePickers('ho-rtime',offHours(co.returnTime)?'':(co.returnTime||''),"var _t=timePickValue('ho-rtime');if(_t){co.returnTime=_t;saveCOProgress();drawCO();}",false,true)+'</span>'
     +hoQuickTimes(v,true)
     +'</div></div>';
-  var w=d.wifi||'',bs='padding:7px 14px;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;touch-action:manipulation;';
-  var wifi='<div id="ct-wifi-box" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:2px solid '+(w==='ok'?'var(--gb)':w?'var(--re)':'var(--am)')+';border-radius:10px;padding:7px 10px;background:'+(w==='ok'?'var(--sg)':w?'var(--rg)':'var(--ag)')+';">'
-    +'<span style="font-size:13px;font-weight:900;color:var(--tx);flex:1;min-width:140px;">📶 WiFi device *</span>'
-    +'<button style="'+bs+(w==='ok'?'border:2px solid var(--gb);background:var(--se);color:#fff;':'border:2px solid var(--g3);background:var(--g0);color:var(--tx);')+'" onclick="coSetDoc(\'wifi\',\'ok\')">'+(w==='ok'?'✓ ':'')+'Handed over</button>'
-    +'<button style="'+bs+(w&&w!=='ok'?'border:2px solid var(--re);background:var(--re);color:#fff;':'border:2px solid var(--g3);background:var(--g0);color:var(--tx);')+'" onclick="coSetDoc(\'wifi\',\'issue\')">'+(w&&w!=='ok'?'⚠ ':'')+'Not available</button>'
-    +'</div>';
-  return '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'+ret+ctRemoteBoxHTML()+wifi+'</div>';
+  var bs='padding:7px 14px;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;touch-action:manipulation;';
+  var on='border:2px solid var(--gb);background:var(--se);color:#fff;',off='border:2px solid var(--g3);background:var(--g0);color:var(--tx);',red='border:2px solid var(--re);background:var(--re);color:#fff;';
+  var row=function(id,label,sub,val,btns){
+    var st=val==='ok'?'ok':val==='issue'?'bad':val==='none'?'ok':'';
+    return '<div id="'+id+'" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:2px solid '+(st==='ok'?'var(--gb)':st==='bad'?'var(--re)':'var(--am)')+';border-radius:10px;padding:7px 10px;background:'+(st==='ok'?'var(--sg)':st==='bad'?'var(--rg)':'var(--ag)')+';">'
+      +'<span style="font-size:13px;font-weight:900;color:var(--tx);flex:1;min-width:160px;">'+label+(sub?'<br><span style="font-size:11px;font-weight:700;color:var(--g5);">'+sub+'</span>':'')+'</span>'+btns+'</div>';};
+  var s=d.sim||'',w=d.wifi||'';
+  var sim=row('ct-sim-box','📱 SIM card with 31 GB data *','Free with every rental · goes in the client’s phone · tell the client it MUST come back with the vehicle',s,
+    '<button style="'+bs+(s==='ok'?on:off)+'" onclick="coSetDoc(\'sim\',\'ok\')">'+(s==='ok'?'✓ ':'')+'Handed over</button>'
+   +'<button style="'+bs+(s==='issue'?red:off)+'" onclick="coSetDoc(\'sim\',\'issue\')">'+(s==='issue'?'⚠ ':'')+'Not available</button>');
+  var wifi=coWifiReq()
+    ?row('ct-wifi-box','📶 WiFi device *','Client asked for one (on the booking) · must come back with the vehicle',w,
+      '<button style="'+bs+(w==='ok'?on:off)+'" onclick="coSetDoc(\'wifi\',\'ok\')">'+(w==='ok'?'✓ ':'')+'Handed over</button>'
+     +'<button style="'+bs+(w&&w!=='ok'?red:off)+'" onclick="coSetDoc(\'wifi\',\'issue\')">'+(w&&w!=='ok'?'⚠ ':'')+'Not available</button>')
+    :row('ct-wifi-box','📶 WiFi device','Only on special request — not on this booking. Tap Handed over only if the client asks for one now.',w==='ok'?'ok':'none',
+      '<button style="'+bs+(w!=='ok'?on:off)+'" onclick="coSetDoc(\'wifi\',\'\')">'+(w!=='ok'?'✓ ':'')+'Not needed</button>'
+     +'<button style="'+bs+(w==='ok'?on:off)+'" onclick="coSetDoc(\'wifi\',\'ok\')">'+(w==='ok'?'✓ ':'')+'Handed over</button>');
+  return '<div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">'+ret+ctRemoteBoxHTML()+sim+wifi+'</div>';
 }
 // Handover: only the cross-border papers are left up here (WiFi + return time moved to Contract)
 function hoTopRow(){
@@ -7006,7 +7036,8 @@ var _hoBusy=false;
 async function signHandover(){
   if(_hoBusy)return;
   if(coLeftCount(CO_BEFORE_HANDOVER)){coLeftBox(CO_BEFORE_HANDOVER,{block:true,title:'Handover cannot be signed yet',sub:'Staff must finish these first.'});return;}
-  if(!(co.docItems&&co.docItems.wifi)){toast('WiFi device not done — it is on the Contract step, under Collection & Return','err');return;}
+  if(!(co.docItems&&co.docItems.sim)){toast('SIM card not done — it is on the Contract step, under Collection & Return','err');return;}
+  if(!coWifiDone()){toast('WiFi device not done — the client asked for one; it is on the Contract step, under Collection & Return','err');return;}
   if(co.v.xb&&!(co.docItems&&co.docItems.xb)){toast('Check the cross-border documents first','err');return;}
   if(!co.returnTime){toast('Return time not set — it is on the Contract step, under Collection & Return','err');return;}
   if(!hasSig('co-c-sig')){toast('Customer must sign','err');return;}
@@ -7438,10 +7469,10 @@ function coAccRows(uncPrep,uncMech){
   rows+=coAccRow(5,'📋','Contract — '+(co.contractBy||'—'),
     co.contractSigned?'✅ Signed by '+(co.clientName||co.v.cl||'client')+' at '+(co.contractAt||''):'❌ Contract not signed',!co.contractSigned);
   rows+=coAccRow(6,'🤝','Handover — '+(co.mechBy||co.inspBy||'—'),
-    '📶 WiFi: '+(d.wifi==='ok'?'handed over':'NOT handed over')+(co.v.xb?' · 🌍 Cross-border docs: '+(d.xb==='ok'?'handed over':'MISSING'):'')
+    '📱 SIM card: '+coSimTxt(d)+(d.wifi==='ok'||coWifiReq()?' · 📶 WiFi: '+coWifiTxt(d):'')+(co.v.xb?' · 🌍 Cross-border docs: '+(d.xb==='ok'?'handed over':'MISSING'):'')
       +' · 📅 Return '+(co.v.rt||'—')+(co.returnTime?' at '+co.returnTime:'')+' · ⛽ '+(co.fuelOut||'Full')+' · '+((co.odometerOut||co.v.odo||0).toLocaleString())+' km'
       +(hoOpen?' · ⚠ '+hoOpen+' handover point'+(hoOpen===1?'':'s')+' not ticked':''),
-    d.wifi!=='ok'||(co.v.xb&&d.xb!=='ok')||!handoverClosed());
+    d.sim!=='ok'||coWifiBad(d)||(co.v.xb&&d.xb!=='ok')||!handoverClosed());
   rows+=coAccRow(7,'👔','Manager — '+(co.mgmtBy||'—'),'Cleared at '+(co.mgmtAt||'—'),false);
   return rows;
 }
@@ -7575,7 +7606,8 @@ function coStepMissing(n){
       m.push('✍️ Rental contract not signed yet');
     }
   }else if(n===6){
-    if(d.wifi!=='ok')m.push('📶 WiFi device not handed over');
+    if(d.sim!=='ok')m.push('📱 SIM card not handed over');
+    if(coWifiBad(d))m.push('📶 WiFi device not handed over (client asked for one)');
     if(!co.returnTime)m.push('🕑 Expected return time not set');
     var hc=co.handoverChecks||{};
     (window._HO_SECTIONS||[]).forEach(function(sec){
@@ -7655,7 +7687,7 @@ function coFixLine(i){
   else if(/equipment not confirmed/i.test(x)){step=2;}
   else if(/contract not signed/i.test(x)){cs=2;after=function(){try{previewAndSignContract();}catch(e){}};}
   else if(/passport|licence photo|name not filled|: name$/i.test(x)){cs=0;sel='#cos [onclick*="captureDriverDoc"], #cos input[type=file]';}
-  else if(/return time|WiFi|Remote return|exact address|collection date/i.test(x)){cs=0;sel=/WiFi/i.test(x)?'#ct-wifi-box':/Remote|address|collection/i.test(x)?'#ct-remote':'#ct-rtime-box';}
+  else if(/return time|WiFi|SIM card|Remote return|exact address|collection date/i.test(x)){cs=0;sel=/WiFi/i.test(x)?'#ct-wifi-box':/SIM card/i.test(x)?'#ct-sim-box':/Remote|address|collection/i.test(x)?'#ct-remote':'#ct-rtime-box';}
   else if(/insurance/i.test(x)){cs=1;sel='#ct-ins';}
   else if(/windscreen/i.test(x)){cs=1;sel='#ct-aws';}
   else if(/camping equipment/i.test(x)){cs=1;sel='#ct-aeq';}
@@ -7775,7 +7807,8 @@ function coMissing(){
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' NOT TAKEN ('+extraDriverTxt()+')');
   })();
   if(!co.contractSigned)m.push('✍️ Rental contract NOT SIGNED');
-  if(d.wifi!=='ok')m.push('📶 WiFi device not handed over');
+  if(d.sim!=='ok')m.push('📱 SIM card not handed over');
+  if(coWifiBad(d))m.push('📶 WiFi device not handed over (client asked for one)');
   if(v.xb&&d.xb!=='ok')m.push('🌍 Cross-border documents not handed over');
   if(!co.returnTime)m.push('🕑 Expected return time not set');
   if(!handoverClosed())m.push('✍️ Client has not signed the handover');
@@ -8269,7 +8302,7 @@ async function completeCORun(){
     contract_override:co._ctOverride?(co._ctOverride.by+' · '+co._ctOverride.at+' · waived: '+co._ctOverride.items.join('; ')+' · reason: '+co._ctOverride.reason):null,
     manager_name:co.mgmtBy, manager_signed_at:(co.mgmtSig||co.mgmtCleared)?new Date().toISOString():null,
     odo_out:kmInt(co.odometerOut)||kmInt(co.v.odo), out_notes:coOdoNotes(), unchecked_prep:uncPrep, unchecked_mech:uncMech,
-    damage_panels:co.dmgd, prep_checklist:co.prepItems||{}, mech_checklist:co.mechItems||{}, mech_by:co.mechCheckBy||null, mech_who:co.mechWho||{}, return_time:co.returnTime||null,
+    damage_panels:co.dmgd, doc_items:co.docItems||{}, prep_checklist:co.prepItems||{}, mech_checklist:co.mechItems||{}, mech_by:co.mechCheckBy||null, mech_who:co.mechWho||{}, return_time:co.returnTime||null,
     return_date_new:(co.contract&&co.contract.return_place_date&&co.contract.return_place_date!==co.v.rt&&co.contract.return_location&&co.contract.return_location!==GR_HQ)?co.contract.return_place_date:undefined, return_place:(co.contract&&co.contract.return_location)||null, return_address:(co.contract&&co.contract.return_address)||null, return_place_time:(co.contract&&co.contract.return_place_time)||null, doc_checks:co.docItems||{},
     created_at:new Date().toISOString(),
   });
@@ -8470,7 +8503,7 @@ function coHandoverExtras(){
   var diag=coDamageDiagrams();
   var ct=(co.contract&&co.contract.contract_html)||'';
   return '<h2>🤝 Handover Checklist</h2><p style="font-size:13px;color:#666;">Handed over by '+_bx(co.mechBy||co.inspBy||'—')+' · ✅ = explained / shown to the client</p><table>'+chk+'</table>'
-    +'<p style="font-size:14px;margin-top:10px;">📶 WiFi device: <b>'+(((co.docItems||{}).wifi==='ok')?'handed to client — must be returned':'not issued')+'</b>'+(co.v.xb?' · 🌍 Cross-border documents ('+_bx(co.v.xb)+'): <b>'+(((co.docItems||{}).xb==='ok')?'handed to client':'—')+'</b>':'')+'</p>'
+    +'<p style="font-size:14px;margin-top:10px;">📱 Go Rent SIM card with 31 GB data: <b>'+(((co.docItems||{}).sim==='ok')?'handed to client — please return it with the vehicle':'not issued')+'</b>'+(((co.docItems||{}).wifi==='ok')?' · 📶 WiFi device: <b>handed to client — please return it with the vehicle</b>':'')+(co.v.xb?' · 🌍 Cross-border documents ('+_bx(co.v.xb)+'): <b>'+(((co.docItems||{}).xb==='ok')?'handed to client':'—')+'</b>':'')+'</p>'
     +(diag?'<h2>🗺 Damage Diagram (marked at departure)</h2><p style="font-size:13px;color:#666;">Blue = scratch · Red = dent · Yellow = pre-existing — the client is not liable for damage recorded here.</p>'+diag:'')
     +(ct?'<h2>📋 Signed Rental Contract</h2><div style="border:2px solid #145c30;border-radius:8px;padding:12px;background:#fff;">'+ct+'</div>':'<h2>📋 Signed Rental Contract</h2><p style="font-size:14px;color:#b45309;">The signed contract is kept in the Go Rent office file.</p>');
 }
@@ -8682,7 +8715,7 @@ async function startCI(fn){
   if(_early){ci.early=true;ci.dueBack=v.rt;ci.notes='EARLY RETURN — was due back '+v.rt+(ci.notes?'. '+ci.notes:'');}
   goPage('ci');drawCI();
   // Km and fuel at departure: take them from this booking's check-out record if it exists
-  try{SB.from('checkouts').select('odo_out,fuel_out,prep_checklist,damage_panels,return_time,return_place,return_address,return_place_time').in('booking_id',[bkKey(v),bkAltKey(bkKey(v))].filter(Boolean)).order('created_at',{ascending:false}).limit(1).then(function(r){
+  try{SB.from('checkouts').select('odo_out,fuel_out,prep_checklist,doc_items,damage_panels,return_time,return_place,return_address,return_place_time').in('booking_id',[bkKey(v),bkAltKey(bkKey(v))].filter(Boolean)).order('created_at',{ascending:false}).limit(1).then(function(r){
     var row=r&&r.data&&r.data[0];if(!ci||ci.fn!==fn)return;
     ci._coLoaded=!!row;if(!row){try{drawCI();}catch(e){}return;}
     if(Array.isArray(row.damage_panels)&&row.damage_panels.length){
@@ -8691,6 +8724,7 @@ async function startCI(fn){
       if(row.damage_panels[0].size)isize=row.damage_panels[0].size;
     }
     if(row.odo_out)ci.odometerOut=row.odo_out;
+    if(row.doc_items&&typeof row.doc_items==='object'&&Object.keys(row.doc_items).length){ci._coDocs=row.doc_items;ciBuildRetGroups();}
     if(row.fuel_out)ci.v.fuelOut=row.fuel_out;
     if(row.return_time)ci.returnTime=row.return_time;
     if(row.return_place){ci.remote={return_place:row.return_place,return_address:row.return_address,return_place_time:row.return_place_time};try{drawCI();}catch(e){}}
@@ -8830,11 +8864,12 @@ function ciStep0_CI(){
   <div class="step-intro">
     <div class="step-ico">🧹</div>
     <div><div class="step-title">Step 1 — Vehicle, damage &amp; client signs</div>
-    <div class="step-sub">WiFi & charger · km · fuel · vehicle check (✓ All good, tap only what is wrong) · any new damage? · client signs and can go · equipment is Step 2</div></div>
+    <div class="step-sub">SIM card, WiFi (if issued) & charger · km · fuel · vehicle check (✓ All good, tap only what is wrong) · any new damage? · client signs and can go · equipment is Step 2</div></div>
   </div>
-  <div class="ci-top3" style="display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr);gap:8px;margin:10px 0 12px;">
+  <div class="ci-top3" style="display:grid;grid-template-columns:minmax(0,.8fr)${ciSimOut()?' minmax(0,1fr)':''}${ciWifiOut()?' minmax(0,1fr)':''} minmax(0,1fr);gap:8px;margin:10px 0 12px;">
     ${ciRcvMini()}
-    ${ciMiniRet('ci-wifi-box','📶 WiFi',retSt['WiFi device']||'',"ciSetWifi('ok')","ciSetWifi('missing')")}
+    ${ciSimOut()?ciMiniRet('ci-sim-box','📱 SIM card',retSt['SIM card']||'',"ciSetSim('ok')","ciSetSim('missing')"):''}
+    ${ciWifiOut()?ciMiniRet('ci-wifi-box','📶 WiFi',retSt['WiFi device']||'',"ciSetWifi('ok')","ciSetWifi('missing')"):''}
     ${ciMiniRet('ci-usb-box','🔌 USB charger',retSt['USB charger']||'',"ciSetRet('USB charger','ok')","ciSetRet('USB charger','missing')")}
   </div>
   <!-- ODO + FUEL ROW -->
@@ -9064,7 +9099,8 @@ async function peterOverrideCI(){
   var open=ciCompletion().filter(function(x){return !x.ok;});
   if(!ci.odoIn)open.unshift({lbl:'Odometer in (Step 1)'});
   if(!ci.fuelIn)open.unshift({lbl:'Fuel in (Step 1)'});
-  if(!retSt['WiFi device'])open.unshift({lbl:'WiFi device returned? (Step 1)'});
+  if(ciWifiOpen())open.unshift({lbl:'WiFi device returned? (Step 1)'});
+  if(ciSimOpen())open.unshift({lbl:'SIM card returned? (Step 1)'});
   if(!retSt['USB charger'])open.unshift({lbl:'USB charger returned? (Step 1)'});
   if(!open.length)open=[{lbl:'Management sign-off (Step 5)'}];
   ci.forceClosedBy=null;           // always ask Peter to confirm + give a reason for this override
@@ -9589,7 +9625,7 @@ function ciBuildRetGroups(){
     if(!cur||cur.g.indexOf('Exterior')>=0||!ciShow(x,i))return;
     cur.items.push(String(x[1]).replace('__QTY__',''));
   });
-  groups.push({g:'🔑 Keys, WiFi & documents',items:['WiFi device','USB charger','All keys & remote','Vehicle licence & insurance']});
+  groups.push({g:'🔑 Keys, SIM, WiFi & documents',items:(ciSimOut()?['SIM card']:[]).concat(ciWifiOut()?['WiFi device']:[],['USB charger','All keys & remote','Vehicle licence & insurance'])});
   // Order at check-in: 1) the items clients lose most, 2) the other loose items, 3) Box 1, 2, 3, 4 in number order, 4) the rest
   var loose=groups.filter(function(g){return /Loose Items/i.test(g.g);})[0]||{g:'📦 Loose Items',items:[]};
   var hasComp=loose.items.indexOf('Compressor')>=0;
@@ -9647,7 +9683,8 @@ async function signRetCheck(){
   if(!ci.odoIn){toast('Type the odometer reading (km) from the dashboard','err');return;}
   var _oo=ci.odometerOut||ci.v.odo||0;
   if(_oo&&ci.odoIn<_oo&&!ci.odoLowOk){if(!(await ciOdoLowAsk()))return;}
-  if(!retSt['WiFi device']){toast('Check the WiFi device first (top of this step)','err');return;}
+  if(ciSimOpen()){toast('Check the SIM card first (top of this step)','err');return;}
+  if(ciWifiOpen()){toast('Check the WiFi device first (top of this step)','err');return;}
   if(!retSt['USB charger']){toast('Check the USB charger first (top of this step)','err');return;}
   if(!ci.custSig){toast('The client signs first (end of Step 1)','err');return;}
   var _eq=ciOpenBeforeSign().filter(function(o){return o.s===2;});if(_eq.length){toast('Equipment first — '+_eq[0].t,'err');return;}
@@ -9702,7 +9739,8 @@ function ciOpenBeforeSign(){
   var out=[];
   try{
     if(!ci.receivedBy)out.push({s:0,t:'Who is receiving the vehicle'});
-    if(!retSt['WiFi device'])out.push({s:0,t:'WiFi device — returned or not'});
+    if(ciSimOpen())out.push({s:0,t:'SIM card — returned or not'});
+    if(ciWifiOpen())out.push({s:0,t:'WiFi device — returned or not'});
     if(!retSt['USB charger'])out.push({s:0,t:'USB charger — returned or not'});
     if(!ci.odoIn)out.push({s:0,t:'Kilometres from the dashboard'});
     if(!ci.fuelIn)out.push({s:0,t:'Fuel level'});
@@ -9782,7 +9820,7 @@ function ciQuickInject(){
 function ciGoOpen(k){
   var open=ciOpenBeforeSign().filter(function(o){return o.s===0;});
   var o=open[k]||open[0];if(!o)return;
-  var id=/receiving/i.test(o.t)?'ci-rcv':/WiFi/.test(o.t)?'ci-wifi-box':/USB/.test(o.t)?'ci-usb-box':/Kilometres/.test(o.t)?'ci-odo':/Fuel/.test(o.t)?'ci-fuel':/damage/i.test(o.t)?'ci-dmg-q':'';
+  var id=/receiving/i.test(o.t)?'ci-rcv':/WiFi/.test(o.t)?'ci-wifi-box':/SIM card/.test(o.t)?'ci-sim-box':/USB/.test(o.t)?'ci-usb-box':/Kilometres/.test(o.t)?'ci-odo':/Fuel/.test(o.t)?'ci-fuel':/damage/i.test(o.t)?'ci-dmg-q':'';
   if(ciStep>1){ciStep=0;drawCI();}
   setTimeout(function(){
     var el=id?document.getElementById(id):null;
@@ -10317,7 +10355,7 @@ function sendHandoverMgmt(){
     +'Vehicle: '+co.fn+' ('+(co.v.reg||'')+')\nClient: '+(co.clientName||co.v.cl||'')+(co.clientPhone?' ('+co.clientPhone+')':'')
     +'\nPickup: '+(coPickupDate()||'-')+' | Return: '+(co.v.rt||'-')+(co.returnTime?' at '+co.returnTime:'')
     +'\nKm out: '+(co.odometerOut||co.v.odo||'-')+' | Fuel out: '+(co.fuelOut||'Full')
-    +'\nWiFi device: '+(d.wifi==='ok'?'handed over':'NOT handed over')+(co.v.xb?' | Cross-border ('+co.v.xb+') docs: '+(d.xb==='ok'?'handed over':'MISSING'):'')
+    +'\nSIM card: '+coSimTxt(d)+' | WiFi device: '+coWifiTxt(d)+(co.v.xb?' | Cross-border ('+co.v.xb+') docs: '+(d.xb==='ok'?'handed over':'MISSING'):'')
     +'\nHanded over by: '+(co.mechBy||co.inspBy||'-')+' | Contract by: '+(co.contractBy||'-')
     +'\n\nHandover document (checklist, damage, photos, signed contract):\n'+co._handoverLink);
   co._mgmtSent=true;var b=document.getElementById('btn-mgmt-co');if(b)b.outerHTML=mgmtBtn('btn-mgmt-co','sendHandoverMgmt()',true);
@@ -12838,7 +12876,8 @@ function guideCO(){
       var c0=co.contract||{};
     }
     if(!co.returnTime)return t('Ask the client what time they will bring it back, and set the time.',document.getElementById('ct-rtime-box'));
-    if(!(co.docItems&&co.docItems.wifi))return t('WiFi device: tap Handed over (or Not available).',document.getElementById('ct-wifi-box'));
+    if(!(co.docItems&&co.docItems.sim))return t('SIM card: give the client the Go Rent SIM card (31 GB data), tell them to bring it back, and tap Handed over.',document.getElementById('ct-sim-box'));
+    if(!coWifiDone())return t('The client asked for a WiFi device: hand it over and tap Handed over (or Not available).',document.getElementById('ct-wifi-box'));
     var ds=co.drivers||[];
     for(var i=0;i<ds.length;i++){var d=ds[i],who=i===0?'the main driver':'driver '+(i+1);
       if(!d.passportImg)return t('Take a photo of the PASSPORT of '+who+'.',document.getElementById('fi-drv-'+i+'-passportImg')&&document.getElementById('fi-drv-'+i+'-passportImg').parentNode);
@@ -12865,7 +12904,8 @@ function guideCO(){
   }else if(st===6){
     if(!handoverClosed()&&coLeftCount(CO_BEFORE_HANDOVER)){var _l6=coLeftList(CO_BEFORE_HANDOVER);return t(_l6.length===1?'Handover locked: '+_l6[0]:'Handover locked — '+_l6.length+' checks still open. Tap Show on the red line to see them.',gFind(R,'.left-box'));}
     var dd=co.docItems||{};
-    if(!dd.wifi)return {done:true,text:'📶 WiFi device not done yet — it is on the Contract step',next:'Go to Contract →',go:function(){coGoStep(5);}};
+    if(!dd.sim)return {done:true,text:'📱 SIM card not done yet — it is on the Contract step',next:'Go to Contract →',go:function(){coGoStep(5);}};
+    if(!coWifiDone(dd))return {done:true,text:'📶 WiFi device (client asked for one) not done yet — it is on the Contract step',next:'Go to Contract →',go:function(){coGoStep(5);}};
     if(co.v.xb&&!dd.xb){b=gFind(R,'div.insp-flash',function(x){return /^🌍 Cross-border docs/.test((x.textContent||'').trim());});return t('Give the client the cross-border papers, then tap Handed over.',b);}
     if(!co.returnTime)return {done:true,text:'🕑 Return time not set yet — it is on the Contract step',next:'Go to Contract →',go:function(){coGoStep(5);}};
     var secs=window._HO_SECTIONS||[],hc=co.handoverChecks||{};
@@ -12907,6 +12947,7 @@ function coCsEl(item){
     if(/: name$/.test(item))return gFind(R,'input',function(x){return /as on passport/.test(x.placeholder||'')&&!x.value&&x.offsetParent;});
     if(/^Return time/.test(item))return vis($('ct-rtime-box'));
     if(/^WiFi/.test(item))return vis($('ct-wifi-box'));
+    if(/^SIM/.test(item))return vis($('ct-sim-box'));
     if(/^Return place/.test(item))return vis($('ct-raddr'))||vis($('ct-rptime-box'))||vis($('ct-remote'));
     if(/Insurance/.test(item))return vis($('ct-ins'));
     if(/Windscreen/.test(item))return vis($('ct-aws'));
@@ -12929,7 +12970,8 @@ function guideCI(){
   var g=ciGroup(ciStep),b;
   if(g===0){
     if(!ci.receivedBy)return t('Choose your name: who is receiving the vehicle?',gFind(R,'.who-box'));
-    if(!retSt['WiFi device'])return t('Is the WiFi device back? Tap Returned or Not returned.',document.getElementById('ci-wifi-box'));
+    if(ciSimOpen())return t('Is the Go Rent SIM card back? Ask the client for it, then tap Returned or Not returned.',document.getElementById('ci-sim-box'));
+    if(ciWifiOpen())return t('Is the WiFi device back? Tap Returned or Not returned.',document.getElementById('ci-wifi-box'));
     if(!retSt['USB charger'])return t('Is the USB charger back? Tap Returned or Not returned.',document.getElementById('ci-usb-box'));
     if(!ci.odoIn)return t('Type the kilometres from the dashboard.',document.getElementById('ci-odo'));
     var _oo0=ci.odometerOut||(ci.v&&ci.v.odo)||0;
