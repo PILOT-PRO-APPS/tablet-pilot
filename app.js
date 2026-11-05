@@ -12190,84 +12190,93 @@ function buildContractHTML(c,sigUrl){
     return rows.join('');
   })();
 
+  // Soft wording V6.11 (owner 5 Nov 2026): same rules, calmer tone — matches GR-Full_Termsv6.11.pdf
+  const H2='font-size:15px;font-weight:800;color:#1f4e3d;border-bottom:2px solid #1f4e3d;padding-bottom:3px;margin:16px 0 8px;';
+  const H3='font-size:13.5px;font-weight:700;margin:10px 0 2px;';
+  const P='font-size:13px;color:#222;line-height:1.6;margin-bottom:8px;';
+  const NOTE='background:#f6f6f2;border:1px solid #d8d8cc;border-radius:4px;padding:8px 12px;margin:6px 0 10px;font-size:13px;line-height:1.55;';
+  const NB='color:#1f4e3d;';
+  const COLS='display:grid;grid-template-columns:1fr 1fr;gap:0 18px;font-size:13px;line-height:1.6;margin-bottom:8px;';
+  const LBL='font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;';
+  const OPT='display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;';
+  const OPTON='background:#f0f9f4;border-color:#1e8449;';
+
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:11.5px;color:#111;line-height:1.55;max-width:780px;margin:0 auto;background:#fff;">
 
   <!-- LETTERHEAD -->
-  <div style="display:flex;align-items:flex-start;gap:14px;border-bottom:2px solid #000;padding-bottom:12px;margin-bottom:14px;">
+  <div style="display:flex;align-items:flex-start;gap:14px;border-bottom:2px solid #1f4e3d;padding-bottom:12px;margin-bottom:12px;">
     <img src="${GR_LOGO}" alt="GoRent Namibia 4x4 Rentals" style="width:130px;height:auto;flex-shrink:0;">
     <div style="flex:1;">
       <div style="font-size:18px;font-weight:900;letter-spacing:-.3px;line-height:1;">GO RENT 4X4 RENTALS AND TOURS CC</div>
-      <div style="font-size:13px;color:#555;margin-top:3px;">Reg. No: CC/2021/04371 | Windhoek, Namibia | WhatsApp: +264 81 861 8085 | gorent4x4.com</div>
-      <div style="font-size:15px;font-weight:700;margin-top:6px;text-transform:uppercase;letter-spacing:.5px;">Vehicle Rental Agreement &amp; Terms and Conditions</div>
+      <div style="font-size:13px;color:#555;margin-top:3px;">Reg. No: CC/2021/04371 | 6 Diehl Street, Windhoek, Namibia | WhatsApp: +264 81 861 8085 / +264 81 858 1750 | www.4x4namibia.rentals</div>
+      <div style="font-size:15px;font-weight:700;margin-top:6px;color:#1f4e3d;">Vehicle Rental Agreement &amp; Terms and Conditions</div>
     </div>
   </div>
+
+  <div style="background:#f1f6f3;border-left:4px solid #1f4e3d;padding:9px 12px;margin:0 0 12px;font-size:13px;line-height:1.55;">Welcome to Go Rent. This agreement sets out how the rental works, what the insurance covers and what it does not, so that you know where you stand before you set off. Most of the rules come from our insurers and from Namibian law. Please read it carefully, and ask us about anything that is unclear before you sign. Once signed, it is binding on you and on Go Rent.</div>
 
   <!-- 1. PARTIES -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin-bottom:10px;">1. PARTIES &amp; VEHICLE DETAILS</div>
+  <div style="${H2}margin-top:0;">1. Parties &amp; vehicle details</div>
+  <div style="${H3}">1.1 Rental company</div>
+  <div style="${P}">GO RENT 4X4 RENTALS AND TOURS CC ("Go Rent", "GR", "we"), a registered Namibian closed corporation (CC/2021/04371).</div>
+  <div style="${H3}">1.2 The renter</div>
+  <div style="${P}">The person who signs this agreement ("you", "the Renter") is responsible for:<br>
+    • paying all rental fees, insurance fees, penalties and fines;<br>
+    • following this agreement, including the speed limits and area rules;<br>
+    • the additional drivers and passengers. What they do in or with the vehicle is your responsibility.<br>
+    <strong>Drivers:</strong> minimum age 23, with a licence held for at least 1 year. There is no extra charge for younger drivers. If your licence is not in English, you also need a valid International Driving Permit (IDP); copies cannot be accepted.</div>
 
-  <div style="font-size:14px;font-weight:700;margin-bottom:4px;">1.1 RENTAL COMPANY</div>
-  <div style="font-size:10.5px;color:#333;margin-bottom:10px;">GO RENT 4X4 RENTALS AND TOURS CC ("Go Rent" / "GR") — registered Namibian closed corporation (CC/2021/04371).</div>
-
-  <div style="font-size:14px;font-weight:700;margin-bottom:4px;">1.2 CLIENT</div>
-  <div style="font-size:13px;color:#333;margin-bottom:10px;line-height:1.6;">
-    The individual who signs this Agreement ("you" / "the Renter") is solely responsible for:
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
-      <div>• Paying all rental fees, insurance waiver fees, penalties, and fines.<br>• Ensuring full compliance with this Agreement, including speed limits and restricted-area rules.<br>• Supervising all additional drivers and passengers — their actions are your liability.</div>
-      <div>• No extra charge for younger drivers; we do not rent to drivers under 23.<br>• Minimum driver age: 23 years. Licence held for a minimum of 1 year.<br>• Licence not in English: a valid International Driving Permit (IDP) is also required — no copies accepted.</div>
-    </div>
-  </div>
-
-  <div style="font-size:14px;font-weight:700;margin-bottom:6px;">1.3 CLIENT INFORMATION</div>
+  <div style="${H3}margin-bottom:6px;">1.3 Client information</div>
   <div style="border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-bottom:10px;">
     <div style="display:grid;grid-template-columns:2fr 1fr 1.2fr 1.2fr;border-bottom:1px solid #ccc;">
       ${['Full Name','Date of Birth','Nationality','Passport Number'].map((l,i)=>{
         const vals=[c.client_name,c.client_dob,c.client_nationality,c.client_passport];
         return `<div style="padding:7px 8px;${i<3?'border-right:1px solid #ccc;':''}">
-          <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">${l}</div>
+          <div style="${LBL}">${l}</div>
           <div style="font-size:14px;font-weight:600;color:#111;min-height:18px;">${vals[i]||''}</div>
         </div>`;
       }).join('')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;">
       <div style="padding:7px 8px;border-right:1px solid #ccc;">
-        <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Passport Expiry</div>
+        <div style="${LBL}">Passport Expiry</div>
         <div style="font-size:14px;font-weight:600;color:#111;min-height:18px;">${c.client_passport_expiry||''}</div>
       </div>
       <div style="padding:7px 8px;border-right:1px solid #ccc;">
-        <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Driver's Licence #</div>
+        <div style="${LBL}">Driver's Licence #</div>
         <div style="font-size:14px;font-weight:600;color:#111;min-height:18px;">${c.client_licence||''}</div>
       </div>
       <div style="padding:7px 8px;">
-        <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">Licence Expiry Date</div>
+        <div style="${LBL}">Licence Expiry Date</div>
         <div style="font-size:14px;font-weight:600;color:#111;min-height:18px;">${c.client_licence_expiry||''}</div>
       </div>
     </div>
   </div>
 
-  <div style="font-size:14px;font-weight:700;margin-bottom:6px;">1.4 VEHICLE INFORMATION</div>
+  <div style="${H3}margin-bottom:6px;">1.4 Vehicle information</div>
   <div style="border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-bottom:8px;">
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #ccc;">
       ${[['Go Rent Fleet Number',c.fleet_no],['Vehicle Registration',c.vehicle_reg],['Total Rental Days',days?(days+' days'):'']].map(([l,v],i)=>
-        `<div style="padding:7px 8px;${i<2?'border-right:1px solid #ccc;':''}"><div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">${l}</div><div style="font-size:14px;font-weight:600;min-height:18px;">${v||''}</div></div>`
+        `<div style="padding:7px 8px;${i<2?'border-right:1px solid #ccc;':''}"><div style="${LBL}">${l}</div><div style="font-size:14px;font-weight:600;min-height:18px;">${v||''}</div></div>`
       ).join('')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid #ccc;">
       ${[['Rental FROM Date',fD(c.pickup_date)],['Time',c.pickup_time||'08:00'],['Location',c.pickup_location||'Go Rent Office, 6 Diehl Str, Windhoek']].map(([l,v],i)=>
-        `<div style="padding:7px 8px;${i<2?'border-right:1px solid #ccc;':''}"><div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">${l}</div><div style="font-size:14px;font-weight:600;min-height:18px;">${v||''}</div></div>`
+        `<div style="padding:7px 8px;${i<2?'border-right:1px solid #ccc;':''}"><div style="${LBL}">${l}</div><div style="font-size:14px;font-weight:600;min-height:18px;">${v||''}</div></div>`
       ).join('')}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;">
       ${[['Rental TO Date',fD(c.return_date)],['Time',c.return_time||'08:00'],['Location',c.return_location||'Go Rent Office, 6 Diehl Str, Windhoek']].map(([l,v],i)=>
-        `<div style="padding:7px 8px;${i<2?'border-right:1px solid #ccc;':''}"><div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:2px;">${l}</div><div style="font-size:14px;font-weight:600;min-height:18px;">${v||''}</div></div>`
+        `<div style="padding:7px 8px;${i<2?'border-right:1px solid #ccc;':''}"><div style="${LBL}">${l}</div><div style="font-size:14px;font-weight:600;min-height:18px;">${v||''}</div></div>`
       ).join('')}
     </div>
   </div>
-  <div style="font-size:13px;color:#555;margin-bottom:12px;">The vehicle remains sole property of Go Rent at all times. GR may recover it immediately on material breach.</div>
+  <div style="${P}">The vehicle remains the property of Go Rent at all times. If this agreement is seriously breached, Go Rent may take the vehicle back immediately.</div>
 
-  <div style="font-size:14px;font-weight:700;margin-bottom:4px;">1.5 ADDITIONAL DRIVERS</div>
-  <div style="font-size:13px;color:#333;margin-bottom:6px;line-height:1.5;">
-    Only persons listed below — plus the Renter — may drive the vehicle. Each must present a valid licence at pick-up. The Renter remains fully liable for any breach by an additional driver.<br>
-    ${(c.extra_driver_fee!==undefined&&c.extra_driver_count&&c.extra_driver_fee===c.extra_driver_count*280)?'Go Rent charges <strong>N$280.00 per additional driver</strong> (once-off fee per rental period), payable at vehicle collection.':(EXTRA_DRIVER_FREE?(EXTRA_DRIVER_FREE===1?'The first additional driver is <strong>free</strong>. ':'The first '+EXTRA_DRIVER_FREE+' additional drivers are <strong>free</strong>. '):'')+'Go Rent charges an <strong>admin fee of N$'+EXTRA_DRIVER_FEE+'.00 for each '+(EXTRA_DRIVER_FREE?'further ':'')+'additional driver</strong> (once-off fee per rental period), payable at vehicle collection.'}
+  <div style="${H3}">1.5 Additional drivers</div>
+  <div style="${P}">
+    Only you and the drivers listed below may drive the vehicle. Each driver must show a valid licence at pick-up. You remain responsible if an additional driver breaks the rules of this agreement.<br>
+    ${(c.extra_driver_fee!==undefined&&c.extra_driver_count&&c.extra_driver_fee===c.extra_driver_count*280)?'Go Rent charges <strong>N$280.00 per additional driver</strong> (once-off fee per rental period), payable at vehicle collection.':(EXTRA_DRIVER_FREE?(EXTRA_DRIVER_FREE===1?'The first additional driver is <strong>free</strong>. ':'The first '+EXTRA_DRIVER_FREE+' additional drivers are <strong>free</strong>. '):'')+'Each '+(EXTRA_DRIVER_FREE?'further ':'')+'additional driver costs a once-off <strong>admin fee of N$'+EXTRA_DRIVER_FEE+'.00</strong>, payable at collection.'}
   </div>
   ${addlDrivers}
   ${(function(){
@@ -12280,294 +12289,250 @@ function buildContractHTML(c,sigUrl){
     if(!amt)return '<div style="margin-top:6px;padding:8px 10px;border:1px solid #145c30;border-radius:4px;background:#f2f9f4;font-size:13px;"><strong>Additional driver fee:</strong> none — the first additional driver is free.</div>';
     var tot='N$ '+amt.toFixed(2);
     return '<div style="margin-top:6px;padding:8px 10px;border:1px solid #145c30;border-radius:4px;background:#f2f9f4;font-size:13px;">'
-      +'<strong>Additional driver fee:</strong> '+(old?'':'first driver free, ')+k+' \u00d7 N$'+unit+'.00 = <strong>'+tot+'</strong> (once-off) \u2014 '
+      +'<strong>Additional driver fee:</strong> '+(old?'':'first driver free, ')+k+' × N$'+unit+'.00 = <strong>'+tot+'</strong> (once-off) — '
       +(paid?'<span style="color:#145c30;font-weight:700;">received at collection</span>':'<span style="color:#b91c1c;font-weight:700;">payable at collection</span>')
       +'</div>';
   })()}
 
   <!-- 2. INSURANCE -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:16px 0 10px;">2. INSURANCE OPTIONS &amp; SECURITY DEPOSITS
-    <span style="float:right;font-size:13px;font-weight:700;background:#111;color:#fff;padding:3px 10px;border-radius:3px;letter-spacing:.5px;">FOR OFFICE USE ONLY</span>
+  <div style="${H2}">2. Insurance options &amp; security deposits
+    <span style="float:right;font-size:12px;font-weight:700;background:#1f4e3d;color:#fff;padding:3px 10px;border-radius:3px;letter-spacing:.3px;">FOR OFFICE USE</span>
   </div>
+  <div style="${P}">One insurance option is compulsory. The security deposit is your share of the cost if there is damage. It is paid online through a secure Adumo payment link, and refunded the same way within 7 days after return if there is no damage.</div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;background:#e3f4e8;border:2px solid #000;border-radius:6px;padding:10px;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;background:#f4f9f6;border:1px solid #bcd3c6;border-radius:6px;padding:10px;">
     <div>
       <!-- Option 1 -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='1'?'#f0f9f4;border-color:#1e8449':'#fff'};">
+      <div style="${OPT}background:#fff;${c.insurance_option==='1'?OPTON:''}">
         ${chkBox(c.insurance_option==='1')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 1 – Basic Cover</strong> | N$${plN(ctInsRate('1'))}/day | Security deposit N$45,000 — refunded 7 days after return if no damage.</div>
+        <div style="font-size:11px;line-height:1.5;"><strong>Option 1 – Basic Cover</strong> | N$${plN(ctInsRate('1'))}/day | Security deposit N$45,000.</div>
       </div>
       <!-- Option 2 -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='2'?'#f0f9f4;border-color:#1e8449':'#fff'};">
+      <div style="${OPT}background:#fff;${c.insurance_option==='2'?OPTON:''}">
         ${chkBox(c.insurance_option==='2')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 2 – Extended Cover</strong> | N$${plN(ctInsRate('2'))}/day | Security deposit N$30,000 — refunded 7 days after return if no damage.</div>
+        <div style="font-size:11px;line-height:1.5;"><strong>Option 2 – Extended Cover</strong> | N$${plN(ctInsRate('2'))}/day | Security deposit N$30,000.</div>
       </div>
       <!-- Option 3 -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.insurance_option==='3'?'#f0f9f4;border-color:#1e8449':'#fff'};">
+      <div style="${OPT}background:#fff;${c.insurance_option==='3'?OPTON:''}">
         ${chkBox(c.insurance_option==='3')}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Option 3 – Premium Cover (Zero Excess on Covered Claims)</strong> | N$${plN(ctInsRate('3'))}/day | No excess payable on claims that fall within cover. Sections 3 and 5 exclusions still apply regardless of option chosen.</div>
+        <div style="font-size:11px;line-height:1.5;"><strong>Option 3 – Premium Cover (zero excess on covered claims)</strong> | N$${plN(ctInsRate('3'))}/day | No excess on claims that fall within the cover.</div>
       </div>
     </div>
     <div>
       <!-- Windscreen add-on -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;margin-bottom:5px;border:1px solid #ccc;border-radius:4px;background:${c.addon_windscreen?'#f0f9f4;border-color:#1e8449':'#fff'};">
+      <div style="${OPT}background:#fff;${c.addon_windscreen?OPTON:''}">
         ${chkBox(!!c.addon_windscreen)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Add-On – Windscreen &amp; Tyre Cover</strong> | N$${plN(PL_TYRE)}/day | Optional. 1 windscreen per rental. Tyre cover: <strong>${tyreCover}</strong>. <span style="color:#c0392b;font-weight:700;">Rims always excluded.</span></div>
+        <div style="font-size:11px;line-height:1.5;"><strong>Add-on – Windscreen &amp; Tyre Cover</strong> (optional) | N$${plN(PL_TYRE)}/day | Covers 1 windscreen per rental and <strong>${tyreCover}</strong> (1 tyre for rentals up to 21 days, 2 tyres for longer rentals). Rims are not included.</div>
       </div>
       <!-- Cross-border -->
-      <div style="display:flex;align-items:flex-start;gap:6px;padding:7px 8px;border:1px solid #ccc;border-radius:4px;background:${c.cross_border?'#f0f9f4;border-color:#1e8449':'#fff'};">
+      <div style="${OPT}background:#fff;${c.cross_border?OPTON:''}">
         ${chkBox(!!c.cross_border_deposit)}
-        <div style="font-size:10.5px;line-height:1.5;"><strong>Remote Collection &amp; Cross-Border Damage Deposit (N$30,000.00) received</strong>
+        <div style="font-size:11px;line-height:1.5;"><strong>Remote collection &amp; cross-border deposit (N$30,000.00) received</strong>
         ${c.cross_border?`<br><span style="color:#1e8449;font-weight:700;">✓ Authorised: ${c.cross_border}</span>`:''}
-        <br><span style="font-size:9.5px;color:#555;">(if applicable — see Section 6.2.2 for travel into Botswana or other neighbouring countries)</span></div>
+        <br><span style="font-size:10px;color:#555;">Only if applicable – see section 6.2.2.</span></div>
       </div>
     </div>
   </div>
-
-  <div style="background:#fff8e6;border:1px solid #e8a000;border-radius:4px;padding:9px 12px;margin-bottom:14px;font-size:10.5px;line-height:1.6;">
-    <strong>IMPORTANT:</strong> Regardless of which insurance option is selected, certain damage events are NEVER covered. See Sections 3 and 5 for the full exclusion list.
-    Signing confirms you have read and understood. Botswana and other countries outside Namibia carry their own additional deposit and rules — see Section 6.2.
-  </div>
+  <div style="${NOTE}"><strong style="${NB}">Please note:</strong> whichever option you choose, some types of damage are not covered by any insurance. These are listed in sections 3 and 5 and are paid by the renter. Travel outside Namibia has its own deposit and rules (section 6.2).</div>
 
   ${ini()}
 
-  <!-- 3. EXCLUSIONS SUMMARY -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">3. VEHICLE INSURANCE EXCLUSIONS — ALWAYS THE RENTER'S COST</div>
-  <div style="border:1px solid #e74c3c;border-radius:4px;padding:9px 12px;margin-bottom:12px;font-size:13px;line-height:1.7;background:#fdf5f5;">
-    <div style="font-weight:700;margin-bottom:5px;">The following damage is NEVER covered under any insurance option. The Renter pays all repair, replacement, and recovery costs in full:</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
-      <div>• Windscreen — only covered with optional Tyre &amp; Windscreen add-on<br>
-      • Side windows, rear windows, canopy windows — never covered<br>
-      • Mirrors (side mirrors) — never covered<br>
-      • Excessive scratches — trees, branches, bush, or vegetation<br>
-      • <strong style="color:#c0392b;">Rims — excluded from all cover.</strong> Renter pays full replacement value at OEM product cost for any rim damage<br>
-      • Steering damage — potholes, rocks, kerbs, or off-road driving<br>
-      • <strong style="color:#c0392b;">Missing rims</strong>, missing tyres, or lost / stolen spare wheels — full OEM replacement value<br>
-      • Tyres — beyond the add-on limit (1 tyre for rentals up to 21 days; 2 tyres for rentals longer than 21 days)</div>
-      <div>• Sandblast / sandstorm damage to paint or glass<br>
-      • Single-vehicle accidents (rollovers, collisions with animals or objects)<br>
-      • Stationary objects — walls, poles, gates, trees, rocks<br>
-      ${ctCampingBooked()?'• Lost or damaged camping gear<br>':''}
-      • Tyre blowout vehicle damage — blowouts, loose lug nuts, broken wheel studs, or jack misuse<br>
-      • Negligence or vehicle misuse (see Section 5)</div>
-    </div>
-    <div style="font-size:13px;color:#888;margin-top:4px;">See Section 5 for the comprehensive exclusion and void-insurance conditions.</div>
+  <!-- 3. NOT COVERED -->
+  <div style="${H2}margin-top:0;">3. What the insurance does not cover</div>
+  <div style="${P}">The following is not covered by any insurance option. If it happens, you pay the repair, replacement and recovery costs:</div>
+  <div style="${COLS}">
+    <div>• Windscreen – unless you took the Windscreen &amp; Tyre add-on<br>
+    • Side, rear and canopy windows<br>
+    • Side mirrors<br>
+    • Rims – any rim damage is charged at the OEM replacement price<br>
+    • Missing rims or tyres, or lost or stolen spare wheels – OEM replacement price<br>
+    • Tyres beyond the add-on limit (1 tyre up to 21 days, 2 tyres for longer rentals)<br>
+    • Steering damage from potholes, rocks, kerbs or off-road driving</div>
+    <div>• Scratches from trees, branches, bush or other vegetation<br>
+    • Sandblast or sandstorm damage to paint or glass<br>
+    • Single-vehicle accidents – rollovers, or hitting animals or objects<br>
+    • Hitting stationary objects – walls, poles, gates, trees, rocks<br>
+    • Damage after a tyre blowout, loose wheel nuts, broken wheel studs or incorrect use of the jack<br>
+    ${ctCampingBooked()?'• Lost or damaged camping equipment<br>':''}
+    • Negligence or misuse of the vehicle (section 5.3)</div>
   </div>
+  <div style="font-size:12.5px;color:#666;margin-bottom:10px;">Section 5 gives the full details.</div>
 
   <!-- 4. SPEED LIMITS -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">4. SPEED LIMITS, TRAFFIC LAWS &amp; GPS TRACKER</div>
-  <div style="font-size:13px;margin-bottom:6px;"><strong>4.1 GR CONTRACT SPEED LIMITS</strong> — Go Rent contractual speed limits take precedence over posted road signs. The Renter must keep to them at all times.</div>
+  <div style="${H2}">4. Speed limits, traffic laws &amp; GPS</div>
+  <div style="${H3}">4.1 Go Rent contract speed limits</div>
+  <div style="${P}">These limits are part of our insurance conditions and apply even where road signs allow a higher speed.</div>
   <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
-    <tr style="background:#111;color:#fff;"><th style="padding:5px 10px;text-align:left;font-weight:700;">Road Type</th><th style="padding:5px 10px;text-align:right;font-weight:700;">GR Contract Limit</th></tr>
-    ${[['Town / Built-up area','60 km/h'],['Gravel road (good condition)','80 km/h'],['Gravel road (corrugated / poor condition)','60 km/h'],['National tarred highway','120 km/h'],['Safari / 8-seater','100 km/h'],['4x4 High Range (off-road)','60 km/h'],['4x4 Low Range (off-road)','10 km/h'],['National Parks','40 km/h']].map((r,i)=>
+    <tr style="background:#1f4e3d;color:#fff;"><th style="padding:5px 10px;text-align:left;font-weight:700;">Road type</th><th style="padding:5px 10px;text-align:right;font-weight:700;">Limit</th></tr>
+    ${[['Town / built-up area','60 km/h'],['Gravel road – good condition','80 km/h'],['Gravel road – corrugated or poor condition','60 km/h'],['National tarred highway','120 km/h'],['Safari / 8-seater','100 km/h'],['4x4 High Range (off-road)','60 km/h'],['4x4 Low Range (off-road)','10 km/h'],['National parks','40 km/h']].map((r,i)=>
       `<tr style="background:${i%2?'#f9f9f9':'#fff'}"><td style="padding:4px 10px;border-bottom:1px solid #eee;">${r[0]}</td><td style="padding:4px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:700;">${r[1]}</td></tr>`
     ).join('')}
   </table>
-  <div style="background:#fdf5f5;border:1px solid #e74c3c;border-radius:4px;padding:8px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;">
-    <strong>SPEEDING AND YOUR INSURANCE:</strong> Speeding is the main cause of accidents and rollovers on Namibian roads. Exceeding the speed limit by a small margin does not by itself cancel the insurance; GR does not cancel cover for speeding alone. However, in the event of an accident, the insurance company, which monitors the vehicle's speed by GPS, may at its sole discretion reject the claim and cancel the insurance cover on the vehicle if the vehicle was speeding. The Renter is then personally liable for the damage. GR treats GPS data as primary evidence of the vehicle's speed.
-  </div>
-  <div style="font-size:13px;color:#333;margin-bottom:12px;line-height:1.6;">
-    <strong>4.2 GPS TRACKING &amp; EVIDENCE</strong><br>
-    • Vehicle fitted with GPS recording speed, location, and route data at all times.<br>
-    • By signing, you consent to this monitoring.<br>
-    • GR reserves the right to share GPS data with insurers, law enforcement, and courts.<br>
-    • The insurance company has access to the GPS data and may use it when assessing any accident claim.<br>
-    • GR treats GPS data as primary evidence for the vehicle's speed, no-go area entry, or insurance void, subject to the Renter's right to dispute its accuracy.<br>
-    <strong>4.3 NAMIBIAN TRAFFIC LAWS — MANDATORY COMPLIANCE</strong><br>
-    Failure to comply with Namibian traffic laws may void insurance and may result in additional penalties (for speeding, Section 4.1 applies):<br>
-    • Drive on the LEFT-hand side at all times. • Seatbelts mandatory for all occupants. • Zero blood-alcohol tolerance under GR policy (stricter than Namibian law). • Stop signs and red traffic lights must be obeyed — ignoring them voids insurance. • Overtaking prohibited on blind rises, curves, or restricted visibility. • No mobile phone use while driving (hands-free excepted). • <strong>Headlights ALWAYS on when driving, regardless of time of day or visibility.</strong><br>
-    <strong>4.4 TRAFFIC FINES</strong><br>
-    Any official traffic fine is the Renter's sole responsibility. An additional N$450 administration fee per fine is charged by GR for processing.<br>
-    <strong>4.5 SOUTHERN AFRICA — INSURANCE NOTE</strong><br>
-    Southern Africa does not require comprehensive vehicle insurance by law. Many local vehicles carry no coverage at all.
-  </div>
-  <div style="background:#fff8e6;border:1px solid #e8a000;border-radius:4px;padding:8px 12px;margin-bottom:14px;font-size:13px;line-height:1.5;font-weight:700;">
-    IMPORTANT: Namibian insurance covers TWO-VEHICLE COLLISIONS ONLY — both vehicles identifiable. It is NOT fully comprehensive, and must not be confused with the "fully comprehensive" or "all-inclusive" cover common in Europe and other countries — cover here is materially narrower. It does NOT cover single-vehicle incidents, negligence, rollovers, hitting animals or objects, getting stuck, incorrect drive mode selection, or any event in Sections 3 and 5.1 — regardless of insurance option. All such events are entirely the Renter's cost and defined as negligence under Section 5.3.
-  </div>
+  <div style="${NOTE}"><strong style="${NB}">Speed and your insurance:</strong> speeding is the main cause of accidents and rollovers on Namibian roads. Our insurer monitors the vehicle's speed by GPS. If repeated speeding is detected, or the vehicle was speeding at the time of an accident, the insurer may cancel the insurance cover and reject the claim. You would then pay for the damage to the vehicle.</div>
+  <div style="${H3}">4.2 GPS tracking</div>
+  <div style="${P}">• The vehicle records speed, location and route by GPS at all times. By signing, you agree to this.<br>
+    • Our insurer has access to the GPS data and may use it when assessing a claim.<br>
+    • Go Rent may share GPS data with insurers, law enforcement and courts.<br>
+    • GPS data is the main evidence of the vehicle's speed and of entry into a No-Go area. You keep the right to dispute its accuracy.</div>
+  <div style="${H3}">4.3 Namibian traffic laws</div>
+  <div style="${P}">Breaking a Namibian traffic law may void the insurance cover and may lead to further penalties. In particular: drive on the left at all times; seatbelts for everyone in the vehicle; no alcohol at all while driving (our rule is stricter than Namibian law); obey stop signs and red lights; no overtaking on blind rises, curves or with poor visibility; no phone use while driving, except hands-free; headlights on whenever you drive, day or night.</div>
+  <div style="${H3}">4.4 Traffic fines</div>
+  <div style="${P}">Traffic fines are paid by the renter. We add an admin fee of N$450 per fine for processing it.</div>
+  <div style="${H3}">4.5 How insurance works in Southern Africa</div>
+  <div style="${P}">Vehicle insurance is not compulsory in Southern Africa, and many local vehicles have none.</div>
+  <div style="${NOTE}"><strong style="${NB}">Good to know:</strong> Namibian vehicle insurance covers collisions between two vehicles where both vehicles can be identified, on marked and maintained roads. It is narrower than the "fully comprehensive" or "all-inclusive" cover common in Europe. It does not cover single-vehicle incidents, rollovers, hitting animals or objects, getting stuck, choosing the wrong drive mode, negligence, or anything listed in sections 3 and 5.1, whichever option you choose. These costs are paid by the renter and are treated as negligence under section 5.3.</div>
   ${ini()}
 
   <!-- 5. EXCLUSIONS DETAIL -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">5. DETAILED EXCLUSIONS &amp; RENTER RESPONSIBILITIES</div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:10px;">
-    <strong>5.1 EVENTS NOT COVERED BY INSURANCE</strong><br>
-    Insurance does NOT cover the following. The Renter pays the full cost plus a 20% administration fee. "Replacement Value" means the full cost to Go Rent of replacing the vehicle with an equivalent new or equivalent-condition unit, as determined by an independent Namibian dealer at the time of the incident. A vehicle that has rolled or been written off is treated as a total loss with no residual or salvage value deducted:
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;margin-top:4px;">
-      <div>• Vehicle overturned or written off — damage fee of 20% of Replacement Value (tow-in and admin fees additional)<br>
-      • Unauthorised areas — driving outside Namibia or prohibited zones without written GR approval<br>
-      • No driving after sunset — except within towns. Driving to lodges after sunset is prohibited.<br>
-      • Expired rental period — no coverage after the agreed return date<br>
-      • Burn damage — cigarettes, open flame, or any heat source<br>
-      • Roof, bonnet, or door misuse — standing on or placing excessive loads on panels<br>
-      • Rollovers — overturning the vehicle under any circumstances<br>
-      • Side windows, rear windows, canopy windows, side mirrors — never covered under any insurance option<br>
-      • <strong style="color:#c0392b;">Rim damage — rims are excluded from cover;</strong> bent, cracked, or kerbed rims are the Renter's full cost at OEM product replacement value<br>
-      • <strong style="color:#c0392b;">Missing rims</strong>, missing tyres, or lost / stolen spare wheels — full OEM replacement value per item</div>
-      <div>• Tyre damage beyond add-on limits — see Section 2 (1 tyre for rentals up to 21 days, 2 tyres for rentals longer than 21 days); any tyre beyond that limit is the Renter's full cost<br>
-      • Water crossing — any crossing deeper than axle depth, and in any case never deeper than 700mm (the Toyota Hilux manufacturer-specified maximum wading depth). Depth must be checked on foot before entering; damage from crossings beyond this depth is never covered<br>
-      • Sandstorm / sandblast damage to paint or glass<br>
-      • Personal belongings — theft or loss<br>
-      • Interior damage beyond normal wear<br>
-      • Rooftop tent misuse — driving with tent open or partially open unless formally extended<br>
-      ${ctCampingBooked()?'• Camping equipment — loss or damage to any provided gear (paid by the renter)<br>':''}
-      • Mechanical misuse — gearbox or engine damage from incorrect operation<br>
-      • Undercarriage &amp; body damage — from off-road collisions or driving over rocks<br>
-      • Scratches &amp; paint damage from vegetation — trees, branches, thorns, bush contact<br>
-      • Lost keys — N$6,500 plus any travel or courier costs<br>
-      • Wrong fuel type — using incorrect fuel (e.g. petrol in diesel) voids all cover<br>
-      • Accidents that occur within rest camps, campsites, lodge or hotel premises<br>
-      • Accidents without a police report — this always stays the Renter's/client's responsibility</div>
-    </div>
+  <div style="${H2}margin-top:0;">5. Exclusions &amp; your responsibilities</div>
+  <div style="${H3}">5.1 Events not covered by insurance</div>
+  <div style="${P}">For the events below, you pay the full cost plus a once-off administration fee of N$5,000. "Replacement value" means what it costs Go Rent to replace the vehicle with an equivalent new or equivalent-condition vehicle, as set by an independent Namibian dealer at the time of the incident. A vehicle that has rolled or been written off is treated as a total loss, with no salvage value deducted.</div>
+  <div style="${COLS}">
+    <div>• Vehicle overturned or written off – your share is 20% of the replacement value (not the full value), plus tow-in and admin fees<br>
+    • Rollovers, in any circumstances<br>
+    • Driving outside Namibia, or in prohibited areas, without written approval from Go Rent<br>
+    • Driving after sunset outside towns, including driving to a lodge after dark<br>
+    • Anything that happens after the agreed return date<br>
+    • Burns from cigarettes, flames or any heat source<br>
+    • Standing on, or putting heavy loads on, the roof, bonnet or doors<br>
+    • Side, rear and canopy windows, and side mirrors<br>
+    • Rim damage (bent, cracked or kerbed rims) – OEM replacement price<br>
+    • Missing rims or tyres, or lost or stolen spare wheels – OEM replacement price per item<br>
+    • Tyres beyond the add-on limit in section 2<br>
+    • Water crossings deeper than axle depth, and in any case deeper than 500 mm. Always check the depth on foot first.</div>
+    <div>• Sandstorm or sandblast damage to paint or glass<br>
+    • Theft or loss of personal belongings<br>
+    • Interior damage beyond normal wear<br>
+    • Driving with the rooftop tent open or partly open, or with its cover not properly fastened<br>
+    ${ctCampingBooked()?'• Loss of or damage to camping equipment<br>':''}
+    • Gearbox or engine damage from incorrect operation<br>
+    • Underbody and body damage from rocks or off-road collisions<br>
+    • Scratches and paint damage from trees, branches, thorns or bush<br>
+    • Lost keys – N$6,500 plus any travel or courier costs<br>
+    • Wrong fuel (e.g. petrol in a diesel) – this may also void the insurance cover<br>
+    • Accidents in rest camps, campsites, or lodge or hotel grounds<br>
+    • Any accident without a police report</div>
   </div>
-  <div style="font-size:13px;font-weight:700;margin-bottom:4px;">5.2 VOID INSURANCE CONDITIONS — INSURANCE CANCELLED IMMEDIATELY</div>
-  <div style="background:#fdf5f5;border:1px solid #e74c3c;border-radius:4px;padding:8px 12px;margin-bottom:6px;font-size:13px;line-height:1.5;font-weight:700;">
-    CRITICAL — READ CAREFULLY: Any one of the following events immediately cancels ALL insurance cover, including Option 3 (Premium Cover). The Renter becomes personally liable for the full cost of ALL damage — even damage unrelated to the listed event.
+  <div style="background:#fafafa;border:1px dashed #bbb;border-radius:4px;padding:7px 10px;margin:4px 0 10px;font-size:12.5px;"><strong>Example:</strong> a single-vehicle accident causes N$20,000 of repairs. You pay the N$20,000 plus the N$5,000 admin fee, plus any towing.</div>
+
+  <div style="${H3}">5.2 What may void the insurance</div>
+  <div style="${NOTE}"><strong style="${NB}">Please read this carefully:</strong> any one of the events below may void all insurance cover, including Premium Cover. If the cover is voided, you pay the full cost of any damage to the vehicle, including damage that is not connected to the event.</div>
+  <div style="${COLS}">
+    <div>• Repeated speeding above the contract limits in section 4.1 (monitored by our insurer through the vehicle's GPS)<br>
+    • Driving under the influence of alcohol or drugs, at any level<br>
+    • Driving with an expired, suspended or unrecognised licence<br>
+    • Driving on sand dunes, beaches, off-piste or unmarked tracks<br>
+    • Driving into rivers, swamps, the sea or flooded areas<br>
+    • Ignoring red lights or stop signs<br>
+    • Entering areas of civil unrest or riots</div>
+    <div>• Towing a trailer or another vehicle<br>
+    • Transporting goods in breach of customs laws<br>
+    • An accident after sunset outside a town<br>
+    • Using 4x4 mode on tar or other hard surfaces<br>
+    • A driver not listed in section 1.5 driving the vehicle<br>
+    • Entering a No-Go area (section 6.1)<br>
+    • Commercial use – carrying passengers or goods for payment</div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;font-size:13px;line-height:1.6;margin-bottom:10px;">
-    <div>• Alcohol or drugs — driving under any level of influence<br>
-    • Invalid licence — expired, suspended, or not recognised in Namibia<br>
-    • Unmarked / prohibited roads — sand dunes, beaches, off-piste tracks<br>
-    • Water crossing — driving into rivers, swamps, sea, or flood areas<br>
-    • Ignoring traffic signals — red lights or stop signs<br>
-    • Civil unrest / riot areas — strictly prohibited</div>
-    <div>• Towing — towing any trailer or other vehicle<br>
-    • Customs law violations — vehicle may not transport goods in breach of customs laws<br>
-    • No driving after sunset — any accident after sunset outside a town not covered<br>
-    • 4x4 misuse — using 4x4 mode on tar or hard surfaces<br>
-    • Unauthorised driver — anyone not listed in Section 1.5 operating the vehicle<br>
-    • Driving in a No-Go area — see Section 6<br>
-    • Commercial use — vehicle may NOT convey passengers or goods for payment</div>
-  </div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:8px;">
-    <strong>5.3 NEGLIGENCE &amp; VEHICLE ABUSE</strong><br>
-    Negligence is any action a reasonable person would consider careless, improper, or contrary to manufacturer guidelines. All costs from negligence are the Renter's sole responsibility regardless of insurance cover selected.<br>
-    • Driving with rooftop tent open or unsecured.<br>
-    • Standing on, sitting on, or placing heavy loads on the bonnet, roof, doors, or tents.<br>
-    • Overloading the vehicle beyond its rated capacity.<br>
-    • Using the vehicle for commercial activity, racing, timed event, or off-road competition.<br>
-    • Failing to check tyre pressures before driving on sand, gravel, or tar.<br>
-    • Reversing into objects, trees, walls, or structures due to inattention.<br>
-    • Driving through vegetation causing scratches, paint damage, or broken mirrors.<br>
-    • Ignoring advice given at handover regarding 4x4 operation, tyre pressures, or road conditions.<br>
-    <strong>5.4 TYRE &amp; RIM — DAMAGE, LOSS &amp; PROCEDURE</strong>
-  </div>
-  <div style="background:#fff8e6;border:1px solid #e8a000;border-radius:4px;padding:8px 12px;margin-bottom:6px;font-size:13px;line-height:1.5;">
-    <strong style="color:#c0392b;">RIMS &amp; MISSING ITEMS — ALWAYS THE CLIENT'S COST: Rims are excluded from all cover.</strong> Rim damage, missing rims, missing tyres, and lost or stolen spare wheels are NEVER covered by any insurance option, including the Tyre &amp; Windscreen add-on. The Renter pays the full replacement value at OEM product cost per item, plus fitting and balancing costs.
-  </div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
-    • If tyre damaged: stop safely, fix puncture or replace with spare immediately.<br>
-    • Purchase a matching branded replacement tyre if the spare is used. Notify GR immediately.<br>
-    • <strong style="color:#c0392b;">Bent, cracked, scuffed, or kerbed rims — rims excluded from cover;</strong> full replacement value at OEM product cost per rim.<br>
-    • Any rim or tyre missing at vehicle return — full OEM replacement value per item.<br>
-    • <strong style="color:#c0392b;">Spare wheels — the Renter's responsibility.</strong> Both spare wheels are handed over present and locked. The Renter must check daily that both spares are still on the vehicle and keep them locked. A spare wheel (rim and tyre) lost or stolen during the rental is NOT covered by any insurance option and is charged at full OEM replacement value per wheel.<br>
-    • Fitting, balancing, and transport costs for rim/tyre replacement are the Renter's responsibility.<br>
-    <strong>5.5 SANDSTORM PROCEDURE</strong><br>
-    Slow down or pull over safely. Sandblasting damage to paint or glass is always excluded from insurance.<br>
-    <strong>5.6 THEFT OF VEHICLE</strong><br>
-    Theft covered ONLY if ALL four conditions are met: (1) Vehicle parked securely in a safe location. (2) All doors, windows, and canopy were locked. (3) Original GR keys retained by Renter. (4) Police report obtained within 24 hours. If any condition is not met, the Renter is liable for the full replacement value of the vehicle.<br>
-    <strong>5.7 POLICE REPORTS — MANDATORY (24-HOUR RULE)</strong><br>
-    A police report must be obtained within 24 hours of any accident, theft, or incident. Without a valid police report, no insurance claim can be processed and the Renter bears all costs.<br>
-    <strong>5.8 VEHICLE HANDOVER &amp; RETURN PROCEDURE</strong><br>
-    • A vehicle condition report is signed by both parties at handover. Damage not recorded is the Renter's liability.<br>
-    • The vehicle and all associated risk remain the Renter's responsibility until Go Rent formally records the return.<br>
-    • After-hours returns: keys must be secured. Risk continues with the Renter until next-business-day GR inspection.
-  </div>
+
+  <div style="${H3}">5.3 Negligence</div>
+  <div style="${P}">Negligence is anything a reasonable person would see as careless, improper or against the manufacturer's guidelines. Costs caused by negligence are paid by the renter, whichever insurance option you chose. Examples:<br>
+    • driving with the rooftop tent open, not secured, or with its cover not properly fastened;<br>
+    • standing, sitting or loading heavy items on the bonnet, roof, doors or tent;<br>
+    • overloading the vehicle;<br>
+    • commercial use, racing, timed events or off-road competitions;<br>
+    • not checking tyre pressures for sand, gravel or tar;<br>
+    • reversing into objects, trees, walls or buildings;<br>
+    • driving through vegetation that scratches the paint or breaks mirrors;<br>
+    • not following our handover advice on 4x4 use, tyre pressures or road conditions.</div>
+
+  <div style="${H3}">5.4 Tyres, rims &amp; spare wheels</div>
+  <div style="${P}">Rims are not covered by any insurance option, including the Windscreen &amp; Tyre add-on. Rim damage, and any rim, tyre or spare wheel missing at return, is charged at the OEM replacement price per item, plus fitting, balancing and transport.<br>
+    • If a tyre is damaged, stop safely and fix the puncture or fit the spare straight away.<br>
+    • If you use the spare, buy a matching branded replacement tyre and let us know straight away.<br>
+    • Both spare wheels are handed over present and locked. Please check daily that both are still on the vehicle and keep them locked. A spare wheel (rim and tyre) lost or stolen during the rental is not covered by insurance.</div>
+  <div style="${H3}">5.5 Sandstorms</div>
+  <div style="${P}">Slow down or pull over safely. Sandblast damage to paint or glass is not covered by insurance.</div>
+  <div style="${H3}">5.6 Theft of the vehicle</div>
+  <div style="${P}">Theft is covered only if all four of these apply: (1) the vehicle was parked in a safe place; (2) all doors, windows and the canopy were locked; (3) you still have the original Go Rent keys; and (4) a police report was made within 24 hours. If any of these does not apply, you are liable for the full replacement value of the vehicle.</div>
+  <div style="${H3}">5.7 Accidents: call us, and a police report within 24 hours</div>
+  <div style="${P}">Please call us straight away in the event of an accident or breakdown, and report every accident, theft or incident to the police within 24 hours. Without a police report the insurer cannot process a claim, and the renter carries all costs.</div>
+  <div style="${H3}">5.8 Handover &amp; return</div>
+  <div style="${P}">• We both sign a condition report at handover. Damage not recorded on it is the renter's responsibility.<br>
+    • The vehicle, and the risk for it, stay with you until Go Rent formally records the return.<br>
+    • After-hours returns: the keys must be left securely, and the risk stays with you until our inspection on the next business day.</div>
   ${ini()}
 
   <!-- 6. NO-GO AREAS -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">6. NO-GO AREAS &amp; TRAVEL OUTSIDE NAMIBIA</div>
-  <div style="font-size:13px;font-weight:700;margin-bottom:4px;">6.1 NAMIBIA — PROHIBITED NO-GO AREAS</div>
-  <div style="background:#fdf5f5;border:2px solid #e74c3c;border-radius:4px;padding:9px 12px;margin-bottom:6px;font-size:13px;line-height:1.6;">
-    <strong>THESE AREAS ARE ABSOLUTELY PROHIBITED. Entry into any of the highlighted No-Go areas listed in Section 6.1 — whether accidental or intentional — constitutes a serious breach and results in: a penalty of N$30,000 payable; immediate and permanent cancellation of ALL insurance cover; the Renter becomes personally liable for all damage, in addition to the penalty. GR treats GPS data as primary evidence of entry into a No-Go area. No exceptions.</strong><br>
-    <span style="font-size:12px;color:#555;">This N$30,000 penalty, and the immediate cancellation of insurance and personal liability that come with it, apply ONLY to entry into the No-Go areas listed below. They do not apply to other breaches of this Agreement — those are penalised under their own specific clauses elsewhere in this Agreement.</span>
+  <div style="${H2}margin-top:0;">6. No-Go areas &amp; travel outside Namibia</div>
+  <div style="${H3}">6.1 Namibia – No-Go areas</div>
+  <div style="${P}">For your own safety, the areas below may not be entered. They have no phone reception, no breakdown or recovery service and no ambulance access, so help can take days to arrive, and the terrain easily damages vehicles. For these reasons our insurers do not cover them. Entering any of them, whether on purpose or by accident, results in the immediate cancellation of all insurance cover for the remainder of the rental period, and you then pay for any damage to the vehicle. GPS data is the main evidence of entry.</div>
+  <div style="${COLS}">
+    <div>• Van Zyl's Pass<br>• Khaudum National Park<br>• Sandwich Harbour<br>• Sperrgebiet (Diamond Areas 1 &amp; 2)<br>• Skeleton Coast north of Möwe Bay</div>
+    <div>• Remote Damaraland backcountry (unmarked tracks)<br>• Diamond Coast / Bogenfels area<br>• Off-piste dunes near Walvis Bay and Swakopmund<br>• Driving on any beach<br>• Any unmarked road not gazetted or maintained by the Namibia Roads Authority (NRA)</div>
   </div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:10px;color:#c0392b;font-weight:700;">
-    • Van Zyl's Pass<br>• Khaudum National Park<br>• Sandwich Harbour<br>• Sperrgebiet (Diamond Area 1 &amp; 2)<br>• Skeleton Coast north of Möwe Bay<br>• Remote Damaraland backcountry (unmarked tracks)<br>• Diamond Coast / Bogenfels area<br>• Off-piste dunes near Walvis Bay and Swakopmund<br>• Driving on any beach<br>• Any unmarked road not gazetted / maintained by the Namibia Roads Authority (NRA)
-  </div>
-  <div style="border:2px solid #2c5aa0;border-radius:4px;padding:9px 12px;margin-bottom:10px;font-size:13px;line-height:1.6;">
-    <div style="font-weight:800;color:#2c5aa0;margin-bottom:4px;">6.2 BOTSWANA &amp; OTHER COUNTRIES — A SEPARATE SET OF RULES</div>
-    Travel into Botswana or any other country outside Namibia is treated entirely separately from Namibian travel and carries its own caution areas, its own deposit, and its own breakdown rule, all set out below. These rules apply in addition to — not instead of — the rest of this Agreement.<br>
-    <strong>6.2.1 Botswana — Travel With Caution (Permitted)</strong><br>
-    <span style="color:#b9770e;font-weight:700;">• Central Kalahari Game Reserve (CKGR)<br>• Moremi Game Reserve / Okavango Delta<br>• Savuti<br>• Makgadikgadi Pans<br>• Nxai Pans<br>• Cut lines and hunting areas with no maintained roads</span><br>
-    <span style="font-size:12px;"><strong>These Botswana areas are permitted but demanding:</strong> deep sand, heavy mud, water crossings and fragile salt pans, with little or no cellular coverage. The N$30,000 No-Go penalty in 6.1 does NOT apply here; instead the N$30,000 additional deposit (6.2.2) applies and all breakdown, towing and recovery costs are the Renter's responsibility (6.2.3).<br>
-    <strong>Other countries:</strong> South Africa — written itinerary submitted and approved before departure. Zimbabwe — Victoria Falls area only, with prior written approval, and only via Botswana: cross at the Kazungula border to Victoria Falls and return the same way. Zambia, Angola, or any other country not explicitly authorised in writing — PROHIBITED.</span><br>
-    <strong>6.2.2 Botswana &amp; Other Countries — Additional Deposit</strong><br>
-    <strong>A N$30,000 additional cross-border damage deposit is required</strong> before departure for any travel into Botswana or any other country outside Namibia. This deposit is in addition to the security deposit selected under Section 2 and any other deposits stated in this Agreement, and is refunded 7 days after return if no damage.<br>
-    <strong>6.2.3 Botswana &amp; Other Countries — Breakdowns Are the Renter's Responsibility</strong><br>
-    <strong>Because these areas are so remote</strong>, with little or no cellular coverage and significantly delayed response times, any mechanical breakdown, recovery, towing, or repair that occurs in Botswana or any other country outside Namibia is entirely the Renter's responsibility, including all associated costs. GR roadside assistance is limited strictly to within Namibia and does not extend to Botswana or any other country.<br>
-    • The Renter is responsible for arranging and paying for recovery and repair of the vehicle.<br>
-    • If the vehicle cannot be repaired on site, the Renter must, at the Renter's own cost, get the vehicle either to the nearest authorised Toyota dealership, or back within the borders of Namibia — whichever is reasonably achievable first.<br>
-    • Go Rent cannot supply a replacement vehicle in these areas.<br>
-    • Go Rent is not liable for any loss, cost, delay, or breakdown time lost as a result of a breakdown occurring in Botswana or any other country outside Namibia.<br>
-    See also "Vehicle Recovery Outside Namibia" below.<br>
-    <strong>6.2.4 Botswana &amp; Zimbabwe — Third-Party Cover / Road Permit</strong><br>
-    Namibian insurance cover does <strong>not</strong> automatically extend across these borders. It is the Renter's own responsibility to purchase any third-party insurance and/or road permit required by the country being entered (for example, the cross-border charge payable at the Botswana or Zimbabwe border post) before crossing. This is separate from, and in addition to, the N$30,000 additional deposit in 6.2.2 and the GR insurance option selected under Section 2. Go Rent takes no responsibility for a Renter turned back, fined, or delayed at a border post for not holding the required local cover or permit.<br>
-    <span style="font-size:12px;color:#555;">Road conditions note (all areas above): These areas involve deep sand, heavy mud (wet season), corrugated gravel, severe potholes, and water crossings. High-clearance 4x4 and an experienced driver are essential. A guided convoy is strongly recommended.</span><br>
-    <strong>VEHICLE RECOVERY OUTSIDE NAMIBIA</strong><br>
-    If the vehicle becomes undrivable outside Namibia, the Renter bears ALL costs to return it to Namibia: all towing and recovery fees, cross-border transport, import/export documentation, customs duties, and third-party charges. Go Rent accepts no liability for any cross-border recovery. GR roadside assistance is limited strictly to within Namibia.
-  </div>
+
+  <div style="${H3}">6.2 Botswana &amp; other countries</div>
+  <div style="${P}">Travel outside Namibia has its own rules, deposit and breakdown arrangements, set out below. They apply in addition to the rest of this agreement.<br>
+    <strong>Permitted:</strong> Botswana (see the caution areas below). South Africa, with a written itinerary approved before departure. Zimbabwe, Victoria Falls area only, with prior written approval and only via Botswana: cross at the Kazungula border to Victoria Falls and return the same way.<br>
+    <strong>Not permitted:</strong> Zambia, Angola, and any other country not approved by Go Rent in writing.</div>
+  <div style="${H3}">6.2.1 Botswana – travel with caution</div>
+  <div style="${P}">These areas are permitted but demanding, with deep sand, heavy mud, water crossings, fragile salt pans and little or no phone signal: Central Kalahari Game Reserve (CKGR); Moremi Game Reserve / Okavango Delta; Savuti; Makgadikgadi Pans; Nxai Pans; cut lines and hunting areas without maintained roads. The No-Go rule in 6.1 does not apply here; the cross-border deposit (6.2.2) and breakdown rule (6.2.3) do.</div>
+  <div style="${H3}">6.2.2 Cross-border deposit</div>
+  <div style="${P}">For any travel into Botswana or another country outside Namibia, an additional damage deposit of N$30,000 is required before departure. It is in addition to the deposit for your insurance option, and is refunded 7 days after return if there is no damage.</div>
+  <div style="${H3}">6.2.3 Breakdowns outside Namibia</div>
+  <div style="${P}">Our roadside assistance is available within Namibia only. Outside Namibia, phone signal is limited and help can take a long time to reach you, so we are unable to arrange recovery there. If the vehicle breaks down outside Namibia, the renter takes care of the following, at the renter's cost:<br>
+    • arranging recovery and repair of the vehicle (please contact us first, and we will gladly advise and help where we can);<br>
+    • if it cannot be repaired on site, bringing it to the nearest authorised Toyota dealer or back into Namibia, whichever is reasonably possible first;<br>
+    • if it cannot be driven, the costs of returning it to Namibia, such as towing and recovery, cross-border transport, import/export documents, customs duties and third-party charges.<br>
+    We are unable to supply a replacement vehicle outside Namibia. Go Rent is not liable for any loss, cost or delay caused by a breakdown outside Namibia, including the loss of the remainder of your trip and the cost of your own travel back to Namibia.</div>
+  <div style="${H3}">6.2.4 Third-party cover &amp; road permits</div>
+  <div style="${P}">Namibian insurance does not automatically extend across borders. You need to buy any third-party insurance or road permit required by the country you enter (for example the cross-border charge at the Botswana or Zimbabwe border) before crossing. This is separate from the N$30,000 deposit and your insurance option. Go Rent is not responsible if you are turned back, fined or delayed at a border for not having the required cover or permit.<br>
+    <span style="font-size:12px;color:#555;">Road conditions in these areas include deep sand, heavy mud in the wet season, corrugated gravel, severe potholes and water crossings. A high-clearance 4x4 and an experienced driver are essential, and a guided convoy is strongly recommended.</span></div>
   ${c.cross_border?`<div style="background:#f0f9f4;border:1px solid #1e8449;border-radius:4px;padding:8px 12px;margin-bottom:10px;font-size:13px;"><strong>✓ Authorised cross-border travel for this rental:</strong> ${c.cross_border}. Additional cross-border damage deposit of N$30,000 applies${c.cross_border_deposit?' and has been received':''}.</div>`:''}
 
   <!-- 7. FEES -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">7. RENTAL PERIOD, RETURN &amp; ADDITIONAL FEES</div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
-    Minimum rental: 24 hours (or part thereof). Mileage: unlimited unless stated otherwise in the quotation. Payment: Visa and Mastercard accepted. Security deposit is blocked (not banked) on the Renter's credit card — released within 48 hours of a clean return. Rates include VAT.<br>
-    <strong>7.1 OFFICE HOURS &amp; VEHICLE RETURN TIMES</strong><br>
-    GR office hours are 07:30 to 16:00, Monday to Friday. Returns on weekends or public holidays must be arranged with GR in advance. Should the Renter not return the vehicle within the agreed time, GR will charge an additional fee to receive the vehicle after hours.<br>
-    <strong>7.2 LATE RETURN</strong><br>
-    If returned after the agreed date and time, the Renter pays the daily rate PLUS N$3,500 per extra day or part thereof. Rental extensions must be requested at least 2 days before the agreed return date.<br>
-    <strong>7.3 EARLY RETURN</strong><br>
-    No refund or credit for early return under any circumstances.<br>
-    <strong>7.4 FUEL</strong><br>
-    The vehicle is handed over with a full tank of diesel (DIESEL ONLY) and must be returned filled up completely with diesel. Failure results in a N$250 fee plus shortfall fuel cost. No fuel deposit is taken. Wrong fuel (e.g. petrol in diesel) = negligence — Renter bears all repair and recovery costs.
-  </div>
+  <div style="${H2}">7. Rental period, return &amp; fees</div>
+  <div style="${P}">Minimum rental period 5 days. Unlimited kilometres unless the quotation says otherwise. Security deposits are paid online through a secure Adumo payment link and refunded the same way. All rates include VAT.</div>
+  <div style="${H3}">7.1 Office &amp; return times</div>
+  <div style="${P}">Office and return times are Monday to Friday 08:00 to 16:00, and Saturday 08:00 to 12:00. For Sundays, public holidays and after-hours returns, please make arrangements with us in advance. If the vehicle is not returned within the agreed time, an after-hours fee applies.</div>
+  <div style="${H3}">7.2 Late return</div>
+  <div style="${P}">If the vehicle is returned after the agreed date and time, you pay the daily rate plus N$3,500 for each extra day or part of a day. Please request any extension at least 2 days before the agreed return date.</div>
+  <div style="${H3}">7.3 Early return</div>
+  <div style="${P}">There is no refund or credit for returning the vehicle early.</div>
+  <div style="${H3}">7.4 Fuel</div>
+  <div style="${P}">The vehicle is handed over with a full tank of diesel (diesel only) and must be returned completely full of diesel. If not, a N$250 fee plus the cost of the missing fuel applies. No fuel deposit is taken. Using the wrong fuel is negligence, and you pay all repair and recovery costs.</div>
   ${ini()}
-  <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
-    <strong>7.5 CLEANLINESS &amp; FEES</strong><br>
-    Excessively dirty vehicle: N$1,750 valet fee. Heavy scratches requiring paint correction: N$3,500 polishing fee. No smoking or vaping inside the vehicle. Burn marks or ash damage: full interior repair cost. Unauthorised stickers, decals or signage: N$400 removal fee per item.<br>
-    <strong>7.6 CLAIMS HANDLING FEE</strong><br>
-    A N$5,000 claims handling fee (insurer's administrative fee) applies for each insurance claim submitted, regardless of fault.<br>
-    <strong>7.7 CANCELLATION POLICY</strong><br>
-    Cancellations made more than 30 days before the scheduled pick-up date receive a refund of 50% of the deposit paid. Cancellations made less than 30 days before the scheduled pick-up date are not refunded.
-  </div>
+  <div style="${H3}">7.5 Cleanliness</div>
+  <div style="${P}">No smoking or vaping in the vehicle. Very dirty vehicle: N$1,750 valet fee. Heavy scratches needing paint correction: N$3,500 polishing fee. Burn marks or ash damage: the full cost of interior repair.</div>
+  <div style="${H3}">7.6 Insurance claims</div>
+  <div style="${P}">A claims handling fee of N$5,000 (the insurer's administration fee) applies to each insurance claim, regardless of fault. For damage that is not covered (section 5.1), only the N$5,000 admin fee applies, not both.</div>
+  <div style="${H3}">7.7 Cancellation</div>
+  <div style="${P}">Cancellations more than 30 days before pick-up: 50% of the deposit paid is refunded. Cancellations less than 30 days before pick-up: no refund.</div>
 
   <!-- 8. BREAKDOWNS -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">8. BREAKDOWNS, TOWING &amp; ROADSIDE ASSISTANCE</div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
-    All GR vehicles are meticulously maintained prior to each rental. Mechanical breakdowns are not common but can happen, particularly in remote and off-road environments where response times may be significantly delayed. Go Rent shall not be held liable for any loss, inconvenience, additional expenses, missed connections, altered travel plans, accommodation costs, or any other direct or indirect damages arising from a vehicle breakdown. The Renter acknowledges and accepts this risk by signing this Agreement.<br>
-    <span style="font-size:12px;color:#555;">For breakdowns occurring in Botswana or any other country outside Namibia, see Section 6.2.3 — these are always the Renter's responsibility and cost.</span><br>
-    • The Renter must NOT tow or pull any vehicle or object with the rental vehicle.<br>
-    • In the event of a breakdown, call GR immediately. Do not arrange your own towing or repairs.<br>
-    • Only GR-approved recovery companies may be used. Unapproved towing or repairs invalidate all cover.<br>
-    • If the breakdown is excluded from insurance, the Renter pays all recovery, towing, and repair costs.
-  </div>
+  <div style="${H2}">8. Breakdowns, towing &amp; roadside assistance</div>
+  <div style="${P}">Our vehicles are carefully serviced before every rental. Breakdowns are rare but can happen, especially in remote areas where help may take some time to arrive. Go Rent is not liable for any loss, inconvenience, extra expenses, missed connections, changed travel plans, accommodation costs or other direct or indirect costs caused by a breakdown. By signing, you accept this risk. Breakdowns outside Namibia are covered in section 6.2.3.<br>
+    • In a breakdown, call Go Rent first. Please do not arrange your own towing or repairs.<br>
+    • Only Go Rent-approved recovery companies may be used. Towing or repairs we have not approved may void the insurance cover.<br>
+    • Never use the rental vehicle to tow or pull another vehicle or object.<br>
+    • If the cause of the breakdown is not covered by insurance, you pay the recovery, towing and repair costs.</div>
 
   <!-- 9. LIABILITY -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">9. LIABILITY, INDEMNITY &amp; GOVERNING LAW</div>
-  <div style="font-size:13px;line-height:1.6;margin-bottom:14px;">
-    <strong>9.1 ASSUMPTION OF RISK</strong><br>
-    Driving in Namibia and neighbouring countries involves inherent risks — remote areas, wildlife, extreme road and weather conditions. By signing, you voluntarily accept these risks.<br>
-    <strong>9.2 INDEMNITY &amp; HOLD HARMLESS</strong><br>
-    You agree to fully indemnify and hold harmless GO RENT 4X4 RENTALS AND TOURS CC from all claims, losses, damages, and legal actions arising from your use or an additional driver's use of the vehicle; any breach of this Agreement or violation of Namibian law; death, injury, or property damage caused by your negligence or misconduct.<br>
-    <strong>9.3 RELEASE OF LIABILITY</strong><br>
-    You release GR from liability for personal injury (including death) or property damage, except where caused by GR's own gross negligence as determined by a competent Namibian court.<br>
-    <strong>9.4 NO CONSEQUENTIAL DAMAGES</strong><br>
-    GR is not liable for indirect or consequential losses — including missed flights, accommodation costs, lost income, or tour bookings — under any circumstances.<br>
-    <strong>9.5 LOSS OF USE</strong><br>
-    If the Renter declines insurance and the vehicle is out of service for repairs, the Renter also pays GR's lost rental income at the daily rate for up to 60 days.<br>
-    <strong>9.6 PAYMENT BEFORE COLLECTION</strong><br>
-    The full rental amount and any security deposits must be paid before the vehicle is handed over to the Renter.<br>
-    <strong>9.7 GOVERNING LAW</strong><br>
-    This Agreement is governed by the laws of the Republic of Namibia. Disputes shall be heard in the Magistrate's Court or High Court of Namibia, Windhoek. If any provision is found invalid, all remaining provisions continue in full force.<br>
-    <strong>9.8 ENTIRE AGREEMENT</strong><br>
-    This document (and any signed addenda) constitutes the entire agreement between GR and the Renter. No verbal representations, promises, or prior agreements are binding. Variations are valid only in writing, signed by an authorised GR representative.<br>
-    <strong>9.9 PERSONAL INFORMATION &amp; DATA PROTECTION (POPIA)</strong><br>
-    The Renter consents to Go Rent processing personal information in compliance with Namibian data-protection legislation. Data is used solely for: rental administration, GPS monitoring and insurer communication. Go Rent will not sell or disclose personal information to third parties except as required by law or this Agreement.
-  </div>
+  <div style="${H2}">9. Liability &amp; legal terms</div>
+  <div style="${P}"><strong>9.1 Risks of travel.</strong> Driving in Namibia and neighbouring countries involves natural risks, such as remote areas, wildlife and demanding road and weather conditions. By signing, you accept these risks.<br>
+    <strong>9.2 Indemnity.</strong> You indemnify and hold harmless GO RENT 4X4 RENTALS AND TOURS CC against all claims, losses, damages and legal actions arising from your or an additional driver's use of the vehicle, any breach of this agreement or of Namibian law, or death, injury or property damage caused by your negligence or misconduct.<br>
+    <strong>9.3 Release of liability.</strong> You release Go Rent from liability for personal injury (including death) or damage to property, except where caused by Go Rent's own gross negligence as decided by a competent Namibian court.<br>
+    <strong>9.4 Indirect losses.</strong> Go Rent is not liable for indirect or consequential losses, such as missed flights, accommodation costs, lost income or tour bookings, in any circumstances.<br>
+    <strong>9.5 Loss of use.</strong> If you declined insurance and the vehicle is out of service for repairs, you also pay Go Rent's lost rental income at the daily rate for up to 60 days.<br>
+    <strong>9.6 Payment before collection.</strong> The full rental amount and any security deposits are paid before the vehicle is handed over.<br>
+    <strong>9.7 Governing law.</strong> This agreement is governed by the laws of the Republic of Namibia. Disputes are heard in the Magistrate's Court or High Court of Namibia in Windhoek. If any clause is found invalid, the rest of the agreement remains in force.<br>
+    <strong>9.8 Entire agreement.</strong> This document, with any signed addenda, is the entire agreement between Go Rent and the renter. Verbal statements, promises or earlier agreements are not binding. Changes are valid only in writing, signed by an authorised Go Rent representative.<br>
+    <strong>9.9 Personal information.</strong> You agree to Go Rent processing your personal information in line with Namibian data-protection law, only for rental administration, GPS monitoring and communication with insurers. Go Rent does not sell your information and shares it only where the law or this agreement requires.</div>
 
 
   <!-- FINANCIAL SUMMARY -->
-  <div style="border:2px solid #111;border-radius:4px;padding:12px;margin-bottom:16px;">
-    <div style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #111;padding-bottom:6px;margin-bottom:10px;">Financial Summary</div>
+  <div style="border:1px solid #1f4e3d;border-radius:4px;padding:12px;margin-bottom:16px;">
+    <div style="font-size:14px;font-weight:800;color:#1f4e3d;border-bottom:1px solid #1f4e3d;padding-bottom:6px;margin-bottom:10px;">Financial summary</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
       ${[
         ['Rental period', days?days+' days':'—'],
@@ -12578,27 +12543,27 @@ function buildContractHTML(c,sigUrl){
   </div>
 
   <!-- 10. SIGNATURES -->
-  <div style="font-size:15px;font-weight:800;border-bottom:2px solid #000;padding-bottom:3px;margin:0 0 10px;">10. DECLARATION &amp; SIGNATURES</div>
-  <div style="font-size:10.5px;margin-bottom:14px;line-height:1.6;">
-    By signing below, the Renter confirms that they have read, understood, and agree to all terms and conditions set out in this Agreement, including all insurance exclusions, speed limits, no-go area restrictions, and negligence provisions.
+  <div style="${H2}margin-top:0;">10. Declaration &amp; signatures</div>
+  <div style="${P}margin-bottom:14px;">
+    By signing below, you confirm that you have read and understood this agreement, that you had the opportunity to ask questions, and that you agree to all its terms, including the insurance exclusions, speed limits, No-Go areas and negligence provisions.
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;border:1px solid #ccc;border-radius:4px;overflow:hidden;">
     <div style="padding:8px 10px;border-right:1px solid #ccc;">
-      <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Renter Full Name</div>
+      <div style="${LBL}margin-bottom:4px;">Renter Full Name</div>
       <div style="font-size:14px;font-weight:700;min-height:20px;">${c.client_name||''}</div>
     </div>
     <div style="padding:8px 10px;border-right:1px solid #ccc;">
-      <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Date</div>
+      <div style="${LBL}margin-bottom:4px;">Date</div>
       <div style="font-size:14px;font-weight:700;min-height:20px;">${fD(c.pickup_date)}</div>
     </div>
     <div style="padding:8px 10px;">
-      <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:4px;">Place Signed</div>
+      <div style="${LBL}margin-bottom:4px;">Place Signed</div>
       <div style="font-size:14px;font-weight:700;min-height:20px;">${c.pickup_location||'Go Rent Office, 6 Diehl Str, Windhoek'}</div>
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;padding-top:14px;border-top:2px solid #000;">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;padding-top:14px;border-top:2px solid #1f4e3d;">
     <div>
       <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:#555;margin-bottom:6px;">Renter Signature</div>
       <div style="border:1px solid #ccc;border-radius:4px;min-height:64px;padding:4px 8px;display:flex;align-items:center;justify-content:center;background:#fafafa;">
@@ -12614,14 +12579,15 @@ function buildContractHTML(c,sigUrl){
     <div>
       <div style="min-height:64px;display:flex;align-items:flex-end;"><img src="${GR_SIG}" alt="Go Rent signature" style="max-height:64px;max-width:100%;display:block;"></div>
       <div style="font-size:13px;font-weight:700;text-transform:uppercase;color:#555;margin-top:6px;">For and on behalf of GO RENT 4X4 RENTALS AND TOURS CC</div>
-      <div style="font-size:13px;color:#888;font-weight:600;text-transform:uppercase;margin-top:8px;">Authorised Representative Name</div>
+      <div style="${LBL}margin-top:8px;">Authorised Representative Name</div>
       <div style="font-size:14px;font-weight:700;min-height:20px;border-bottom:1px solid #ccc;padding-bottom:3px;">${c.staff_signed_by||((typeof co!=='undefined'&&co&&co.contractBy)||'')}</div>
     </div>
   </div>
 
   ${ini()}
   <div style="text-align:center;margin-top:16px;padding-top:10px;border-top:1px solid #ccc;font-size:13px;color:#777;">
-    GO RENT 4X4 RENTALS AND TOURS CC · CC/2021/04371 · Windhoek, Namibia · gorent4x4.com · WhatsApp: +264 81 861 8085
+    GO RENT 4X4 RENTALS AND TOURS CC · CC/2021/04371 · 6 Diehl Street, Windhoek, Namibia · www.4x4namibia.rentals · WhatsApp: +264 81 861 8085 / +264 81 858 1750<br>
+    <span style="font-size:11px;">Terms V6.11 (5 Nov 2026)</span>
   </div>
 </div>`;
 }
