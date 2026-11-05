@@ -713,6 +713,7 @@ async function rtApply(){
       try{var _ov=document.getElementById('page-ov');if(_ov&&_ov.classList.contains('on'))renderOV();}catch(e){}   // Needs action: "paid now — ready to release"
     }
     if(t.bookings||t.vehicles||t.vehicle_discs||t.booking_overrides||t.checkouts||t.checkins||t.rental_contracts||t.service_history||t.tyre_history)await autoRefresh(false);
+    if(t.quotes&&!t.bookings){try{await loadCover();if(co&&co.v&&!co._done&&!co.contractSigned){drawCO();try{ctAskRefresh();}catch(e){}}}catch(e){}}   // insurance from the Desktop APP
     if(t.app_settings){try{loadDriverPrices();}catch(e){}try{loadRetPapers();}catch(e){}}
   }catch(e){}
 }
@@ -1956,7 +1957,7 @@ function bkToVeh(b,vr,today){
   return {bid:String(b.id),b:b,fn:b.fleet_no||'',reg:vr.registration||'',cl:b.client||'',pu:b.pickup_date,rt:b.return_date,
     quote:b.quote||'',pax:pax,xb:(b.cross_border&&b.cross_border!=='None')?b.cross_border:null,wifiReq:b.wifi_device==='Yes',
     puLocation:b.pickup_loc||'Windhoek',doLocation:b.dropoff_loc||'Windhoek',
-    flightIn:_fmtFlight(b.arrival_flight,'arr'),flightOut:_fmtFlight(b.departure_flight,'dep'),
+    flightIn:_fmtFlight(b.arrival_flight,'arr'),flightOut:_fmtFlight(b.departure_flight,'dep'),flightInDate:b.arrival_flight_date||'',flightOutDate:b.departure_flight_date||'',
     transfer:(inc||cli)?tr:'',transferPays:inc?'included':(cli?'client':''),location:b.pickup_loc||'',
     email:b.email||'',phone:b.phone||'',
     camping:camping,tent:camping,extraFuel:b.extra_fuel==='Yes',sleepingBags:camping?pax:0,fridge:camping,
@@ -2018,6 +2019,7 @@ async function loadBookings(){
       });
     }catch(e){}
     try{await loadRemoteDrafts();}catch(e){}
+    try{await loadCover();}catch(e){}
     BOOKINGS_LOADED=true;
     return true;
   }catch(e){console.warn('loadBookings',e);return false;}
@@ -4219,18 +4221,26 @@ function miniBox(title,val,onOk,onBad,okLbl,badLbl){
 // (3 hours before departure, on the half hour, never before 07:00)
 function hoSetTime(t){co.returnTime=t;saveCOProgress();drawCO();}
 function hoQuickTimes(v,inline){
-  var opts=['08:00','10:00','12:00','14:00','16:00'],sug='',fl='';
+  var opts=['08:00','10:00','12:00','14:00','16:00'],sug='',fl='',note='';
   try{
-    var m=String((v&&v.flightOut)||'').match(/(\d{1,2}):(\d{2})/);
-    if(m){fl=('0'+m[1]).slice(-2)+':'+m[2];var mins=(+m[1])*60+(+m[2])-180;mins=Math.min(16*60,Math.max(7*60+30,Math.floor(mins/30)*30));   // inside office hours 07:30–16:00
-      sug=('0'+Math.floor(mins/60)).slice(-2)+':'+('0'+(mins%60)).slice(-2);}
+    // the booking as the Desktop APP has it now (a job's own copy of the vehicle can be older)
+    var fv=(v&&v.bid&&FLEET.filter(function(x){return x.bid===v.bid;})[0])||v||{};
+    var m=String(fv.flightOut||'').match(/(\d{1,2}):(\d{2})/),fd=fv.flightOutDate||'',rt=fv.rt||(v&&v.rt)||'';
+    if(m){fl=('0'+m[1]).slice(-2)+':'+m[2];var raw=(+m[1])*60+(+m[2])-180;
+      var dl=function(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});}catch(e){return d;}};
+      if(fd&&rt&&fd>rt)note='✈ Flight home '+fl+' on '+dl(fd)+' — after the return day, so no time from the flight';   // owner 5 Nov 2026: use the flight's date
+      else if(fd&&rt&&fd<rt)note='⚠ The Desktop APP has the flight home ('+dl(fd)+') before the return — ask the office';
+      else if(raw<7*60+30)note='⚠ Flight home '+fl+' on the return day is too early — the vehicle must come back the day before. Ask the office.';
+      else{var mins=Math.min(16*60,Math.floor(raw/30)*30);   // inside office hours, 24-hour times
+        sug=('0'+Math.floor(mins/60)).slice(-2)+':'+('0'+(mins%60)).slice(-2);}}
   }catch(e){}
   var b=function(t,lbl,hl){var on=co.returnTime===t;
     return '<button onclick="hoSetTime(\''+t+'\')" style="padding:7px 10px;border-radius:8px;font-size:13px;font-weight:900;cursor:pointer;touch-action:manipulation;'
       +(on?'border:2px solid var(--gb);background:var(--se);color:#fff;':hl?'border:2px solid #7c3aed;background:#f3e8ff;color:#4c1d95;':'border:2px solid var(--g3);background:var(--g0);color:var(--tx);')+'">'+lbl+'</button>';};
   return '<div style="display:flex;flex-wrap:wrap;gap:6px;'+(inline?'':'margin-top:8px;')+'">'
     +(sug?b(sug,'✈ '+sug+' <span style="font-weight:700;font-size:11px;">(flight '+fl+')</span>',true):'')
-    +opts.filter(function(t){return t!==sug;}).map(function(t){return b(t,t,false);}).join('')+'</div>';
+    +opts.filter(function(t){return t!==sug;}).map(function(t){return b(t,t,false);}).join('')+'</div>'
+    +(note?'<div style="margin-top:6px;font-size:13px;font-weight:800;color:'+(/^⚠/.test(note)?'var(--re)':'var(--g5)')+';">'+_bx(note)+'</div>':'');
 }
 // Expected return time + WiFi device: on the Contract step, right under Collection & Return,
 // as two compact rows (they used to be two big boxes at the top of Handover).
@@ -5650,11 +5660,46 @@ var PL_TYRE=180;
 // prices (Desktop APP price list: insB). Premium = 2.8 Hilux with hardshell tents (ins). Same deposits.
 var CT_INS_B={'1':195,'2':270,'3':415};
 function vehClassic(v){v=v||(co&&co.v)||{};return /^\s*2\.4/.test(String(v.desc||''));}
-function ctInsRate(k,v){return vehClassic(v)?CT_INS_B[k]:(CT_INS[k]&&CT_INS[k].rate);} // Camping equipment cover removed 12 Oct 2026 (owner): not sold any more; lost/damaged camping gear is the client's cost
+// Owner 5 Nov 2026: insurance option and windscreen & tyre add-on come from the Desktop APP (tablet_cover_info): the booked
+// Pilot quote (option, add-on and the daily prices charged), else the booking. The tablet shows them and cannot change them.
+var COVER={},COVER_OK=false;
+function coverOf(v){v=v||(co&&co.v)||{};return COVER[String(v.bid||'')]||null;}
+async function loadCover(ids){
+  try{ids=ids||FLEET.map(function(v){return v.bid;}).filter(Boolean);if(!ids.length)return;
+    var r=await SB.rpc('tablet_cover_info',{p_ids:ids});if(r&&!r.error&&r.data){Object.keys(r.data).forEach(function(k){COVER[k]=r.data[k];});COVER_OK=true;}}catch(e){}
+}
+function ctInsRate(k,v){var cv=coverOf(v);
+  if(cv&&cv.src==='quote'){if(String(cv.ins)===String(k)&&+cv.ins_day>0)return +cv.ins_day;if(cv.model)return cv.model==='budget'?CT_INS_B[k]:(CT_INS[k]&&CT_INS[k].rate);}
+  return vehClassic(v)?CT_INS_B[k]:(CT_INS[k]&&CT_INS[k].rate);}
+function ctTyreRate(v){var cv=coverOf(v);return cv&&cv.src==='quote'&&+cv.tyre_day>0?+cv.tyre_day:PL_TYRE;}
+// Put the Desktop's cover on the contract (never on one already signed). Nothing from the Desktop = nothing chosen.
+function ctCoverApply(c){
+  c=c||(co.contract=co.contract||{});if(co&&co.contractSigned)return c;
+  var cv=coverOf();
+  c.insurance_option=cv&&/^[123]$/.test(String(cv.ins||''))?String(cv.ins):null;
+  if(cv&&(cv.tyre===true||cv.tyre===false))c.addon_windscreen=cv.tyre;else delete c.addon_windscreen;
+  c.deposit_amount=c.insurance_option&&CT_INS[c.insurance_option]?CT_INS[c.insurance_option].dep:null;
+  c.cover_src=cv&&cv.src?(cv.src==='quote'?'quote '+(cv.quote_no||''):'booking'):null;
+  return c;
+}
+function ctCoverHTML(){
+  var c=ctCoverApply(),cv=coverOf()||{},days=ctDays(),ok=!!c.insurance_option&&(c.addon_windscreen===true||c.addon_windscreen===false);
+  var nm=c.insurance_option?CT_INS[c.insurance_option].t:'';
+  var h='<div id="ct-ins" style="padding:12px 14px;border-radius:10px;border:2px solid '+(ok?'var(--gb)':'var(--re)')+';background:'+(ok?'var(--sg)':'var(--rg)')+';">'
+    +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;">🛡 Insurance &amp; cover — from the Desktop APP</div>';
+  h+='<div style="font-size:16px;font-weight:900;margin-top:4px;color:'+(c.insurance_option?'var(--tx)':'var(--re)')+';">'+(c.insurance_option?_bx(nm)+' · N$'+plN(ctInsRate(c.insurance_option))+'/day':'⚠ Insurance not set in the Desktop APP')+'</div>';
+  h+='<div id="ct-aws" style="font-size:15px;font-weight:800;margin-top:3px;color:'+(c.addon_windscreen===true||c.addon_windscreen===false?'var(--tx)':'var(--re)')+';">🛞 Windscreen &amp; tyre: '
+    +(c.addon_windscreen===true?'Yes · N$'+plN(ctTyreRate())+'/day × '+days+' = '+ctMoney(ctTyreRate()*days):c.addon_windscreen===false?'No':'⚠ not set in the Desktop APP')+'</div>';
+  h+=ok?'<div style="font-size:12px;color:var(--g5);margin-top:4px;">As booked and paid'+(cv.src==='quote'?' (quote '+_bx(cv.quote_no||'')+')':'')+'. Changes are made by the office in the Desktop APP.</div>'
+       :'<div style="font-size:13px;font-weight:800;color:var(--re);margin-top:6px;">Ask the office ('+_bx(mgrNames())+') to set it in the Desktop APP booking. It shows here by itself — the contract waits until then.</div>'
+        +'<button type="button" onclick="ctCoverReload()" style="margin-top:8px;padding:9px 14px;border-radius:9px;border:2px solid var(--g3);background:var(--g0);font-size:14px;font-weight:900;cursor:pointer;">↻ Check again</button>';
+  return h+'</div>';
+}
+async function ctCoverReload(){if(!co||!co.v)return;toast('Checking the Desktop APP…');await loadCover([co.v.bid]);try{drawCO();}catch(e){}try{ctAskRefresh();}catch(e){}} // Camping equipment cover removed 12 Oct 2026 (owner): not sold any more; lost/damaged camping gear is the client's cost
 function plN(n){n=Number(n);return n%1?n.toFixed(2):String(n);}
 function ctMoney(n){return 'N$ '+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function ctDays(){var _pu=coPickupDate();return _pu&&co.v.rt?Math.max(1,Math.round((new Date(co.v.rt)-new Date(_pu))/86400000)):0;}
-function ctSet(k,v){(co.contract=co.contract||{})[k]=v;if(k==='country_deposit')co.contract.country_deposit_auto=false;if(k==='insurance_option'){var o=CT_INS[v];co.contract.deposit_amount=o?o.dep:null;}drawCO();try{ctAskRefresh();}catch(e){}}
+function ctSet(k,v){if(k==='insurance_option'||k==='addon_windscreen'){toast('Insurance and windscreen cover come from the Desktop APP','err');return;}(co.contract=co.contract||{})[k]=v;if(k==='country_deposit')co.contract.country_deposit_auto=false;if(k==='insurance_option'){var o=CT_INS[v];co.contract.deposit_amount=o?o.dep:null;}drawCO();try{ctAskRefresh();}catch(e){}}
 // ── EXTRA DRIVER FEE ───────────────────────────────────────────────────────
 // The renter + 1 additional driver are FREE; from the 3rd driver an admin fee per driver, once per rental,
 // taken at collection (amount from the Price list). Counted from the drivers actually captured, so nobody
@@ -5834,8 +5879,8 @@ function ctXdepButtons(c){
 function ctOpenQuestions(){
   var c=co.contract=co.contract||{},q=[],days=ctDays();
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
-  if(!c.insurance_option)q.push({s:'Insurance',t:'📋 Which insurance does the client take?',h:ctInsButtons(c)});
-  if(c.addon_windscreen!==true&&c.addon_windscreen!==false)q.push({s:'Windscreen cover',t:'🛞 Windscreen & Tyre cover — N$'+plN(PL_TYRE)+'/day × '+days+' = '+ctMoney(PL_TYRE*days),h:ctYesNo(c,'addon_windscreen')});
+  ctCoverApply(c);
+  if(!c.insurance_option||(c.addon_windscreen!==true&&c.addon_windscreen!==false))q.push({s:'Insurance (Desktop APP)',t:'🛡 Insurance & cover not set in the Desktop APP',h:ctCoverHTML(),manual:true});
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
   if(rl&&rl!==GR_HQ&&(!c.return_address||!c.return_place_time))q.push({s:'Return place & time',t:'📍 Vehicle returned at '+_bx(rl)+' — exact place and time',
     h:'<textarea placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" style="width:100%;min-height:56px;padding:9px 11px;border-radius:9px;border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;margin-bottom:6px;">'+_bx(c.return_address||'')+'</textarea>'
@@ -5891,7 +5936,7 @@ function ctDetailsForm(){
       +(right?'<div style="text-align:right;font-size:14px;font-weight:900;color:'+(on?'var(--se)':'var(--g5)')+';white-space:nowrap;">'+right+'</div>':'')
       +'</label>';
   }
-  var ws=c.addon_windscreen===true,wsT=PL_TYRE*days;
+  ctCoverApply(c);
   // Cover that must be answered: Taken or Declined (null = not answered yet)
   function choice(key,title,sub,rateTxt,totTxt){
     var v=c[key],done=v===true||v===false;
@@ -5902,9 +5947,7 @@ function ctDetailsForm(){
       +'<div style="font-size:13px;font-weight:800;margin-top:3px;color:'+(v===true?'var(--se)':done?'var(--g5)':'var(--re)')+';">'+(v===true?'✓ Taken · '+totTxt:v===false?'Declined by client':'Required: choose Taken or Declined · '+rateTxt)+'</div></div>'
       +'<div style="display:flex;gap:6px;">'+btn(true,'✓ Taken')+btn(false,'✕ Declined')+'</div></div>';
   }
-  var insSel='<div class="fi" id="ct-ins" style="padding:10px 12px;border-radius:10px;border:2px solid '+(c.insurance_option?'var(--gb)':'var(--re)')+';background:'+(c.insurance_option?'var(--sg)':'var(--rg)')+';"><label style="font-size:15px;font-weight:900;color:var(--tx);">Insurance option *</label>'
-    +ctInsButtons(c)
-    +'</div>';
+  var insSel=ctCoverHTML();
   var OFFICE='Go Rent Office, 6 Diehl Str, Windhoek';
   // follow the Collection / Return choice on this screen straight away (gatherContract does the
   // same when the contract opens) — the remote-return box used to appear only after a preview
@@ -5916,9 +5959,6 @@ function ctDetailsForm(){
   var h='<div style="font-size:13px;color:var(--g5);margin-bottom:10px;">Rental period: <b style="color:var(--tx);">'+days+' days</b> · rental rates are on the separate invoice</div>'
     +remoteBox
     +insSel
-    +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;margin:12px 0 6px;">Extra cover — client must take or decline each</div>'
-    +'<div id="ct-aws">'+choice('addon_windscreen','🛞 Windscreen &amp; Tyre cover','N$'+plN(PL_TYRE)+' per day · 1 windscreen, '+(days>21?'2 tyres':'1 tyre')+' · rims excluded','N$'+plN(PL_TYRE)+'/day','N$'+plN(PL_TYRE)+' × '+days+' = '+ctMoney(wsT))+'</div>'
-    +(ws?'<div style="display:flex;justify-content:space-between;padding:8px 14px;margin:-2px 0 8px;border-top:1px dashed var(--g3);font-size:15px;font-weight:900;"><span style="color:var(--g5);">Cover total ('+days+' days)</span><span style="color:var(--se);">'+ctMoney(wsT)+'</span></div>':'')
     ;
   return h;
 }
@@ -6109,7 +6149,7 @@ function gatherContract(){
   co.contract.quote_number=(function(){var _e=document.getElementById('ct-quote');return _e?_e.value:undefined;})()||co.contract.quote_number||co.v.quote||'';
   co.contract.deposit_amount=+(function(){var _e=document.getElementById('ct-dep');return _e?_e.value:undefined;})()||co.contract.deposit_amount;
   delete co.contract.fuel_deposit; delete co.contract.fuel_deposit_received; // fuel deposit discontinued (owner, 13 Oct 2026)
-  co.contract.insurance_option=(function(){var _e=document.getElementById('ct-ins');return _e?_e.value:undefined;})()||co.contract.insurance_option;
+  ctCoverApply(co.contract);   // insurance + windscreen & tyre from the Desktop APP (owner 5 Nov 2026)
   (function(){try{var st=PAY_ST[co.v.bid];if(!st||!st.ok)return;var key=bkKey(co.v),x=(st.xb||[]).filter(function(r){return r.key===key||r.fleet===co.fn;})[0];
     if(x&&+x.held>=+(st.xb_amount||30000)-0.5)co.contract.cross_border_deposit=true;}catch(e){}})();   // from the Desktop APP's payments (owner 3 Nov)
   (function(){var _e=document.getElementById('ct-edf');if(_e)co.contract.extra_driver_paid=_e.checked;})();
@@ -6129,8 +6169,9 @@ function ctCampingBooked(){try{return !!(co&&co.v&&co.v.camping);}catch(e){retur
 function ctMissing(c){
   c=c||co.contract||{};var m=[];
   if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
-  if(!c.insurance_option)m.push('📋 Insurance option not selected');
-  if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover: Taken or Declined?');
+  if(!co.contractSigned)ctCoverApply(c);
+  if(!c.insurance_option)m.push('🛡 Insurance not set in the Desktop APP — ask the office');
+  if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & tyre cover not set in the Desktop APP — ask the office');
   // Owner 3 Nov 2026: no deposits on the tablet (country, cross-border, method, reference) — the Desktop APP manages them.
   // The cross-border deposit is still checked at Release from the Desktop APP's payments (xbGate).
   (function(){var n=extraDriverCharged();
@@ -7801,8 +7842,9 @@ function coMissing(){
   if(!d0.name)m.push('👤 Client name not filled in');
   if(!d0.passportImg)m.push('🛂 No passport photo');
   if(!d0.licFront)m.push('🪪 No licence photo');
-  if(!c.insurance_option)m.push('📋 Insurance option not selected');
-  if(!co.contractSigned&&c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & Tyre cover not taken/declined');
+  if(!co.contractSigned)ctCoverApply(c);
+  if(!c.insurance_option)m.push('🛡 Insurance not set in the Desktop APP — ask the office');
+  if(!co.contractSigned&&c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & tyre cover not set in the Desktop APP — ask the office');
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' NOT TAKEN ('+extraDriverTxt()+')');
   })();
@@ -11093,7 +11135,7 @@ async function loadAlerts(){
       <div>
         <div class="rpt-fn">${a.fleet_no} — ${a.client}</div>
         <div class="rpt-cl">Received by ${a.received_by||'—'}</div>
-        <div class="rpt-meta">${new Date(a.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+        <div class="rpt-meta">${new Date(a.created_at).toLocaleDateString('en-GB',{day:'numeric',month:'short',hourCycle:'h23',hour:'2-digit',minute:'2-digit'})}</div>
       </div>
       <span class="bdg ${a.resolved?'x':'r'}">${a.resolved?'Resolved':'⚠ Open'}</span>
     </div>
@@ -12148,7 +12190,7 @@ function buildContractHTML(c,sigUrl){
       <span style="font-size:10px;font-weight:800;color:#111;letter-spacing:.4px;">INITIAL HERE</span>
       ${c.client_initials_url?`<img src="${c.client_initials_url}" alt="Renter initials" style="max-height:40px;max-width:90px;display:block;">`:''}</div></div>`;
   const fD=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}):'';
-  const fDT=d=>d?new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+  const fDT=d=>d?new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric',hourCycle:'h23',hour:'2-digit',minute:'2-digit'}):'';
   const days=c.total_days||0;
 
   // Tyre cover: 1 tyre up to 21 days, 2 tyres for longer rentals (owner 16 Oct 2026; was 14)
@@ -12322,7 +12364,7 @@ function buildContractHTML(c,sigUrl){
       <!-- Windscreen add-on -->
       <div style="${OPT}background:#fff;${c.addon_windscreen?OPTON:''}">
         ${chkBox(!!c.addon_windscreen)}
-        <div style="font-size:11px;line-height:1.5;"><strong>Add-on – Windscreen &amp; Tyre Cover</strong> (optional) | N$${plN(PL_TYRE)}/day | Covers 1 windscreen per rental and <strong>${tyreCover}</strong> (1 tyre for rentals up to 21 days, 2 tyres for longer rentals). Rims are not included.</div>
+        <div style="font-size:11px;line-height:1.5;"><strong>Add-on – Windscreen &amp; Tyre Cover</strong> (optional) | N$${plN(ctTyreRate())}/day | Covers 1 windscreen per rental and <strong>${tyreCover}</strong> (1 tyre for rentals up to 21 days, 2 tyres for longer rentals). Rims are not included.</div>
       </div>
       <!-- Cross-border -->
       <div style="${OPT}background:#fff;${c.cross_border?OPTON:''}">
@@ -12852,8 +12894,8 @@ function guideCO(){
     }
     if(!co.contractSigned){
       var c=co.contract||{};
-      if(!c.insurance_option){b=document.getElementById('ct-ins');return t('Ask the client which insurance they take, then tap it.',b);}
-      if(c.addon_windscreen!==true&&c.addon_windscreen!==false)return t('Ask the client: Windscreen & Tyre cover? Tap Taken or Declined.',document.getElementById('ct-aws'));
+      ctCoverApply(c);
+      if(!c.insurance_option||(c.addon_windscreen!==true&&c.addon_windscreen!==false)){b=document.getElementById('ct-ins');return t('Insurance is not set in the Desktop APP yet — ask the office to set it.',b);}
       // the same list the contract itself checks (ctMissing): the guide used to send staff to
       // "Preview & Sign" while e.g. the extra driver fee was still open, and the contract
       // then only said "cannot be signed yet"
