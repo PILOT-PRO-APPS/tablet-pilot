@@ -5683,16 +5683,16 @@ function ctCoverApply(c){
   return c;
 }
 function ctCoverHTML(){
-  var c=ctCoverApply(),cv=coverOf()||{},days=ctDays(),ok=!!c.insurance_option&&(c.addon_windscreen===true||c.addon_windscreen===false);
+  var c=ctCoverApply(),cv=coverOf()||{},days=ctDays(),ok=true; /* owner 6 Nov 2026: information only, never blocks */ var _set=!!c.insurance_option&&(c.addon_windscreen===true||c.addon_windscreen===false);
   var nm=c.insurance_option?CT_INS[c.insurance_option].t:'';
   var h='<div id="ct-ins" style="padding:12px 14px;border-radius:10px;border:2px solid '+(ok?'var(--gb)':'var(--re)')+';background:'+(ok?'var(--sg)':'var(--rg)')+';">'
     +'<div style="font-size:12px;font-weight:800;color:var(--g5);text-transform:uppercase;letter-spacing:.4px;">🛡 Insurance &amp; cover — from the Desktop APP</div>';
-  h+='<div style="font-size:16px;font-weight:900;margin-top:4px;color:'+(c.insurance_option?'var(--tx)':'var(--re)')+';">'+(c.insurance_option?_bx(nm)+' · N$'+plN(ctInsRate(c.insurance_option))+'/day':'⚠ Insurance not set in the Desktop APP')+'</div>';
-  h+='<div id="ct-aws" style="font-size:15px;font-weight:800;margin-top:3px;color:'+(c.addon_windscreen===true||c.addon_windscreen===false?'var(--tx)':'var(--re)')+';">🛞 Windscreen &amp; tyre: '
-    +(c.addon_windscreen===true?'Yes · N$'+plN(ctTyreRate())+'/day × '+days+' = '+ctMoney(ctTyreRate()*days):c.addon_windscreen===false?'No':'⚠ not set in the Desktop APP')+'</div>';
-  h+=ok?'<div style="font-size:12px;color:var(--g5);margin-top:4px;">As booked and paid'+(cv.src==='quote'?' (quote '+_bx(cv.quote_no||'')+')':'')+'. Changes are made by the office in the Desktop APP.</div>'
-       :'<div style="font-size:13px;font-weight:800;color:var(--re);margin-top:6px;">Ask the office ('+_bx(mgrNames())+') to set it in the Desktop APP booking. It shows here by itself — the contract waits until then.</div>'
-        +'<button type="button" onclick="ctCoverReload()" style="margin-top:8px;padding:9px 14px;border-radius:9px;border:2px solid var(--g3);background:var(--g0);font-size:14px;font-weight:900;cursor:pointer;">↻ Check again</button>';
+  h+='<div style="font-size:16px;font-weight:900;margin-top:4px;color:'+(c.insurance_option?'var(--tx)':'var(--g5)')+';">'+(c.insurance_option?_bx(nm)+' · N$'+plN(ctInsRate(c.insurance_option))+'/day':'Insurance: not filled in on the Desktop APP')+'</div>';
+  h+='<div id="ct-aws" style="font-size:15px;font-weight:800;margin-top:3px;color:'+(c.addon_windscreen===true||c.addon_windscreen===false?'var(--tx)':'var(--g5)')+';">🛞 Windscreen &amp; tyre: '
+    +(c.addon_windscreen===true?'Yes · N$'+plN(ctTyreRate())+'/day × '+days+' = '+ctMoney(ctTyreRate()*days):c.addon_windscreen===false?'No':'not filled in on the Desktop APP')+'</div>';
+  h+=_set?'<div style="font-size:12px;color:var(--g5);margin-top:4px;">As booked and paid'+(cv.src==='quote'?' (quote '+_bx(cv.quote_no||'')+')':'')+'. Changes are made by the office in the Desktop APP.</div>'
+       :'';
+  if(!_set)h+='<div style="font-size:12px;color:var(--g5);margin-top:4px;">Not filled in on the Desktop APP booking — for information only, the office keeps track of the cover. You can carry on.</div>';
   return h+'</div>';
 }
 async function ctCoverReload(){if(!co||!co.v)return;toast('Checking the Desktop APP…');await loadCover([co.v.bid]);try{drawCO();}catch(e){}try{ctAskRefresh();}catch(e){}} // Camping equipment cover removed 12 Oct 2026 (owner): not sold any more; lost/damaged camping gear is the client's cost
@@ -5880,7 +5880,7 @@ function ctOpenQuestions(){
   var c=co.contract=co.contract||{},q=[],days=ctDays();
   var rl=(function(){try{return placeValue('dropoffArrangement')||c.return_location;}catch(e){return c.return_location;}})();
   ctCoverApply(c);
-  if(!c.insurance_option||(c.addon_windscreen!==true&&c.addon_windscreen!==false))q.push({s:'Insurance (Desktop APP)',t:'🛡 Insurance & cover not set in the Desktop APP',h:ctCoverHTML(),manual:true});
+  // Owner 6 Nov 2026: insurance & windscreen/tyre cover are kept by the Desktop APP — never block the tablet on them.
   var n=extraDriverCharged();if(n&&c.extra_driver_paid!==true)q.push({s:'Extra driver fee',t:'👤 Extra driver fee '+ctMoney(extraDriverFee())+' ('+extraDriverTxt()+')',h:ctGot(c,'extra_driver_paid')});
   if(rl&&rl!==GR_HQ&&(!c.return_address||!c.return_place_time))q.push({s:'Return place & time',t:'📍 Vehicle returned at '+_bx(rl)+' — exact place and time',
     h:'<textarea placeholder="Lodge name, street, GPS or directions" oninput="(co.contract=co.contract||{}).return_address=this.value" style="width:100%;min-height:56px;padding:9px 11px;border-radius:9px;border:2px solid '+(c.return_address?'var(--gb)':'var(--re)')+';background:var(--g0);color:var(--tx);font-size:15px;margin-bottom:6px;">'+_bx(c.return_address||'')+'</textarea>'
@@ -6170,8 +6170,7 @@ function ctMissing(c){
   c=c||co.contract||{};var m=[];
   if(c.return_location&&c.return_location!=='Go Rent Office, 6 Diehl Str, Windhoek'&&!/go rent office|diehl/i.test(c.return_location)&&(!c.return_address||!c.return_place_time||!c.return_place_date))m.push('📍 Remote return: exact address, collection date and time');
   if(!co.contractSigned)ctCoverApply(c);
-  if(!c.insurance_option)m.push('🛡 Insurance not set in the Desktop APP — ask the office');
-  if(c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & tyre cover not set in the Desktop APP — ask the office');
+  // Owner 6 Nov 2026: insurance & windscreen/tyre cover are kept by the Desktop APP — not a contract blocker.
   // Owner 3 Nov 2026: no deposits on the tablet (country, cross-border, method, reference) — the Desktop APP manages them.
   // The cross-border deposit is still checked at Release from the Desktop APP's payments (xbGate).
   (function(){var n=extraDriverCharged();
@@ -7843,8 +7842,7 @@ function coMissing(){
   if(!d0.passportImg)m.push('🛂 No passport photo');
   if(!d0.licFront)m.push('🪪 No licence photo');
   if(!co.contractSigned)ctCoverApply(c);
-  if(!c.insurance_option)m.push('🛡 Insurance not set in the Desktop APP — ask the office');
-  if(!co.contractSigned&&c.addon_windscreen!==true&&c.addon_windscreen!==false)m.push('🛞 Windscreen & tyre cover not set in the Desktop APP — ask the office');
+  // Owner 6 Nov 2026: insurance & windscreen/tyre cover are kept by the Desktop APP — not a release blocker.
   (function(){var n=extraDriverCharged();
     if(n&&c.extra_driver_paid!==true)m.push('👤 Extra driver fee '+ctMoney(extraDriverFee())+' NOT TAKEN ('+extraDriverTxt()+')');
   })();
@@ -12895,7 +12893,7 @@ function guideCO(){
     if(!co.contractSigned){
       var c=co.contract||{};
       ctCoverApply(c);
-      if(!c.insurance_option||(c.addon_windscreen!==true&&c.addon_windscreen!==false)){b=document.getElementById('ct-ins');return t('Insurance is not set in the Desktop APP yet — ask the office to set it.',b);}
+      // Owner 6 Nov 2026: insurance & cover no longer stop the guide (the Desktop APP keeps track of it).
       // the same list the contract itself checks (ctMissing): the guide used to send staff to
       // "Preview & Sign" while e.g. the extra driver fee was still open, and the contract
       // then only said "cannot be signed yet"
