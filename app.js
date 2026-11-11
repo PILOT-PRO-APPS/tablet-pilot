@@ -1215,8 +1215,37 @@ async function forceCompleteCO(fn,ev){
   toast(fn+' closed off ✅','ok');
   renderCOPicker();
 }
-// Owner 11 Nov 2026: no override / close-off of a check-in on the tablet — every check-in is completed in full.
-function forceBtnCI(v){return '';}
+function forceBtnCI(v){
+  if(!isAdmin()||!v)return '';
+  return '<button onclick="forceCompleteCI(\''+_bx(v.fn)+'\',\''+_bx(v.bid||'')+'\',event)" style="margin-left:8px;background:var(--gr);border:2px solid var(--gb);color:var(--gb);border-radius:8px;font-size:11px;font-weight:900;padding:5px 10px;cursor:pointer;">✅ Close off</button>';
+}
+// Peter only: mark a return finished without (or without finishing) the tablet check-in.
+// Recorded as a forced close with who and why — never passes as a check-in that was carried out.
+async function forceCompleteCI(fn,bid,ev){
+  try{if(ev){ev.stopPropagation();ev.preventDefault();}}catch(e){}
+  if(!isAdmin()){toast('Only Peter can close off a check-in','err');return;}
+  var v=(FLEET||[]).find(function(x){return x.fn===fn&&(!bid||String(x.bid||'')===String(bid));})||pickVeh(fn,'in');
+  if(!v){toast('Vehicle '+fn+' not found','err');return;}
+  if(ciIsDone(v)){toast(fn+' is already checked in','ok');return;}
+  var _a=await askBox({title:'Close off check-in '+fn+' — '+(v.cl||''),danger:true,ok:'Close off',
+    text:'This marks the return finished WITHOUT completing the tablet check-in. Anything not captured (km, fuel, damage, equipment, signatures) will be missing from the record.',
+    reason:'Why? (recorded against it)'});
+  if(!_a.ok)return;
+  var why=_a.reason;
+  var who=(APP_USER&&APP_USER.name)||'Peter',now=new Date().toISOString();
+  try{
+    var res=await SB.from('checkins').insert(Object.assign(ridOf(v),{booking_id:bkKey(v),fleet_no:v.fn,client:v.cl||'',manager_name:who,
+      force_closed_by:who,force_closed_at:now,force_closed_reason:why,created_at:now}));
+    if(res&&res.error){if(!wrongRentalBox(res.error.message))toast('Could not close it off: '+res.error.message,'err');return;}
+  }catch(e){toast('Could not close it off — check the connection','err');return;}
+  try{await drFinish(drId('checkin',{v:v,fn:v.fn}));}catch(e){}
+  try{overdueAlertResolve(v);}catch(e){}
+  try{if(ci&&ci.fn===fn){ci={};ciStep=0;}}catch(e){}
+  try{localStorage.removeItem(ipKey(fn));}catch(e){}
+  await loadDoneSets();
+  toast(fn+' check-in closed off ✅','ok');
+  renderCIPicker();
+}
 function resetBtn(fn){
   if(!isAdmin())return '';
   return '<button onclick="resetProcess(\''+_bx(fn)+'\',event)" style="margin-left:8px;background:var(--rg);border:1px solid var(--re);color:var(--rl);border-radius:8px;font-size:11px;font-weight:900;padding:4px 9px;cursor:pointer;">🗑 Reset</button>';
@@ -9082,8 +9111,51 @@ function askBox(o){
   });
 }
 function isPeter(){ return !!(APP_USER && APP_USER.name==='Peter'); }
-// Owner 11 Nov 2026: Peter's check-in override removed completely (header ⚡ OVERRIDE, close with checks missing,
-// list close-off). A check-in can only be finished with every check done.
+async function ciPeterOverride(open){
+  if(!isPeter()){toast('Not complete yet: '+open[0].lbl+' — only Peter can close it with checks missing','err');return false;}
+  if(ci.forceClosedBy)return true;
+  var who=(APP_USER&&APP_USER.name)||'Peter';
+  var _a=await askBox({title:'Close with checks missing',danger:true,ok:'Close check-in',
+    text:'Not done yet:\n • '+open.map(function(x){return x.lbl;}).join('\n • ')+'\n\nIt is recorded as closed off by '+who+'.',
+    reason:'Why is it closed with checks missing?'});
+  if(!_a.ok)return false;
+  ci.forceClosedBy=who;ci.forceClosedAt=new Date().toISOString();
+  ci.forceClosedReason=_a.reason+' — not done: '+open.map(function(x){return x.lbl;}).join('; ');
+  return true;
+}
+// ⚡ OVERRIDE (header, next to Peter's sign-in): Peter closes the open check-in from any step.
+// Nothing captured so far is lost; missing steps + his reason are stored on the check-in,
+// (No deposit decision on the tablet — management decides every refund in the Desktop APP.)
+function ciOverrideOpen(){
+  return !!(isPeter()&&ci&&ci.fn&&ci.v&&!ci._done&&(document.querySelector('.page.on')||{}).id==='page-ci'&&document.getElementById('ci-body'));
+}
+function ciOverrideBtnSync(){
+  var b=document.getElementById('nav-override');if(!b)return;
+  var show=false;try{show=ciOverrideOpen();}catch(e){}
+  b.style.display=show?'':'none';
+}
+setInterval(ciOverrideBtnSync,700);
+async function peterOverrideCI(){
+  if(!isPeter()){toast('🔒 Only Peter can override a check-in','err');ciOverrideBtnSync();return;}
+  if(!ciOverrideOpen()){toast('Open a vehicle on Check-In first','err');return;}
+  try{ci.dmgd=getDmgData();}catch(e){ci.dmgd=ci.dmgd||[];}
+  var open=ciCompletion().filter(function(x){return !x.ok;});
+  if(!ci.odoIn)open.unshift({lbl:'Odometer in (Step 1)'});
+  if(!ci.fuelIn)open.unshift({lbl:'Fuel in (Step 1)'});
+  if(ciWifiOpen())open.unshift({lbl:'WiFi device returned? (Step 1)'});
+  if(ciSimOpen())open.unshift({lbl:'SIM card returned? (Step 1)'});
+  if(!retSt['USB charger'])open.unshift({lbl:'USB charger returned? (Step 1)'});
+  if(!open.length)open=[{lbl:'Management sign-off (Step 5)'}];
+  ci.forceClosedBy=null;           // always ask Peter to confirm + give a reason for this override
+  if(!(await ciPeterOverride(open)))return;
+  if(!ci.receivedBy)ci.receivedBy=APP_USER.name;
+  ci.mgmtNotes=((ci.mgmtNotes||'')+(ci.mgmtNotes?'\n':'')+'OVERRIDE by '+ci.forceClosedBy+': '+ci.forceClosedReason).trim();
+  try{await uploadPhotos(ci.fuelPhotos,ci.fn,ci.v.cl,'fuel-receipt');await uploadPhotos(ci.dmgPhotos,ci.fn,ci.v.cl,'damage-in');}catch(e){}
+  try{await ciPapersUpload();}catch(e){}
+  await completeCI();
+  if(!ci._done){ci.forceClosedBy=null;ci.forceClosedAt=null;ci.forceClosedReason=null;}
+  ciOverrideBtnSync();
+}
 function ciCompletion(){
   var all=RET_GROUPS.reduce(function(a,g){return a.concat(g.items);},[]);
   var unmarked=all.filter(function(i){return !retSt[i];}).length;
@@ -9177,8 +9249,8 @@ async function ciFinish(){
 }
 async function ciFinishRun(){
   var open=ciCompletion().filter(function(x){return !x.ok;});
-  if(open.length){toast('Not complete yet: '+open[0].lbl,'err');return;}
-  if(!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut&&!(ci.fuelPhotos&&ci.fuelPhotos.length)){toast('Fuel is short — take a photo of the fuel receipt first','err');return;}
+  if(open.length&&!(await ciPeterOverride(open)))return;
+  if(!ci.forceClosedBy&&!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut&&!(ci.fuelPhotos&&ci.fuelPhotos.length)){toast('Fuel is short — take a photo of the fuel receipt first','err');return;}
   // Owner 11 Nov 2026: the tablet records NO deposit decision at all — not even "Full deposit returned" on a clean
   // return. Refund or keep is decided by management in the Desktop APP only.
   var n=document.getElementById('ci-hnotes');if(n)ci.mgmtNotes=n.value;
