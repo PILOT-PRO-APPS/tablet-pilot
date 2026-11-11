@@ -9479,6 +9479,7 @@ function showOverdueBanner(){
 }
 var _odAlerted={};
 async function overdueAlerts(l){
+  return;   // 11 Nov 2026 (owner): NOT CHECKED IN alerts are no longer sent to the Desktop app; the Dashboard still lists overdue returns
   if(!drOnline())return;
   if(!DONE_CI_AT||Date.now()-DONE_CI_AT>10*60*1000)return;   // check-in list not loaded (fresh) — never guess
   var todo=l.filter(function(v){return !_odAlerted[bkNorm(bkKey(v))];});if(!todo.length)return;
