@@ -486,7 +486,7 @@ async function showWorkProgress(kind,fn){
     h+=sec('🔩 Mechanical check',md,mi.length,mi.map(function(x){var st=(o.mechItems||{})[x[1]];return {x:x,st:st};}).sort(function(a,b){return (a.st?1:0)-(b.st?1:0);}).map(function(e){return row(e.st==='ok',_bx(e.x[1]),((o.mechWho||{})[e.x[1]])||'',e.st==='issue'||e.st==='prob');}).join(''));
   }else{
     var ret=w.ret||{},q=o.retQty||{};
-    var csteps=[['🧹 Vehicle check signed',!!o.retSig,o.receivedBy],['🔍 Damage photos',!!(o.dmgPhotos&&o.dmgPhotos.length),''],['🏕 Equipment all marked',Object.keys(ret).length>0&&Object.keys(ret).every(function(k){return !!ret[k];}),''],['✍️ Client signed',!!o.custSig,o.custAt||''],['👔 Management',!!o.mgmtSig||!!o.depositPending,o.mgmtName||'']];
+    var csteps=[['🧹 Vehicle check signed',!!o.retSig,o.receivedBy],['🔍 Damage photos',!!(o.dmgPhotos&&o.dmgPhotos.length),''],['🏕 Equipment all marked',Object.keys(ret).length>0&&Object.keys(ret).every(function(k){return !!ret[k];}),''],['✍️ Client signed',!!o.custSig,o.custAt||'']];
     stepsHtml=csteps.map(function(s,i){return row(s[1],s[0]+(w.step===i?' <span style="font-size:11px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:6px;">NOW</span>':''),s[2]||'');}).join('');
     var keys=Object.keys(ret);total=keys.length;
     var miss=keys.filter(function(k){return ret[k]==='missing';}),todo=keys.filter(function(k){return !ret[k];}),ok=keys.filter(function(k){return ret[k]==='ok';});
@@ -2233,7 +2233,7 @@ async function discFixSave(fn,fx){
 function ovInfoToggle(){window._ovInfoOpen=!window._ovInfoOpen;renderOV();}
 function ovExpand(fn){window._ovExpanded=window._ovExpanded===fn?null:fn;renderOV();}
 
-function renderOV(){ try{ _renderOV(); } finally { try{showDepositBanner();}catch(e){} try{showOverdueBanner();}catch(e){} } }
+function renderOV(){ try{ _renderOV(); } finally { try{showOverdueBanner();}catch(e){} } }
 function _renderOV(){
   const TODAY=localYMD();
   const todayD=new Date(TODAY);
@@ -8748,7 +8748,7 @@ async function startCI(fn){
   RET_GROUPS.forEach(g=>g.items.forEach(i=>{retSt[i]='';})); // nothing pre-ticked: staff confirm each item came back
   ci={v,fn,receivedBy:(APP_USER&&APP_USER.name)||'',odoIn:'',odometerOut:(co&&co.fn===fn&&co.odometerOut)||v.odo,fuelIn:'',fuelNote:'',notes:'',
       dmgd:[],dmgPhotos:[],custSig:null,custAt:'',
-      mgmtName:'',mgmtSig:null,mgmtAt:'',deposit:'Full deposit returned',mgmtNotes:'',
+      mgmtName:'',mgmtSig:null,mgmtAt:'',mgmtNotes:'',
       retItems:{},retSig:null,retAt:''};
   ciStep=0;
   initIM();
@@ -9125,7 +9125,7 @@ async function ciPeterOverride(open){
 }
 // ⚡ OVERRIDE (header, next to Peter's sign-in): Peter closes the open check-in from any step.
 // Nothing captured so far is lost; missing steps + his reason are stored on the check-in,
-// and the deposit goes to the Deposits list for a proper management decision.
+// (No deposit decision on the tablet — management decides every refund in the Desktop APP.)
 function ciOverrideOpen(){
   return !!(isPeter()&&ci&&ci.fn&&ci.v&&!ci._done&&(document.querySelector('.page.on')||{}).id==='page-ci'&&document.getElementById('ci-body'));
 }
@@ -9149,7 +9149,6 @@ async function peterOverrideCI(){
   ci.forceClosedBy=null;           // always ask Peter to confirm + give a reason for this override
   if(!(await ciPeterOverride(open)))return;
   if(!ci.receivedBy)ci.receivedBy=APP_USER.name;
-  ci.depositPending=true;ci.depositDue=nextWorkingDay();ci.deposit='Pending — management decision';
   ci.mgmtNotes=((ci.mgmtNotes||'')+(ci.mgmtNotes?'\n':'')+'OVERRIDE by '+ci.forceClosedBy+': '+ci.forceClosedReason).trim();
   try{await uploadPhotos(ci.fuelPhotos,ci.fn,ci.v.cl,'fuel-receipt');await uploadPhotos(ci.dmgPhotos,ci.fn,ci.v.cl,'damage-in');}catch(e){}
   try{await ciPapersUpload();}catch(e){}
@@ -9252,52 +9251,20 @@ async function ciFinishRun(){
   var open=ciCompletion().filter(function(x){return !x.ok;});
   if(open.length&&!(await ciPeterOverride(open)))return;
   if(!ci.forceClosedBy&&!!ci.fuelIn&&ci.fuelIn!==ci.v.fuelOut&&!(ci.fuelPhotos&&ci.fuelPhotos.length)){toast('Fuel is short — take a photo of the fuel receipt first','err');return;}
-  var el=document.getElementById('ci-dep');var dec=el?el.value:(ci.finishDep||'');
-  dec='';   // tablet never decides the deposit (owner 26 Oct); saved as before: clean = no deposit issue, issues = pending for the office
+  // Owner 11 Nov 2026: the tablet records NO deposit decision at all — not even "Full deposit returned" on a clean
+  // return. Refund or keep is decided by management in the Desktop APP only.
   var n=document.getElementById('ci-hnotes');if(n)ci.mgmtNotes=n.value;
-  var x=ciIssues();
-  if(!x.any&&!dec)dec='Full deposit returned';
   if(!(await ciPapersUpload()))return;
   ci.mgmtName=(APP_USER&&APP_USER.name)||ci.mgmtName||'';ci.mgmtAt=now();
-  if(dec){ci.deposit=dec;ci.depositPending=false;ci.mgmtDecided=true;}
-  else{ci.depositPending=true;ci.depositDue=nextWorkingDay();ci.deposit='Pending — management decision';ci.mgmtDecided=false;}
   try{await uploadPhotos(ci.fuelPhotos,ci.fn,ci.v.cl,'fuel-receipt');await uploadPhotos(ci.dmgPhotos,ci.fn,ci.v.cl,'damage-in');}catch(e){}
   await completeCI();
-  if(!ci._done){ci.mgmtDecided=false;ci.depositPending=false;}
 }
 // older names still called from saved screens
 function ciHandToMgmt(){return ciFinish();}
 function signMgmtCI(){return ciFinish();}
-// ── Management: open deposit decisions ──
 var WARN_TRI='<svg class="wtri" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22L12 2z" fill="#e11d2e"/><path d="M11 9h2v6h-2zm0 8h2v2h-2z" fill="#fff"/></svg>';
-var DEP_PENDING=[];
-// One entry per return: duplicate saves of the same check-in (same booking) are shown once; _ids holds every row id
-function depUniq(rows){
-  var by={},out=[];
-  (rows||[]).forEach(function(r){var k=bkNorm(r.booking_id||r.id);
-    if(by[k]){by[k]._ids.push(r.id);if(!by[k].report_link&&r.report_link)by[k].report_link=r.report_link;return;}
-    var c=Object.assign({},r);c._ids=[r.id];by[k]=c;out.push(c);});
-  return out;
-}
-async function refreshDeposits(){
-  try{var r=await SB.from('checkins').select('id,booking_id,fleet_no,client,deposit_due').eq('deposit_status','pending');if(!r.error){DEP_PENDING=depUniq(r.data);showDepositBanner();}}catch(e){}
-}
-// Deposits tab only flashes while a decision is actually waiting
-function depTabLabel(){return DEP_PENDING.length?WARN_TRI+' Deposits ('+DEP_PENDING.length+')':'✅ Deposits';}
-function showDepositBanner(){
-  try{var t=document.getElementById('tab-dep');if(t)t.innerHTML=depTabLabel();}catch(e){}
-  var ov=document.getElementById('ov-body');if(!ov)return;
-  var old=document.getElementById('dep-banner');if(old)old.remove();
-  if(document.getElementById('bd-root'))return;   // the Dashboard board shows this in Needs action
-  if(!DEP_PENDING.length||typeof canViewReports!=='function'||!canViewReports())return;
-  var today=localYMD();
-  var due=DEP_PENDING.filter(function(d){return d.deposit_due&&d.deposit_due<=today;}).length;
-  var b=document.createElement('div');b.id='dep-banner';
-  b.setAttribute('style','margin:8px 10px 0;padding:12px 16px;border-radius:12px;border:2px solid '+(due?'var(--re)':'var(--am)')+';background:'+(due?'var(--rg)':'var(--ag)')+';color:'+(due?'var(--rl)':'var(--al)')+';font-weight:900;font-size:15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-shrink:0;');
-  b.innerHTML='<span>'+WARN_TRI+' '+DEP_PENDING.length+' deposit decision'+(DEP_PENDING.length===1?'':'s')+' waiting'+(due?' · '+due+' due today / overdue':'')+'</span><span>Open →</span>';
-  b.onclick=openDeposits;
-  ov.insertBefore(b,ov.firstChild);
-}
+// Owner 11 Nov 2026: the tablet has NO deposit decisions at all (no Deposits tab, no banner, nothing saved).
+// Every deposit refund / keep is decided by management in the Desktop APP only.
 // Returns not checked in (23 Oct 2026, H-38 Blakeman back 17 Oct, nothing done on the tablet):
 // checked out on the tablet, return date passed (from the morning after), no check-in.
 // ── 🧭 DASHBOARD BOARD (owner 28 Oct 2026) ─────────────────────────────────────────────
@@ -9444,10 +9411,7 @@ function bdCol(title,cls,list,key,card,none){
 }
 function ovBoardHTML(outList,inList,timeStr,dateStr,info){
   var needs=bdNeeds();
-  // deposits waiting (managers): one row in the same box instead of a separate banner
-  var depRow='';
-  try{if(DEP_PENDING.length&&canViewReports())depRow='<div class="bd-need" onclick="openDeposits()"><div class="bd-fn">💰</div><div class="bd-mid"><div class="bd-cl">'+DEP_PENDING.length+' deposit decision'+(DEP_PENDING.length===1?'':'s')+' waiting</div><div class="bd-sub">Office → Reports → Deposits</div></div><button class="bd-btn bd-blue" onclick="event.stopPropagation();openDeposits()">Open</button></div>';}catch(e){}
-  var nN=needs.length+(depRow?1:0);
+  var nN=needs.length;
   var t=localYMD();
   var outT=outList.filter(function(v){return v.pu===t;}),inT=inList.filter(function(v){return v.rt===t;});
   var outLeft=outT.filter(function(v){return !coIsDone(v);}).length,inLeft=inT.filter(function(v){return !ciIsDone(v);}).length;
@@ -9461,7 +9425,7 @@ function ovBoardHTML(outList,inList,timeStr,dateStr,info){
       +'<div class="bd-tools"><button onclick="ovSetView(\'past\')">Past 14 days</button><button onclick="ovSetFull(true)">Full view</button></div>'
     +'</div>'
     +info
-    +(nN?'<div id="bd-needs" class="bd-needs"><div class="bd-needhead">⚠ NEEDS ACTION · '+nN+'</div>'+needs.map(bdNeedRow).join('')+depRow+'</div>':'')
+    +(nN?'<div id="bd-needs" class="bd-needs"><div class="bd-needhead">⚠ NEEDS ACTION · '+nN+'</div>'+needs.map(bdNeedRow).join('')+'</div>':'')
     +'<div class="bd-cols">'
       +bdCol('↗ Going out','c-out',outList,'pu',bdOutCard,'Nothing going out')
       +bdCol('↙ Coming back','c-in',inList,'rt',bdInCard,'Nothing coming back')
@@ -9535,114 +9499,6 @@ function overdueAlertResolve(v){
     SB.from('management_alerts').update({resolved:true,resolved_by:(APP_USER&&APP_USER.name)||'Tablet App',resolved_at:new Date().toISOString()})
       .in('booking_id',ks).eq('kind','not_checked_in').then(function(){},function(){});}catch(e){}
 }
-function openDeposits(){goPage('rp');setTimeout(function(){var t=document.getElementById('tab-dep');if(t)t.click();},50);}
-var DEP_REASONS=['Full deposit returned','Partial deduction — new damage','Partial deduction — missing equipment','Partial deduction — fuel shortage','Partial deduction — several issues','Full deduction — major damage','Withhold pending investigation'];
-async function loadDeposits(){
-  var el=document.getElementById('rp-deposits');if(!el)return;
-  el.innerHTML='<div style="color:var(--g5);padding:20px;text-align:center">Loading...</div>';
-  var r=await SB.from('checkins').select('id,booking_id,fleet_no,client,received_by,created_at,km_driven,fuel_in,fuel_out,fuel_short,new_damage_panels,missing_items,damaged_items,client_notes,manager_notes,report_link,deposit_due').eq('deposit_status','pending').order('deposit_due',{ascending:true});
-  if(r.error){el.innerHTML='<div class="al warn">Could not load: '+_bx(r.error.message)+'</div>';return;}
-  DEP_PENDING=depUniq(r.data);
-  var today=localYMD();
-  showDepositBanner();
-  if(!DEP_PENDING.length){el.innerHTML='<div class="al ok" style="text-align:center;">✅ No deposit decisions waiting</div>';return;}
-  el.innerHTML=DEP_PENDING.map(function(c){
-    var late=c.deposit_due&&c.deposit_due<=today;
-    var dmg=(c.new_damage_panels||[]).map(function(d){return d.view_name;}).filter(Boolean);
-    var issues=[dmg.length?'🔴 New damage: '+dmg.join(', '):'',c.fuel_short?'⛽ Fuel short: '+(c.fuel_out||'Full')+' → '+(c.fuel_in||'—'):'',
-      (c.missing_items||[]).length?'❌ Not returned: '+c.missing_items.join(', '):'',(c.damaged_items||[]).length?'⚠ Damaged: '+c.damaged_items.join(', '):''].filter(Boolean);
-    return '<div id="dep-'+c.id+'" style="border:2px solid '+(late?'var(--re)':'var(--am)')+';border-radius:var(--r);padding:14px;margin-bottom:12px;background:var(--g1);">'
-      +'<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;"><div style="font-size:17px;font-weight:900;">'+_bx(c.fleet_no)+' · '+_bx(c.client||'')+'</div>'
-      +'<div style="font-weight:900;color:'+(late?'var(--rl)':'var(--al)')+';">'+(late?'⏰ DUE ':'Due ')+fmtDay(c.deposit_due)+'</div></div>'
-      +'<div style="font-size:13px;color:var(--g5);margin:4px 0 8px;">Returned '+new Date(c.created_at).toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'})+' · received by '+_bx(c.received_by||'—')+' · '+Number(c.km_driven||0).toLocaleString()+' km</div>'
-      +issues.map(function(t){return '<div style="font-size:14px;font-weight:700;color:var(--rl);padding:2px 0;">'+_bx(t)+'</div>';}).join('')
-      +(c.manager_notes?'<div style="font-size:13px;margin-top:6px;"><b>Team notes:</b> '+_bx(c.manager_notes)+'</div>':'')
-      +(c.client_notes?'<div style="font-size:13px;margin-top:2px;"><b>Client notes:</b> '+_bx(c.client_notes)+'</div>':'')
-      +(c.report_link?'<a href="'+_bx(c.report_link)+'" target="_blank" style="display:inline-block;margin-top:8px;font-weight:800;color:var(--se);">📋 Open the check-in report (photos, signatures)</a>':'')
-      +'<div id="dep-paid-'+c.id+'" class="dep-paid" style="margin-top:10px;padding:10px 12px;border-radius:10px;border:2px solid var(--g3,#cbd5e1);font-size:14px;color:var(--g5);">💳 Deposit paid: loading…</div>'
-      +'<div class="fg" style="margin-top:10px;">'
-        +'<div class="fi"><label>Decision</label><select id="dep-r-'+c.id+'" style="color-scheme:light">'+DEP_REASONS.map(function(o,i){return '<option'+(i===4?' selected':'')+'>'+o+'</option>';}).join('')+'</select></div>'
-        +'<div class="fi"><label>Returned to client (N$)</label><input id="dep-a-'+c.id+'" type="number" inputmode="decimal" min="0" placeholder="0"></div>'
-        +'<div class="fi"><label>Deducted (N$)</label><input id="dep-d-'+c.id+'" type="number" inputmode="decimal" min="0" placeholder="0"></div>'
-      +'</div>'
-      +'<div class="fi"><label>Reason / breakdown (the client sees this)</label><textarea id="dep-n-'+c.id+'" placeholder="e.g. Compressor not returned N$ 1 200, fuel refill N$ 450" style="min-height:50px"></textarea></div>'
-      +'<button class="btn g" onclick="saveDeposit('+JSON.stringify(c.id).replace(/"/g,'&quot;')+')">✅ Save deposit decision</button>'
-      +'</div>';
-  }).join('');
-  depPaidLoad(DEP_PENDING);
-}
-// ── What the client paid as deposit (payments ledger, contract, booking) ──
-// Read through tablet_deposit_info (SECURITY DEFINER): the tablet login cannot read `payments` directly.
-var DEP_CAT={security_fuel:'Fuel & admin deposit',security_cross_border:'Cross-border deposit',security_country:'Country deposit',security_other:'Security deposit (insurance)'};
-function depN(x){var n=Number(x||0);return 'N$ '+n.toLocaleString('en-US',{minimumFractionDigits:n%1?2:0,maximumFractionDigits:2});}
-function depPaidHTML(d){
-  d=d||{};var led=d.ledger||[],ct=d.contract,bk=d.booking;
-  var inn=0,out=0,lines=[];
-  led.forEach(function(p){
-    var a=+p.amount||0,lbl=DEP_CAT[p.cat]||'Deposit',when=p.paid_at?fmtDay(p.paid_at):'',m=p.method?String(p.method).replace(/^adumo$/i,'Adumo'):'';
-    if(p.dir==='out'){out+=a;lines.push('<div style="color:var(--al);">↩ Already paid back: '+_bx(lbl)+' '+depN(a)+(when?' · '+_bx(when):'')+'</div>');}
-    else{inn+=a;lines.push('<div>✓ '+_bx(lbl)+' <b>'+depN(a)+'</b>'+(m?' · '+_bx(m):'')+(when?' · '+_bx(when):'')+'</div>');}
-  });
-  var held=inn-out,head,col;
-  if(led.length){head='💳 Deposit paid: '+depN(held)+(out?' still held':'');col=held>0?'var(--gb)':'var(--am)';}
-  else{
-    // nothing in the payments record → show what the contract / booking asked for
-    var exp=[];
-    if(ct){
-      if(+ct.deposit_amount>0)exp.push('Security deposit (insurance option '+_bx(ct.insurance_option||'')+') '+depN(ct.deposit_amount)+(ct.deposit_method?' · '+_bx(ct.deposit_method):'')+(ct.deposit_paid?' · ticked paid':''));
-      if(+ct.fuel_deposit>0)exp.push('Fuel deposit '+depN(ct.fuel_deposit)+(ct.fuel_deposit_received?' · ticked received on the contract':''));
-      if(ct.country_deposit==='received')exp.push('Country deposit N$ 7,500 · ticked received on the contract');
-      if(ct.cross_border_deposit===true)exp.push('Cross-border deposit · ticked on the contract');
-    }
-    if(bk){
-      if(bk.fuel_admin_deposit&&!/not\s*req/i.test(bk.fuel_admin_deposit))exp.push('Fuel & admin deposit: '+_bx(bk.fuel_admin_deposit)+(bk.fuel_admin_dep_amount?' · '+depN(bk.fuel_admin_dep_amount):'')+' (booking)');
-      if(bk.damage_deposit&&!/not\s*req/i.test(bk.damage_deposit))exp.push('Damage deposit: '+_bx(bk.damage_deposit)+(bk.damage_dep_amount?' · '+depN(bk.damage_dep_amount):'')+' (booking)');
-    }
-    head='💳 Deposit paid: not in the payments record';col='var(--am)';
-    lines=exp.length?exp.map(function(t){return '<div>• '+t+'</div>';}):['<div>No security deposit on the contract or booking.</div>'];
-    lines.push('<div style="color:var(--al);font-weight:700;margin-top:4px;">⚠ Check Adumo before refunding.</div>');
-  }
-  if(bk&&+bk.deposit_amount>0)lines.push('<div style="color:var(--g5);font-size:12px;margin-top:4px;">Booking deposit towards the rental (not a security deposit): '+depN(bk.deposit_amount)+(bk.deposit_via?' · '+_bx(bk.deposit_via):'')+(bk.deposit_paid?' · paid: '+_bx(bk.deposit_paid):'')+'</div>');
-  return {html:'<div style="font-size:16px;font-weight:900;color:var(--g9,inherit);margin-bottom:4px;">'+head+'</div>'+lines.join(''),col:col,held:led.length?held:null};
-}
-async function depPaidLoad(list){
-  var keys=(list||[]).map(function(c){return c.booking_id;}).filter(Boolean);
-  var data={};
-  if(keys.length){try{var r=await SB.rpc('tablet_deposit_info',{p_keys:keys});if(!r.error&&r.data)data=r.data;}catch(e){}}
-  (list||[]).forEach(function(c){
-    var el=document.getElementById('dep-paid-'+c.id);if(!el)return;
-    if(!data[c.booking_id]){el.innerHTML='💳 Deposit paid: could not load (check the internet)';return;}
-    var x=depPaidHTML(data[c.booking_id]);
-    el.innerHTML=x.html;el.style.borderColor=x.col;el.style.color='inherit';
-    if(x.held!=null){var a=document.getElementById('dep-a-'+c.id);if(a)a.placeholder=String(x.held);}
-  });
-}
-async function saveDeposit(id){
-  var g=function(k){var e=document.getElementById('dep-'+k+'-'+id);return e?e.value:'';};
-  var reason=g('r'),ret=g('a'),ded=g('d'),notes=String(g('n')||'').trim();
-  if(ret===''&&ded===''){toast('Enter the amount returned and/or deducted','err');return;}
-  if(+ded>0&&!notes){toast('Write the reason for the deduction — the client sees it','err');return;}
-  var who=(APP_USER&&APP_USER.name)||'';
-  var _dep=DEP_PENDING.filter(function(x){return x.id===id;})[0],_ids=(_dep&&_dep._ids)||[id];
-  var up=await SB.from('checkins').update({deposit_status:'decided',deposit_decision:reason,deposit_returned:ret===''?null:+ret,deposit_deducted:ded===''?null:+ded,
-    deposit_notes:notes,deposit_decided_by:who,deposit_decided_at:new Date().toISOString(),manager_name:who,manager_signed_at:new Date().toISOString()}).in('id',_ids).select('id,fleet_no,client,booking_id');
-  if(up.error||!up.data||!up.data.length){toast('Not saved: '+((up.error&&up.error.message)||'no access'),'err');return;}
-  var c=up.data[0];
-  try{SB.from('management_alerts').update({resolved:true,resolved_by:who,resolved_at:new Date().toISOString()}).eq('fleet_no',c.fleet_no).eq('resolved',false).then(function(){},function(){});}catch(e){}
-  DEP_PENDING=DEP_PENDING.filter(function(x){return x.id!==id;});
-  var v=FLEET.filter(function(f){return f.fn===c.fleet_no&&(f.fn+'_'+f.pu)===c.booking_id;})[0]||FLEET.filter(function(f){return f.fn===c.fleet_no;})[0]||{};
-  var first=firstNameOf(c.client);
-  var msg='Hi '+first+', thank you for renting with Go Rent 4×4.\n\nYour deposit for '+c.fleet_no+':\n'
-    +(ret!==''?'• Returned to you: N$ '+(+ret).toLocaleString()+'\n':'')+(ded!==''&&+ded>0?'• Deducted: N$ '+(+ded).toLocaleString()+'\n':'')
-    +(notes?'\n'+notes+'\n':'')+'\nKind regards, Go Rent 4×4';
-  var box=document.getElementById('dep-'+id);
-  if(box)box.outerHTML='<div class="al ok" style="margin-bottom:12px;">✅ '+_bx(c.fleet_no)+' · '+_bx(c.client||'')+' — '+_bx(reason)+' — saved by '+_bx(who)
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"><input id="dep-wa-'+id+'" type="tel" value="'+_bx(v.phone||'')+'" placeholder="Client WhatsApp number" style="flex:1;min-width:180px;padding:8px 10px;border-radius:8px;">'
-    +'<button onclick="openExt(\'https://wa.me/\'+waNumber(document.getElementById(\'dep-wa-'+id+'\').value)+\'?text='+encodeURIComponent(msg).replace(/'/g,'%27')+'\')" style="padding:8px 14px;border-radius:8px;border:none;background:#25d366;color:#04240f;font-weight:900;">💬 Tell the client on WhatsApp</button></div></div>';
-  toast('Deposit decision saved ✅','ok');showDepositBanner();
-}
-setInterval(function(){if(APP_USER&&typeof canViewReports==='function'&&canViewReports())refreshDeposits();},60000);
-setTimeout(function(){if(APP_USER)refreshDeposits();},4000);
 function ciCompletionBox(){
   var c=ciCompletion(),done=c.every(function(x){return x.ok;});
   return '<div style="background:var(--g1);border:2px solid '+(done?'var(--gb)':'var(--am)')+';border-radius:var(--r);padding:10px 14px;margin-bottom:10px;">'
@@ -10213,7 +10069,7 @@ async function openRentalFile(key,fn,client,alsoKeys,part){
     h+=sec('🪪 Passport, ID & licence scans',idDocs.length?idDocs.map(function(p){return signed[p]?thumb(signed[p],rfLabel(p)+(_from[p]&&_from[p]!==key?' · from '+_from[p]:''),p,'client-docs'):'';}).join(''):'<div style="font-size:13px;color:var(--g5);">No scans saved for this booking yet.</div>');
     h+=sec('🚗 Check-out',cko?(line('Prepared by',_bx((cko.prep_by_all||[cko.prep_by]).filter(Boolean).join(', ')||'—'))+line('Handed over by',_bx(cko.handover_by||'—'))+line('Manager',_bx(cko.manager_name||'—'))+line('Km out · fuel out',Number(cko.odo_out||0).toLocaleString()+' km · '+_bx(cko.fuel_out||'—'))+line('Date',new Date(cko.created_at).toLocaleString('en-GB'))):'<div style="font-size:13px;color:var(--g5);">Not checked out on the tablet yet.</div>');
     if(cko&&(cko.out_notes||[]).length)h+=sec('📝 Notes while out',(cko.return_date_new?line('Return date changed to',_bx(cko.return_date_new)):'')+(cko.return_time?line('Expected return time',_bx(cko.return_time)):'')+cko.out_notes.map(function(n){return '<div style="font-size:13px;padding:4px 0;border-bottom:1px solid var(--g2);"><b>'+_bx(n.by||'')+'</b> · '+_bx(new Date(n.at).toLocaleString('en-GB',{hourCycle:'h23',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))+' — '+_bx(n.text)+'</div>';}).join(''));
-    h+=sec('🏠 Check-in',cki?(line('Received by',_bx(cki.received_by||'—'))+line('Manager sign-off',_bx(cki.manager_name||'—'))+line('Km in · fuel in',Number(cki.odo_in||0).toLocaleString()+' km · '+_bx(cki.fuel_in||'—'))+line('Deposit decision',_bx(cki.deposit_decision||'—'))+line('Return report',cki.report_link?'<a href="'+cki.report_link+'" target="_blank" style="color:var(--se);">📄 Open report</a> · <a href="https://wa.me/?text='+encodeURIComponent('Your Go Rent 4×4 vehicle return report: '+cki.report_link)+'" target="_blank" style="color:#25d366;">📱 Share on WhatsApp</a>':'—')+(cki.report_whatsapp_at?line('Sent on WhatsApp',new Date(cki.report_whatsapp_at).toLocaleString('en-GB')):'')+line('Return report emailed',cki.report_sent_to?_bx(cki.report_sent_to)+' · '+new Date(cki.report_sent_at).toLocaleString('en-GB'):'Not sent')+line('Date',new Date(cki.created_at).toLocaleString('en-GB'))):'<div style="font-size:13px;color:var(--g5);">Not checked in on the tablet yet.</div>');
+    h+=sec('🏠 Check-in',cki?(line('Received by',_bx(cki.received_by||'—'))+line('Manager sign-off',_bx(cki.manager_name||'—'))+line('Km in · fuel in',Number(cki.odo_in||0).toLocaleString()+' km · '+_bx(cki.fuel_in||'—'))+line('Deposit','Decided by management in the Desktop APP')+line('Return report',cki.report_link?'<a href="'+cki.report_link+'" target="_blank" style="color:var(--se);">📄 Open report</a> · <a href="https://wa.me/?text='+encodeURIComponent('Your Go Rent 4×4 vehicle return report: '+cki.report_link)+'" target="_blank" style="color:#25d366;">📱 Share on WhatsApp</a>':'—')+(cki.report_whatsapp_at?line('Sent on WhatsApp',new Date(cki.report_whatsapp_at).toLocaleString('en-GB')):'')+line('Return report emailed',cki.report_sent_to?_bx(cki.report_sent_to)+' · '+new Date(cki.report_sent_at).toLocaleString('en-GB'):'Not sent')+line('Date',new Date(cki.created_at).toLocaleString('en-GB'))):'<div style="font-size:13px;color:var(--g5);">Not checked in on the tablet yet.</div>');
     h+=sec('📷 Photos & fuel receipts',picUrls.length?picUrls.map(function(x){return thumb(x.url,rfLabel(x.path)+(_from[x.path]&&_from[x.path]!==key?' · from '+_from[x.path]:''),(x.path.indexOf('x/fuel-receipt/')===0?'':x.path),'vehicle-photos');}).join(''):'<div style="font-size:13px;color:var(--g5);">No photos saved for this booking yet.</div>');
     h+=sec('✍️ Signatures',sigDocs.length?sigDocs.map(function(p){return signed[p]?thumb(signed[p],rfLabel(p),p,'client-docs'):'';}).join(''):'<div style="font-size:13px;color:var(--g5);">No signatures saved for this booking yet.</div>');
     h+='<div style="font-size:11px;color:var(--g5);margin-top:12px;">Tap any picture to open it full size. Scan and signature links are private and expire after 1 hour.</div>';
@@ -10605,10 +10461,10 @@ async function completeCIRun(){
     new_damage_panels:newDmg,equipment_status:retSt,
     missing_items:missing,damaged_items:damaged,
     customer_signed_at:ci.custSig?new Date().toISOString():null,
-    manager_name:ci.mgmtName,manager_signed_at:(ci.mgmtSig||ci.mgmtDecided)?new Date().toISOString():null,
-    deposit_decision:ci.deposit,manager_notes:ciKmNote(ci.mgmtNotes),client_notes:ci.notes,
-    deposit_status:ci.depositPending?'pending':((ci.mgmtSig||ci.mgmtDecided)?'decided':null),deposit_due:ci.depositPending?ci.depositDue:null,
-    deposit_decided_by:(!ci.depositPending&&(ci.mgmtSig||ci.mgmtDecided))?ci.mgmtName:null,deposit_decided_at:(!ci.depositPending&&(ci.mgmtSig||ci.mgmtDecided))?new Date().toISOString():null,
+    manager_name:ci.mgmtName,manager_signed_at:ci.mgmtAt?new Date().toISOString():null,
+    // no deposit decision from the tablet (owner 11 Nov 2026) — the Desktop APP decides every refund
+    deposit_decision:null,manager_notes:ciKmNote(ci.mgmtNotes),client_notes:ci.notes,
+    deposit_status:null,deposit_due:null,deposit_decided_by:null,deposit_decided_at:null,
     fuel_receipts:ci.fuelPhotos||[],
     item_checks:ciItemChecks(),equipment_checked_by:ciEqChecks(),receiver_log:ci.rcvLog||[],
     signature_urls:ci._sigUrls||{},report_link:ci._reportLink||null,
@@ -10631,7 +10487,7 @@ async function completeCIRun(){
     ci._queued=true;_ciRes={data:[]};
     toast('📤 Return finished — saved on this tablet, it uploads by itself when the internet is back','ok');
   }
-  if(_ciRes&&_ciRes.error){if(!wrongRentalBox(_ciRes.error.message))toast('Return not saved: '+_ciRes.error.message+' — nothing lost, try again','err');ci._done=false;ci.depositPending=false;drMarkLocal('checkin',ci.fn,ci.v.cl,ci.receivedBy||'',false);return;}
+  if(_ciRes&&_ciRes.error){if(!wrongRentalBox(_ciRes.error.message))toast('Return not saved: '+_ciRes.error.message+' — nothing lost, try again','err');ci._done=false;drMarkLocal('checkin',ci.fn,ci.v.cl,ci.receivedBy||'',false);return;}
   if(!ci._queued){try{drFinish(drId('checkin',ci));}catch(e){}}
   try{overdueAlertResolve(ci.v);}catch(e){}
   // Alert management about any return issue (damage, fuel, missing or damaged equipment)
@@ -10640,7 +10496,7 @@ async function completeCIRun(){
     try{SB.from('management_alerts').insert({
       booking_id:bkKey(ci.v),fleet_no:ci.fn,client:ci.v.cl,received_by:ci.receivedBy,
       new_damage:newDmg.length>0,fuel_short:_fs,missing_items:missing,damaged_items:damaged,
-      message:'RETURN ISSUE — '+ci.fn+'/'+ci.v.cl+': '+[newDmg.length?'New damage':'',_fs?'Fuel short':'',missing.length?'Items not returned: '+missing.join(', '):'',damaged.length?'Damaged equipment':''].filter(Boolean).join(' · ')+(ci.depositPending?' — DEPOSIT DECISION DUE '+fmtDay(ci.depositDue):''),
+      message:'RETURN ISSUE — '+ci.fn+'/'+ci.v.cl+': '+[newDmg.length?'New damage':'',_fs?'Fuel short':'',missing.length?'Items not returned: '+missing.join(', '):'',damaged.length?'Damaged equipment':''].filter(Boolean).join(' · '),
       created_at:new Date().toISOString()
     }).then(function(){},function(){});}catch(e){}
   }
@@ -10670,7 +10526,6 @@ async function completeCIRun(){
     ${ciWaBox(ci.v.phone,ci._reportLink)}
     <button class="btn g" style="margin-top:10px" onclick="goPage('ov')">← Back to Overview</button>`;
   renderOV();
-  try{refreshDeposits();}catch(e){}
 }
 
 // ── REPORTS PAGE (simple) ─────────────────────────────────────────
@@ -10678,14 +10533,12 @@ async function renderReports(){
   const body=document.getElementById('rp-body');
   body.innerHTML=`<input class="search-bar" placeholder="🔍 Search vehicle or client..." id="rp-q" oninput="searchReports(this.value)">
     <div class="tab-row">
-      <button class="tab-btn" id="tab-dep" onclick="rpTab(this,'rp-deposits');loadDeposits()">${depTabLabel()}</button>
       <button class="tab-btn on" onclick="rpTab(this,'rp-vehicles')">🚗 Fleet</button>
       <button class="tab-btn" onclick="rpTab(this,'rp-history');loadHistory()">📋 Activity Log</button>
       <button class="tab-btn" onclick="rpTab(this,'rp-alerts');loadAlerts()">⚠️ Alerts</button>
       <button class="tab-btn" onclick="rpTab(this,'rp-who');loadAccountability()">👤 Who did what</button>
       <button class="tab-btn" onclick="rpTab(this,'rp-files');loadRentalFiles('')">📁 Rental files</button>
     </div>
-    <div id="rp-deposits" style="display:none"></div>
     <div id="rp-vehicles">${rpFleet()}</div>
     <div id="rp-history" style="display:none"></div>
     <div id="rp-alerts" style="display:none"></div>
@@ -10694,7 +10547,7 @@ async function renderReports(){
 }
 function rpTab(btn,id){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
-  document.querySelectorAll('#rp-deposits,#rp-vehicles,#rp-history,#rp-alerts,#rp-who,#rp-files').forEach(e=>e.style.display='none');
+  document.querySelectorAll('#rp-vehicles,#rp-history,#rp-alerts,#rp-who,#rp-files').forEach(e=>e.style.display='none');
   document.getElementById(id).style.display='';
 }
 // Fleet tab: numbers first, then the report for the one you tap
