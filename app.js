@@ -683,7 +683,7 @@ function startAutoRefresh(){
   // sleep — so by the afternoon one wake-up fired dozens of full reloads of bookings, check-ins,
   // check-outs and clients at the same time, and the tablets crawled until the app was restarted.
   if(!window._autoVisHooked){window._autoVisHooked=true;
-    document.addEventListener('visibilitychange',function(){if(!document.hidden&&APP_USER){autoRefresh(false);checkAppUpdate(true);}});}
+    document.addEventListener('visibilitychange',function(){if(!document.hidden&&APP_USER){if(photoFresh()){window._afterPhoto=1;return;}autoRefresh(false);checkAppUpdate(true);}});}
   setTimeout(function(){checkAppUpdate(false);},15000);
   rtStart();
 }
@@ -3183,6 +3183,7 @@ function drOtherDeviceNote(r,row){
 // ── pull: who is working on what, and live updates for the vehicle that is open here ──
 async function drPull(){
   if(_drPulling||!drOnline()||!APP_USER)return;
+  if(photoFresh())return;   // a photo is being taken / shrunk: pull afterwards (afterPhotoRun)
   _drPulling=true;
   try{
     var q=await SB.from('work_drafts').select('id,kind,fleet_no,client,staff,step,summary,updated_at,updated_by,device,started_at');
@@ -3327,14 +3328,22 @@ async function doneRows(t,cols){
   return q;
 }
 async function loadDoneSets(){
+  // 11 Nov 2026: check-outs and check-ins are fetched together and swapped in at the same moment. Fetched one
+  // after the other, a screen drawn in between saw "checked out, not checked in" for every recent rental.
+  var _qa=null,_qb=null;
+  try{var _r=await Promise.all([doneRows('checkouts','booking_id,force_closed_by,client,booked_by'),doneRows('checkins','booking_id')]);_qa=_r[0];_qb=_r[1];}catch(e){}
+  // a finished job still waiting in this tablet's outbox (internet dropped at Finish) IS finished
+  var _ob=[];try{_ob=obGet();}catch(e){}
   try{
-    var a=await doneRows('checkouts','booking_id,force_closed_by,client,booked_by');
+    var a=_qa;
     var m={},f={},rn={};((a&&a.data)||[]).forEach(function(x){if(!x||!x.booking_id)return;var k=doneSlot(x);m[k]=true;if(x.force_closed_by&&f[k]===undefined)f[k]=true;if(!x.force_closed_by)f[k]=false;if(x.client&&rn[k]===undefined)rn[k]={name:x.client,booked:x.booked_by||''};});
+    _ob.forEach(function(it){try{if(it.table==='checkouts'&&it.row&&it.row.booking_id)m[doneSlot(it.row)]=true;}catch(e){}});
     if(a&&!a.error){DONE_CO=m;FORCED_CO=f;RENTER_CO=rn;}
   }catch(e){}
   try{
-    var b=await doneRows('checkins','booking_id');
+    var b=_qb;
     var m2={};((b&&b.data)||[]).forEach(function(x){if(x&&x.booking_id)m2[doneSlot(x)]=true;});
+    _ob.forEach(function(it){try{if(it.table==='checkins'&&it.row&&it.row.booking_id)m2[doneSlot(it.row)]=true;}catch(e){}});
     if(b&&!b.error){DONE_CI=m2;DONE_CI_AT=Date.now();}
   }catch(e){}
 }
@@ -3412,7 +3421,7 @@ function drStart(){
   setInterval(function(){drPull();drPush();},8000);
   window.addEventListener('offline',function(){toast('📶 No internet — work is kept on this device and sent automatically when back online','err');});
   window.addEventListener('online',function(){_drDirty=true;drPush().then(drPull);toast('📶 Back online — sending saved work','ok');});
-  document.addEventListener('visibilitychange',function(){if(!document.hidden){drPush();drPull();}else drTick();});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){if(photoFresh()){window._afterPhoto=1;return;}drPush();drPull();}else drTick();});
   window.addEventListener('pagehide',function(){try{drTick();}catch(e){}});
   drPush().then(drPull);
 }
@@ -11459,7 +11468,7 @@ async function handlePhotos(e,key,max){
   const toAdd=Math.max(0,Math.min(files.length,cap-arr.length));
   if(files.length>toAdd){try{toast('Only '+cap+' photos here — '+(toAdd?'added the first '+toAdd:'none added'),'err');}catch(e2){}}
   try{e.target.value='';}catch(e3){}
-  if(!toAdd){window._photoAt=0;return;}
+  if(!toAdd){window._photoAt=0;afterPhotoRun();return;}
   // Camera photos are 4–5 MB each. Kept at full size they filled the tablet's memory and the
   // work draft (saved every 2 s), so photos — and signatures — were lost and a check-in could
   // not be completed. Shrink them first: 1920 px is still sharp enough as damage evidence.
@@ -11479,6 +11488,7 @@ async function handlePhotos(e,key,max){
   if(failed){try{toast(failed+' photo'+(failed>1?'s':'')+' could not be read — please take '+(failed>1?'them':'it')+' again','err');}catch(e6){}}
   redraw();
   try{drTick();}catch(e7){}   // save the draft straight away, don't wait for the next 2-second tick
+  afterPhotoRun();
 }
 function delPhoto(key,i){if(!canDelete('photos'))return;const arr=getPA(key);
   // remember the deletion, so a photo merged back from another device does not reappear
@@ -11486,6 +11496,14 @@ function delPhoto(key,i){if(!canDelete('photos'))return;const arr=getPA(key);
     var ref=drPhotoRef(arr[i],id);if(ref){job._phDel=job._phDel||[];if(job._phDel.indexOf(ref)<0)job._phDel.push(ref);}}catch(e){}
   arr.splice(i,1);redraw();}
 function photoBusy(){return !!(window._photoAt&&Date.now()-window._photoAt<180000);}
+// 11 Nov 2026 (iPads hung after photos): coming back from the camera fired the full refresh, the sync with the
+// other tablets (which can redraw the whole job) and the signature repaint while the photo was still being
+// shrunk. Within 45 s of tapping the camera that work now waits and runs once the photo is in.
+function photoFresh(){return !!(window._photoAt&&Date.now()-window._photoAt<45000);}
+function afterPhotoRun(){
+  if(!window._afterPhoto)return;window._afterPhoto=0;
+  setTimeout(function(){try{if(APP_USER)autoRefresh(false);}catch(e){}try{drPush();drPull();}catch(e){}},1500);
+}
 function redraw(){
   if(document.getElementById('page-co').classList.contains('on'))drawCO();
   else drawCI();
