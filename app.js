@@ -3335,9 +3335,12 @@ async function loadDoneSets(){
   try{
     var b=await doneRows('checkins','booking_id');
     var m2={};((b&&b.data)||[]).forEach(function(x){if(x&&x.booking_id)m2[doneSlot(x)]=true;});
-    if(b&&!b.error)DONE_CI=m2;
+    if(b&&!b.error){DONE_CI=m2;DONE_CI_AT=Date.now();}
   }catch(e){}
 }
+// 11 Nov 2026: when did the finished check-ins last load? 0 = never on this tablet. "Not checked in" alerts are
+// only sent with a fresh list (a tablet that had loaded check-outs but not yet check-ins alerted 8 finished returns).
+var DONE_CI_AT=0;
 // what a new record carries to link it to its booking (only once the database has the column)
 function ridOf(v){return (RID_OK&&v&&v.bid!=null)?{rental_id:String(v.bid)}:{};}
 function coIsDone(v){try{return !!doneGet(DONE_CO,v);}catch(e){return false;}}
@@ -9504,9 +9507,19 @@ function showOverdueBanner(){
 var _odAlerted={};
 async function overdueAlerts(l){
   if(!drOnline())return;
+  if(!DONE_CI_AT||Date.now()-DONE_CI_AT>10*60*1000)return;   // check-in list not loaded (fresh) — never guess
   var todo=l.filter(function(v){return !_odAlerted[bkNorm(bkKey(v))];});if(!todo.length)return;
-  todo.forEach(function(v){_odAlerted[bkNorm(bkKey(v))]=1;});
   var keys=[];todo.forEach(function(v){var k=bkKey(v);keys.push(k,bkNorm(k));var a=bkAltKey(k);if(a)keys.push(a);});
+  // ask the database once more: a check-in saved under this booking (key or rental_id) means no alert
+  var rids=todo.map(function(v){return v.bid!=null?String(v.bid):null;}).filter(Boolean);
+  var c1=await SB.from('checkins').select('booking_id').in('booking_id',keys);
+  if(c1.error)return;
+  var c2=rids.length&&RID_OK?await SB.from('checkins').select('rental_id').in('rental_id',rids):{data:[]};
+  if(c2.error)return;
+  var inK={},inR={};(c1.data||[]).forEach(function(x){inK[bkNorm(x.booking_id)]=1;});(c2.data||[]).forEach(function(x){inR[String(x.rental_id)]=1;});
+  todo=todo.filter(function(v){var done=inK[bkNorm(bkKey(v))]||(v.bid!=null&&inR[String(v.bid)]);if(done)doneMark(DONE_CI,v,true);return !done;});
+  if(!todo.length)return;
+  todo.forEach(function(v){_odAlerted[bkNorm(bkKey(v))]=1;});
   var r=await SB.from('management_alerts').select('booking_id').in('booking_id',keys).eq('kind','not_checked_in');
   if(r.error)return;
   var have={};((r.data||[])).forEach(function(x){have[bkNorm(x.booking_id)]=1;});
