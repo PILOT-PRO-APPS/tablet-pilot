@@ -12530,7 +12530,7 @@ function lsPick(name) {
   document.getElementById('ls-names').style.display = 'none';
   document.getElementById('ls-pin').style.display = 'block';
   document.getElementById('ls-who').textContent = name;
-  document.getElementById('ls-dots').textContent = '_ _ _ _';
+  LS_PIN = ''; lsDots();
   document.getElementById('ls-msg').textContent = '';
 }
 
@@ -12542,8 +12542,8 @@ function lsBack() {
 
 function lsDots() {
   var t = '';
-  for (var i = 0; i < 4; i++) t += (i < LS_PIN.length ? '●' : '_') + (i < 3 ? ' ' : '');
-  document.getElementById('ls-dots').textContent = t;
+  for (var i = 0; i < 4; i++) t += '<span class="pd'+(i < LS_PIN.length ? ' on' : '')+'"></span>';
+  document.getElementById('ls-dots').innerHTML = t;
 }
 
 var _lsBusy=false;
