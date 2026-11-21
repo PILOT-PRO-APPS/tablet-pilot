@@ -2906,12 +2906,22 @@ async function drMergePhotos(r,data,srvData){
   // Put the other device's photos on this screen too, or the next save here would drop them again
   var kind=r.id.split(':')[0],job=kind==='checkout'?co:ci;
   if(!job||!job.v||drId(kind,job)!==r.id)return;
+  // pictures removed or replaced on any device also leave this screen (21 Nov 2026, H-38 duplicates)
+  drPhotoKeys(job).forEach(function(k){
+    var b=job[k].filter(function(x){return !del[drPhotoRef(x,r.id)];});
+    if(b.length!==job[k].length){job[k].splice(0,job[k].length);Array.prototype.push.apply(job[k],b);_drDirty=true;}
+  });
   var keys=Object.keys(added);if(!keys.length)return;
   for(var i=0;i<keys.length;i++){
     var k=keys[i],imgs;try{imgs=await drUnpack(added[k]);}catch(e){continue;}
     if(!Array.isArray(job[k]))job[k]=[];
     var cur={};job[k].forEach(function(x){cur[drPhotoRef(x,r.id)]=1;});
-    imgs.forEach(function(x){if(x&&!cur[drPhotoRef(x,r.id)])job[k].push(x);});
+    imgs.forEach(function(x){
+      if(!x)return;
+      // already uploaded from this tablet: it is in the list as its link, don't add the picture again
+      if(typeof x==='string'&&x.indexOf('data:image')===0&&typeof UP_URL!=='undefined'&&UP_URL[drHash(x)]){x=UP_URL[drHash(x)];}
+      var ref=drPhotoRef(x,r.id);if(!cur[ref]&&!del[ref]){job[k].push(x);cur[ref]=1;}
+    });
   }
   job._phDel=mine._phDel;
   _drDirty=true;
@@ -11509,20 +11519,65 @@ function redraw(){
   if(document.getElementById('page-co').classList.contains('on'))drawCO();
   else drawCI();
 }
+// 21 Nov 2026 (H-38: 6 damage photos uploaded 500+ times). After a photo was uploaded its place in the list
+// became a web link, so the draft on the server still held the old picture (draftimg:…) that this list no
+// longer had. Every sync (drMergePhotos) brought those pictures back as "new", they went into the same list
+// the upload loop was walking, got uploaded again, and so on for ever.
+// Now: a picture already uploaded is never uploaded again (UP_URL by content), its old draft reference is
+// marked as replaced (_phDel) so a sync cannot bring it back, the loop only walks the photos that were there
+// when it started, only one upload runs per list, and duplicates are removed from the list.
+var UP_URL={};   // photo content hash -> public link already uploaded
+function upJobOf(arr){
+  try{if(co&&drPhotoKeys(co).some(function(k){return co[k]===arr;}))return {kind:'checkout',job:co};}catch(e){}
+  try{if(ci&&drPhotoKeys(ci).some(function(k){return ci[k]===arr;}))return {kind:'checkin',job:ci};}catch(e){}
+  return null;
+}
+function upDedupe(arr){
+  var seen={};
+  for(var i=arr.length-1;i>=0;i--){
+    var x=arr[i];if(typeof x!=='string')continue;
+    var key=x.indexOf('data:image')===0?'h:'+drHash(x):x;
+    if(x.indexOf('data:image')===0&&UP_URL[drHash(x)]){arr[i]=UP_URL[drHash(x)];key=arr[i];}
+    if(seen[key])arr.splice(i,1);else seen[key]=1;
+  }
+  // a later duplicate may have been the first one; keep the original order of the first copies
+}
 async function uploadPhotos(arr,fn,client,stage){
   if(!(arr&&arr.length))return;
+  if(arr._uploading)return arr._uploading;   // one upload per list at a time
+  var run=(async function(){
   const cln=(client||'unknown').replace(/[^a-zA-Z0-9]/g,'_');
   const date=localYMD();
-  banner(`Uploading ${arr.length} photo(s) — ${fn}/${client}/${stage}`);
-  for(let i=0;i<arr.length;i++){
-    if(arr[i].startsWith('http'))continue;
-    const blob=await(await fetch(arr[i])).blob();
-    const _bk=curBkKey(fn);
-    const path=_bk?`bookings/${_bk}/${stage}/${Date.now()}_${i}.jpg`:`${fn}/${cln}/${date}/${stage}/${Date.now()}_${i}.jpg`;
-    const{error}=await SB.storage.from('vehicle-photos').upload(path,blob,{contentType:'image/jpeg',upsert:false});
-    if(!error){const{data:u}=SB.storage.from('vehicle-photos').getPublicUrl(path);arr[i]=u.publicUrl;}
+  upDedupe(arr);
+  var todo=arr.filter(function(x){return typeof x==='string'&&!x.startsWith('http');}).length;
+  if(!todo)return;
+  banner(`Uploading ${todo} photo(s) — ${fn}/${client}/${stage}`);
+  var owner=upJobOf(arr),did=0;
+  const n=arr.length;   // only the photos that are here now
+  for(let i=0;i<n&&i<arr.length;i++){
+    var src=arr[i];
+    if(typeof src!=='string'||src.startsWith('http'))continue;
+    var h=drHash(src),url=UP_URL[h];
+    if(!url){
+      const blob=await(await fetch(src)).blob();
+      const _bk=curBkKey(fn);
+      const path=_bk?`bookings/${_bk}/${stage}/${Date.now()}_${i}.jpg`:`${fn}/${cln}/${date}/${stage}/${Date.now()}_${i}.jpg`;
+      const{error}=await SB.storage.from('vehicle-photos').upload(path,blob,{contentType:'image/jpeg',upsert:false});
+      if(error)continue;
+      const{data:u}=SB.storage.from('vehicle-photos').getPublicUrl(path);url=u.publicUrl;UP_URL[h]=url;
+    }
+    // the list may have moved while we were uploading: replace this picture wherever it is now
+    var at=arr.indexOf(src);if(at<0)at=i;if(arr[at]===src)arr[at]=url;
+    did++;
+    // the old draft copy of this picture is replaced by the link: a sync must not bring it back
+    try{if(owner){var ref=drPhotoRef(src,drId(owner.kind,owner.job));
+      if(ref&&ref!==src){owner.job._phDel=owner.job._phDel||[];if(owner.job._phDel.indexOf(ref)<0)owner.job._phDel.push(ref);}}}catch(e){}
   }
-  hideBanner();
+  upDedupe(arr);
+  if(did)_drDirty=true;
+  })();
+  arr._uploading=run;
+  try{await run;}finally{arr._uploading=null;hideBanner();}
 }
 // Read width/height from a JPEG header without decoding the picture (first 256 KB is plenty).
 async function jpegSize(file){
